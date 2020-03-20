@@ -9,7 +9,21 @@ using Webserver.LoadBalancer;
 
 namespace Webserver {
 	class Program {
+		public const string wwwroot = "./wwwroot/";
+
 		static void Main() {
+			//Check file integrity
+			int Diff = Integrity.VerifyIntegrity(wwwroot);
+			Console.WriteLine("Checking file integrity...");
+			if (Diff > 0){
+				Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", Diff);
+				Console.WriteLine("If you modified any files within wwwroot, remember to delete Checksums.json afterwards");
+				Console.ReadLine();
+				return;
+			}
+			Console.WriteLine("No integrity issues found.");
+
+			//Start load balancer
 			IPAddress Local = Balancer.Init(
 				new List<IPAddress>() { IPAddress.Parse("192.168.178.9"), IPAddress.Parse("192.168.178.8"), IPAddress.Parse("192.168.178.7")},
 				IPAddress.Parse("224.0.0.1"),
