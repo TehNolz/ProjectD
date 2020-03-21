@@ -6,7 +6,6 @@ using System.Net.Sockets;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Webserver.Utils;
 
 namespace Webserver.LoadBalancer {
 	public static class Balancer {
@@ -17,6 +16,7 @@ namespace Webserver.LoadBalancer {
 
 		/// <summary>
 		/// Gets or sets master mode. If true, this instance of the server will act as the server group's master.
+		/// Only one master exists at any given time.
 		/// </summary>
 		public static bool IsMaster {
 			get { return _isMaster; } 
@@ -32,18 +32,26 @@ namespace Webserver.LoadBalancer {
 		}
 
 		/// <summary>
-		/// Starts the load balancer
+		/// Starts the load balancer.
 		/// </summary>
+		/// <param name="Addresses">A list of IP addresses the listener will bind to. Only the first available address is used, which is also returned.</param>
+		/// <param name="MulticastAddress">The Multicast address that the balancer will use. Must match all other servers. Multicast addresses are in the range 224.0.0.0 - 239.255.255.255</param>
+		/// <param name="BalancerPort">The port the balancer will be using for internal communication</param>
+		/// <param name="HttpPort">The port the balancer will be using for relaying HTTP requests to the slaves</param>
+		/// <returns></returns>
 		public static IPAddress Init(List<IPAddress> Addresses, IPAddress MulticastAddress = null, int BalancerPort = 12000, int HttpPort = 12001) {
 			if (MulticastAddress == null) MulticastAddress = IPAddress.Parse("224.0.0.1"); //Default multicast address;
 			Balancer.HttpPort = HttpPort;
 
+			//Create a client and send a discover message.
 			UdpClient Client = Networking.GetClient(Addresses, MulticastAddress, BalancerPort);
 			Client.Client.ReceiveTimeout = 1000;
 			byte[] Msg = Encoding.UTF8.GetBytes(ConnectionMsg.Discover.ToString());
 			IPEndPoint EP = new IPEndPoint(MulticastAddress, BalancerPort);
 			Client.Send(Msg, EP);
 
+			//Wait for an answer to the discover message. If the socket times out, the server will assume
+			//that no master exists, and will promote itself.
 			try {
 				for(int i = 0; i < 100; i++) {
 					byte[] RawResponse = Client.Receive(ref EP);
@@ -63,6 +71,7 @@ namespace Webserver.LoadBalancer {
 				}
 			} catch (SocketException e) {
 				if(e.SocketErrorCode == SocketError.TimedOut){
+					MasterEndpoint = EP;
 					IsMaster = true;
 				} else {
 					throw new SocketException();
@@ -70,6 +79,7 @@ namespace Webserver.LoadBalancer {
 			}
 			Client.Close();
 
+			//Initialise the networking system
 			MasterEndpoint = EP;
 			Networking.Init(Addresses, MulticastAddress, BalancerPort);
 			Console.WriteLine("Local endpoint is {0}, Master endpoint is {1}", Networking.LocalEndPoint, EP);

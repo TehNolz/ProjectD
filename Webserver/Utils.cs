@@ -2,12 +2,20 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace Webserver.Utils {
+namespace Webserver {
 	class Utils {
+		public static Dictionary<string, List<string>> NameValueToDict(NameValueCollection Data) {
+			Dictionary<string, List<string>> Result = new Dictionary<string, List<string>>();
+			foreach (string key in Data) {
+				Result.Add(key?.ToLower() ?? "null", new List<string>(Data[key]?.Split(',')));
+			}
+			return Result;
+		}
 	}
 
 	/// <summary>

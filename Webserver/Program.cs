@@ -1,11 +1,12 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
-using Newtonsoft.Json.Linq;
+using Webserver.API;
 using Webserver.LoadBalancer;
+using Webserver.Webserver;
 
 namespace Webserver {
 	class Program {
@@ -23,6 +24,13 @@ namespace Webserver {
 			}
 			Console.WriteLine("No integrity issues found.");
 
+			//Parse redirects
+			Redirects.LoadRedirects("Redirects.config");
+			Console.WriteLine("Registered {0} redirections", Redirects.RedirectDict.Count);
+
+			//Discover endpoints
+			APIEndpoint.DiscoverEndpoints();
+
 			//Start load balancer
 			IPAddress Local = Balancer.Init(
 				new List<IPAddress>() { IPAddress.Parse("192.168.178.9"), IPAddress.Parse("192.168.178.8"), IPAddress.Parse("192.168.178.7")},
@@ -30,22 +38,15 @@ namespace Webserver {
 				12000,
 				12001
 			);
-			new Thread(() => Worker(Local, 12001)).Start();
-		}
 
-		public static void Worker(IPAddress Addr, int HttpPort) {
-			HttpListener Listener = new HttpListener();
-			Console.WriteLine(string.Format("Worker listening on {0}:{1}", Addr, HttpPort));
-			Listener.Prefixes.Add(string.Format("http://{0}:{1}/", Addr.ToString(), HttpPort));
-			Listener.Start();
-
-			while (true) {
-				HttpListenerContext Context = Listener.GetContext();
-				Console.WriteLine("Got request!");
-				Context.Response.StatusCode = 200;
-				Context.Response.OutputStream.Write(Encoding.UTF8.GetBytes("Success"!));
-				Context.Response.OutputStream.Close();
+			//Start distributor and worker threads
+			BlockingCollection<ContextProvider> Queue = new BlockingCollection<ContextProvider>();
+			List<RequestWorker> Workers = new List<RequestWorker>();
+			for(int i = 0; i < 6; i++){
+				RequestWorker Worker = new RequestWorker(Queue);
+				new Thread(() => Worker.Run()).Start();
 			}
+			new Thread(() => Distributor.Run(Local, 12001, Queue)).Start();
 		}
 	}
 }

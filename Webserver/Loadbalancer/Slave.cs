@@ -6,7 +6,6 @@ using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Webserver.Utils;
 
 namespace Webserver.LoadBalancer {
 	public static class Slave {
