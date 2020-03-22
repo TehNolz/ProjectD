@@ -14,11 +14,12 @@ namespace Webserver {
 		/// If Checksums.json doesn't exist, this function will assume all files are OK and return 0.
 		/// </summary>
 		/// <param name="Dir">The directory to check</param>
+		/// <param name="Recalculate">If true, Checksums.json will be ignored and new checksums will be calculated.</param>
 		/// <returns>The amount of files that didn't pass the integrity check</returns>
-		public static int VerifyIntegrity(string Dir){
+		public static int VerifyIntegrity(string Dir, bool Recalculate = false){
 			Dictionary<string, string> Checksums = GetChecksums(Dir);
 			
-			if(File.Exists("Checksums.json")){
+			if(File.Exists("Checksums.json") && !Recalculate){
 				//File exists. Check if the file contains an entry for the chosen directory.
 				JObject SavedChecksums = JObject.Parse(File.ReadAllText("Checksums.json"));
 				if(SavedChecksums.ContainsKey(Dir)){

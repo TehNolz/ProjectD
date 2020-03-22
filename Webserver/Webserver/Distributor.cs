@@ -21,7 +21,7 @@ namespace Webserver.Webserver {
 			while (true) {
 				try{
 					HttpListenerContext Context = Listener.GetContext();
-					Console.WriteLine("Received request from {0}", Context.Request.LocalEndPoint);
+					Console.WriteLine("Received request from {0}", Context.Request.RemoteEndPoint);
 					Queue.Add(new ContextProvider(Context));
 				} catch (HttpListenerException e){
 					Console.WriteLine(e);

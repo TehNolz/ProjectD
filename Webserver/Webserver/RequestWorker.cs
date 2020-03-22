@@ -30,10 +30,12 @@ namespace Webserver.Webserver {
 				ResponseProvider Response = Context.Response;
 
 				//Block requests that weren't sent through the load balancer.
-				if(Request.RemoteEndPoint.Address.ToString() != Balancer.MasterEndpoint.Address.ToString()){
+				//TODO: Actually make this work lol. RemoteEndPoint is incorrect somehow
+				/* if (Request.RemoteEndPoint.Address.ToString() != Balancer.MasterEndpoint.Address.ToString()){
+					Console.WriteLine("Refused request: Direct access attempt blocked.");
 					Response.Send(HttpStatusCode.Forbidden);
 					continue;
-				}
+				}*/
 
 				//Parse redirects
 				string URL = Redirects.Resolve(Request.Url.LocalPath.ToLower());

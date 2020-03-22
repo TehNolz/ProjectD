@@ -55,6 +55,19 @@ namespace Webserver.Webserver {
 		}
 		#endregion
 
+		#region LocalEndPoint
+		private IPEndPoint _LocalEndPoint;
+		/// <inheritdoc cref="HttpListenerRequest.LocalEndPoint"/>
+		public IPEndPoint LocalEndPoint {
+			get {
+				return Request == null ? _LocalEndPoint : Request.LocalEndPoint;
+			}
+			private set {
+				_LocalEndPoint = value;
+			}
+		}
+		#endregion
+
 		#region Params
 		/// <inheritdoc cref="HttpListenerRequest.QueryString"/>
 		public Dictionary<string, List<string>> Params;

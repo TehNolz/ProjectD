@@ -10,7 +10,7 @@ using Webserver.Webserver;
 
 namespace Webserver {
 	class Program {
-		public const string wwwroot = "./wwwroot/";
+		public const string wwwroot = "./wwwroot";
 
 		static void Main() {
 			//Check file integrity
@@ -18,11 +18,15 @@ namespace Webserver {
 			Console.WriteLine("Checking file integrity...");
 			if (Diff > 0){
 				Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", Diff);
-				Console.WriteLine("If you modified any files within wwwroot, remember to delete Checksums.json afterwards");
+				Console.WriteLine("Some files may be corrupted. If you continue, all checksums will be recalculated.");
+				Console.WriteLine("Press enter to continue.");
 				Console.ReadLine();
-				return;
+				Integrity.VerifyIntegrity(wwwroot, true);
 			}
 			Console.WriteLine("No integrity issues found.");
+
+			//Crawl webpages.
+			Resource.Crawl(wwwroot);
 
 			//Parse redirects
 			Redirects.LoadRedirects("Redirects.config");
