@@ -12,11 +12,11 @@ namespace Webserver.LoadBalancer {
 		/// <summary>
 		/// Listen for incoming HTTP requests and relay them to slave servers
 		/// </summary>
-		public static void Listen(string Prefix) {
-			Console.WriteLine("Load Balancer Listener now listening on {0}", Prefix);
+		public static void Listen(string Address, int Port) {
+			Console.WriteLine("Load Balancer Listener now listening on {0}:{1}", Address, Port);
 			HttpListener Listener = new HttpListener();
-			Listener.Prefixes.Add(Prefix);
-			Listener.Prefixes.Add("http://localhost:80/");
+			Listener.Prefixes.Add(string.Format("http://{0}:{1}/", Address, Port));
+			Listener.Prefixes.Add(string.Format("http://localhost:{0}/", Port));
 			Listener.Start();
 
 			while (true) {

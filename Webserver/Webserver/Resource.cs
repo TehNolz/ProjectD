@@ -7,17 +7,16 @@ using System.Text;
 
 namespace Webserver.Webserver {
 	public static class Resource {
-		public const string wwwroot = Program.wwwroot;
 
-		public static List<string> WebPages = Crawl(Program.wwwroot);
+		public static List<string> WebPages = Crawl(WebserverConfig.wwwroot);
 
 		public static void ProcessResource(ContextProvider Context){
 			RequestProvider Request = Context.Request;
 			ResponseProvider Response = Context.Response;
 
 			//If target is '/', send index.html if it exists
-			string Target = wwwroot + Request.Url.LocalPath.ToLower();
-			if (Target == wwwroot + "/" && File.Exists(wwwroot + "/index.html")) Target += "index.html";
+			string Target = WebserverConfig.wwwroot + Request.Url.LocalPath.ToLower();
+			if (Target == WebserverConfig.wwwroot + "/" && File.Exists(WebserverConfig.wwwroot + "/index.html")) Target += "index.html";
 
 			//Check if the file exists. If it doesn't, send a 404.
 			if (!WebPages.Contains(Target) || !File.Exists(Target)){

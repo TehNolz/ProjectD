@@ -118,7 +118,7 @@ namespace Webserver.Webserver {
 					.Replace("{STATUSCODE}", ((int)StatusCode).ToString())
 					.Replace("{MSG}", "An error occured, and the resource could not be loaded.");
 			} else {
-				return File.ReadAllText(Program.wwwroot + URL);
+				return File.ReadAllText(WebserverConfig.wwwroot + URL);
 			}
 		}
 	}
