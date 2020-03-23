@@ -15,7 +15,8 @@ namespace Webserver.LoadBalancer {
 		public static void Init() {
 			Networking.Callback = Receive;
 			HeartbeatTimer = new Timer((object _) => HeartbeatCheck(), null, 0, 100);
-			new Thread(() => Listener.Listen()).Start();
+			string URL = Balancer.MasterEndpoint.Address.ToString();
+			new Thread(() => Listener.Listen(string.Format("http://{0}:80/", URL))).Start();
 		}
 
 		public static void Receive(JObject Response, IPEndPoint EP) {
