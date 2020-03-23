@@ -1,10 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Text;
+﻿using System.Collections.Generic;
 using Config;
 
 namespace Webserver {
+	//Configuration classes for use with the Config module. These classes are used to create the Config.json, and to find missing values within it.
+	//Their values will be replaced by the values from Config.json on startup.
 	[ConfigSection]
 	public static class BalancerConfig {
 		[Comment("The multicast address the load balancer will use for internal communication.")]
@@ -24,7 +23,7 @@ namespace Webserver {
 		[Comment("Whether the automatic file integrity check should be enabled. If true, the system will automatically check for file corruption within the wwwroot folder.")]
 		public static bool VerifyIntegrity = true;
 	}
-	
+
 	[ConfigSection]
 	public static class WebserverConfig {
 		[Comment("The path to the folder that contains the webpages and other resources. Any file in this folder will be accessible through the webserver.")]

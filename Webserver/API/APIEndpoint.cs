@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Net;
 using Webserver.Webserver;
 
 namespace Webserver.API {
@@ -20,7 +20,12 @@ namespace Webserver.API {
 		/// </summary>
 		public class PermissionAttribute : Attribute { }
 
-		public class ContentTypeAttribute : Attribute{
+		/// <summary>
+		/// Defines the content type that this endpoint method is expecting. Depending on the content type, the message body
+		/// will have been automatically converted into a usable format before the method is called.
+		/// Eg, if the ContentType is application/json, this property will contain the request body in the form of a JObject.
+		/// </summary>
+		public class ContentTypeAttribute : Attribute {
 			public string Type { get; private set; }
 			public ContentTypeAttribute(string Type) => this.Type = Type;
 		}
@@ -30,50 +35,54 @@ namespace Webserver.API {
 		/// <summary>
 		/// The GET method requests a representation of the specified resource. Requests using GET should only retrieve data.
 		/// </summary>
-		public virtual void GET() => throw new NotImplementedException();
+		public virtual void GET() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The HEAD method asks for a response identical to that of a GET request, but without the response body.
 		/// </summary>
-		public virtual void HEAD() => throw new NotImplementedException();
+		public virtual void HEAD() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The POST method is used to submit an entity to the specified resource, often causing a change in state or side effects on the server.
 		/// </summary>
-		public virtual void POST() => throw new NotImplementedException();
+		public virtual void POST() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The PUT method replaces all current representations of the target resource with the request payload.
 		/// </summary>
-		public virtual void PUT() => throw new NotImplementedException();
+		public virtual void PUT() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The DELETE method deletes the specified resource.
 		/// </summary>
-		public virtual void DELETE() => throw new NotImplementedException();
+		public virtual void DELETE() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The CONNECT method establishes a tunnel to the server identified by the target resource.
 		/// </summary>
-		public virtual void CONNECT() => throw new NotImplementedException();
+		public virtual void CONNECT() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The TRACE method performs a message loop-back test along the path to the target resource.
 		/// </summary>
-		public virtual void TRACE() => throw new NotImplementedException();
+		public virtual void TRACE() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The PATCH method is used to apply partial modifications to a resource.
 		/// </summary>
-		public virtual void PATCH() => throw new NotImplementedException();
+		public virtual void PATCH() => this.Response.Send(HttpStatusCode.MethodNotAllowed);
 		/// <summary>
 		/// The OPTIONS method is used to describe the communication options for the target resource.
 		/// </summary>
-		public void OPTIONS(){
-
+		public void OPTIONS() {
+			//TODO: Implement CORS support
+			this.Response.Send(HttpStatusCode.NoContent);
 		}
 		#endregion
 
+		/// <summary>
+		/// The ContextProvider that represents the communication between client and server.
+		/// </summary>
 		public ContextProvider Context { get; set; }
 		/// <inheritdoc cref="ContextProvider.Request"/>
-		public RequestProvider Request { get { return Context.Request; } }
+		public RequestProvider Request => this.Context.Request;
 		/// <inheritdoc cref="ContextProvider.Response"/>
-		public ResponseProvider Response { get { return Context.Response; } }
+		public ResponseProvider Response => this.Context.Response;
 		/// <inheritdoc cref="RequestProvider.Params"/>
-		public Dictionary<string, List<string>> Params { get { return Context.Request.Params; } }
+		public Dictionary<string, List<string>> Params => this.Context.Request.Params;
 		/// <summary>
 		/// The data from the request body. If necessary, this data will have already been parsed into a usable type, as configured by the ContentType attribute.
 		/// Eg, if the ContentType is application/json, this property will contain the request body in the form of a JObject.

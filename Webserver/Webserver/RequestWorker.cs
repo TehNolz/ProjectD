@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Net;
-using System.Text;
 using Webserver.API;
-using Webserver.LoadBalancer;
 
 namespace Webserver.Webserver {
 	class RequestWorker {
@@ -15,7 +12,7 @@ namespace Webserver.Webserver {
 		/// </summary>
 		/// <param name="Queue">A BlockingCollection where new requests will be placed.</param>
 		/// <param name="Debug">Debug mode. If true, the RequestWorker will automatically shutdown once all requests have been processed. Used for unit testing.</param>
-		public RequestWorker (BlockingCollection<ContextProvider> Queue, bool Debug = false){
+		public RequestWorker(BlockingCollection<ContextProvider> Queue, bool Debug = false) {
 			this.Queue = Queue;
 			this.Debug = Debug;
 		}
@@ -23,9 +20,9 @@ namespace Webserver.Webserver {
 		/// <summary>
 		/// Start this RequestWorker. Should be run in its own thread.
 		/// </summary>
-		public void Run(){
+		public void Run() {
 			do {
-				ContextProvider Context = Queue.Take();
+				ContextProvider Context = this.Queue.Take();
 				RequestProvider Request = Context.Request;
 				ResponseProvider Response = Context.Response;
 
@@ -39,30 +36,31 @@ namespace Webserver.Webserver {
 
 				//Parse redirects
 				string URL = Redirects.Resolve(Request.Url.LocalPath.ToLower());
-				if (URL == null) {
+				if(URL == null) {
 					Console.WriteLine("Couldn't resolve URL; infinite redirection loop. URL: " + Request.Url.LocalPath.ToLower());
 					continue;
 				}
 				//Remove trailing /
-				if (URL.EndsWith('/') && URL.Length > 1) URL = URL.Remove(URL.Length - 1);
+				if(URL.EndsWith('/') && URL.Length > 1)
+					URL = URL.Remove(URL.Length - 1);
 
 				//Redirect if necessary
-				if (URL != Request.Url.LocalPath.ToLower()) {
+				if(URL != Request.Url.LocalPath.ToLower()) {
 					Console.WriteLine("Request redirected to " + URL);
 					Response.Redirect = URL;
 					Response.Send(HttpStatusCode.PermanentRedirect);
 					continue;
 				}
 
-				//If the
-				if(URL.StartsWith("/api")){
+				//If the URL starts with /api, assume that its a request for an API endpoint.
+				if(URL.StartsWith("/api")) {
 					APIEndpoint.ProcessEndpoint(Context);
 				} else {
 					Resource.ProcessResource(Context);
 				}
 
-			//If Debug mode is enabled and the queue is empty, stop the worker.
-			} while (!Debug || Queue.Count != 0);	
+				//If Debug mode is enabled and the queue is empty, stop the worker.
+			} while(!this.Debug || this.Queue.Count != 0);
 		}
 	}
 }
