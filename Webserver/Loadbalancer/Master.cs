@@ -7,58 +7,63 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace Webserver.LoadBalancer {
-	public static class Master {
+namespace Webserver.LoadBalancer
+{
+	public static class Master
+	{
 		public static Timer HeartbeatTimer;
-
 		public static DateTime LastHeartbeat;
-		public static void Init() {
+
+		public static void Init()
+		{
 			Networking.Callback = Receive;
 			HeartbeatTimer = new Timer((object _) => HeartbeatCheck(), null, 0, 100);
 			string URL = Balancer.MasterEndpoint.Address.ToString();
 			new Thread(() => Listener.Listen(URL, BalancerConfig.HttpPort)).Start();
 		}
 
-		public static void Receive(JObject Response, IPEndPoint EP) {
-			
-			switch ((string)Response["Type"]) {
-
+		public static void Receive(JObject response, IPEndPoint address)
+		{
+			switch ((string)response["Type"])
+			{
 				//Connects a new server to the network
 				case "DISCOVER":
-					Balancer.Servers.GetOrAdd(EP, new ServerProfile(EP, DateTime.Now));
-					Networking.SendData(ConnectionMsg.Master);
-					Console.WriteLine("Registered new slave "+EP.Address);
+					Balancer.Servers.GetOrAdd(address, new ServerProfile(address, DateTime.Now));
+					Networking.SendData(ConnectionMessage.Master);
+					Console.WriteLine("Registered new slave " + address.Address);
 					break;
 
 				case "OK":
-					switch((string)Response["Operation"]){
+					switch ((string)response["Operation"])
+					{
 						case "HEARTBEAT":
-							Balancer.Servers[EP].LastHeartbeat = DateTime.Now;
+							Balancer.Servers[address].LastHeartbeat = DateTime.Now;
 							break;
-						default: return;
 					}
 					break;
-
-				default: return;
 			}
 		}
 
-		public static void HeartbeatCheck(){
-			Networking.SendData(ConnectionMsg.Heartbeat);
+		public static void HeartbeatCheck()
+		{
+			Networking.SendData(ConnectionMessage.Heartbeat);
 			Thread.Sleep(50);
 			LastHeartbeat = DateTime.Now;
 
 			List<IPEndPoint> ToRemove = new List<IPEndPoint>();
-			foreach (KeyValuePair<IPEndPoint, ServerProfile> Entry in Balancer.Servers) {
+			foreach (KeyValuePair<IPEndPoint, ServerProfile> Entry in Balancer.Servers)
+			{
 				if (Entry.Key.ToString() == Networking.LocalEndPoint.ToString()) continue;
 				if (Entry.Value.RegisteredAt > LastHeartbeat.AddMilliseconds(-500)) continue;
-				if (Entry.Value.LastHeartbeat < LastHeartbeat.AddMilliseconds(-500)) {
-					Networking.SendData(ConnectionMsg.Timeout(Entry.Key));
+				if (Entry.Value.LastHeartbeat < LastHeartbeat.AddMilliseconds(-500))
+				{
+					Networking.SendData(ConnectionMessage.Timeout(Entry.Key));
 					ToRemove.Add(Entry.Key);
 				}
 			}
 
-			foreach (IPEndPoint EP in ToRemove) {
+			foreach (IPEndPoint EP in ToRemove)
+			{
 				Balancer.Servers.Remove(EP, out _);
 			}
 		}

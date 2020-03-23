@@ -4,9 +4,11 @@ using System.Net;
 using System.Text;
 using Config;
 
-namespace Webserver {
+namespace Webserver
+{
 	[ConfigSection]
-	public static class BalancerConfig {
+	public static class BalancerConfig
+	{
 		[Comment("The multicast address the load balancer will use for internal communication.")]
 		public static string MulticastAddress = "224.0.0.1";
 		[Comment("The port the load balancer will use for internal communication.")]
@@ -20,15 +22,17 @@ namespace Webserver {
 	}
 
 	[ConfigSection]
-	public static class MiscConfig {
+	public static class MiscConfig
+	{
 		[Comment("Whether the automatic file integrity check should be enabled. If true, the system will automatically check for file corruption within the wwwroot folder.")]
 		public static bool VerifyIntegrity = true;
 	}
-	
+
 	[ConfigSection]
-	public static class WebserverConfig {
+	public static class WebserverConfig
+	{
 		[Comment("The path to the folder that contains the webpages and other resources. Any file in this folder will be accessible through the webserver.")]
-		public static string wwwroot = "./wwwroot";
+		public static string WWWRoot = "./wwwroot";
 
 		[Comment("The amount of worker threads the server will use. More threads means that more simultaneous requests can be processed, but increases hardware usage.")]
 		public static int WorkerThreadCount = 5;

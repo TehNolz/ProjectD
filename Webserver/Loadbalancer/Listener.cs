@@ -1,83 +1,93 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
 
-namespace Webserver.LoadBalancer {
-	class Listener {
-
+namespace Webserver.LoadBalancer
+{
+	class Listener
+	{
 		/// <summary>
 		/// Listen for incoming HTTP requests and relay them to slave servers
 		/// </summary>
-		public static void Listen(string Address, int Port) {
-			Console.WriteLine("Load Balancer Listener now listening on {0}:{1}", Address, Port);
-			HttpListener Listener = new HttpListener();
-			Listener.Prefixes.Add(string.Format("http://{0}:{1}/", Address, Port));
-			Listener.Prefixes.Add(string.Format("http://localhost:{0}/", Port));
-			Listener.Start();
+		public static void Listen(string address, int port)
+		{
+			var listener = new HttpListener();
+			listener.Prefixes.Add($"http://{address}:{port}/");
+			listener.Prefixes.Add($"http://localhost:{port}/");
+			listener.Start();
 
-			while (true) {
-				HttpListenerContext Context = Listener.GetContext();
-				string URL = GetBestSlave()+Context.Request.Url.LocalPath;
-				HttpWebRequest RelayRequest = (HttpWebRequest)WebRequest.Create(URL);
-				RelayRequest.UserAgent = Context.Request.UserAgent;
-
-				RelayRequest.BeginGetResponse(Respond, new RequestState(RelayRequest, Context));
+			Console.WriteLine("Load Balancer Listener now listening on {0}:{1}", address, port);
+			while (true)
+			{
+				var context = listener.GetContext();
+				string URL = GetBestSlave() + context.Request.Url.LocalPath;
 				
+				var requestRelay = (HttpWebRequest)WebRequest.Create(URL);
+				requestRelay.UserAgent = context.Request.UserAgent;
+
+				requestRelay.BeginGetResponse(Respond, new RequestState(requestRelay, context));
 			}
 		}
 
-		private static int ServerIterator;
+		private static int serverIndex;
 		/// <summary>
 		/// Find the best slave to relay incoming requests to.
 		/// </summary>
 		/// <returns>The URL of the chosen slave</returns>
-		private static string GetBestSlave(){
-			List<ServerProfile> Servers = new List<ServerProfile>(Balancer.Servers.Values);
-			if(ServerIterator + 1 == Servers.Count){
-				ServerIterator = 0;
-			} else {
-				ServerIterator++;
-			}
-			ServerProfile Server = Servers[ServerIterator];
-			return string.Format("http://{0}:{1}", Server.Endpoint.Address.ToString(), Balancer.HttpPort);
+		private static string GetBestSlave()
+		{
+			var servers = Balancer.Servers.Values;
+			// Increment the server index and wrap back to 0 when the index reaches servers.Count
+			serverIndex = (serverIndex + 1) % servers.Count;
+			return $"http://{servers.ElementAt(serverIndex).Endpoint.Address}:{Balancer.Port}";
 		}
 
 		/// <summary>
 		/// Respond to an incoming HTTP request
 		/// </summary>
-		/// <param name="Result"></param>
-		private static void Respond(IAsyncResult Result) {
-			RequestState Data = (RequestState)Result.AsyncState;
+		/// <param name="result"></param>
+		private static void Respond(IAsyncResult result)
+		{
+			var data = (RequestState)result.AsyncState;
 
-			HttpWebResponse WorkerResponse;
-			try {
-				WorkerResponse = (HttpWebResponse)Data.WebRequest.EndGetResponse(Result);
-			} catch (WebException e){
-				WorkerResponse = e.Response as HttpWebResponse;
+			HttpWebResponse workerResponse;
+			try
+			{
+				workerResponse = (HttpWebResponse)data.WebRequest.EndGetResponse(result);
+			}
+			catch (WebException e)
+			{
+				workerResponse = e.Response as HttpWebResponse;
 			}
 
-			HttpListenerResponse Response = Data.Context.Response;
-			Response.Headers = WorkerResponse.Headers;
-			Response.StatusCode = (int)WorkerResponse.StatusCode;
-			
-			using Stream WorkerResponseStream = WorkerResponse.GetResponseStream();
-			WorkerResponseStream.CopyTo(Response.OutputStream);
+			var response = data.Context.Response;
+			response.Headers = workerResponse.Headers;
+			response.StatusCode = (int)workerResponse.StatusCode;
 
-			try {
-				Response.OutputStream.Close();
-			} catch (Exception) {}
-			WorkerResponse.Dispose();
+			using var outStream = workerResponse.GetResponseStream();
+			outStream.CopyTo(response.OutputStream);
+
+			try
+			{
+				response.OutputStream.Close();
+			}
+			catch (Exception) { }
+
+			workerResponse.Dispose();
 		}
 
-		public class RequestState {
+		public struct RequestState
+		{
 			public readonly HttpWebRequest WebRequest;
 			public readonly HttpListenerContext Context;
 
-			public RequestState(HttpWebRequest Request, HttpListenerContext Context) {
+			public RequestState(HttpWebRequest Request, HttpListenerContext Context)
+			{
 				WebRequest = Request;
 				this.Context = Context;
 			}

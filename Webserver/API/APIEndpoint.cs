@@ -3,16 +3,19 @@ using System.Collections.Generic;
 using System.Text;
 using Webserver.Webserver;
 
-namespace Webserver.API {
-	public abstract partial class APIEndpoint {
+namespace Webserver.API
+{
+	public abstract partial class APIEndpoint
+	{
 		#region Attributes
 		/// <summary>
 		/// Defines this endpoint's URL.
 		/// </summary>
 		[AttributeUsage(AttributeTargets.Class)]
-		public class RouteAttribute : Attribute {
-			public string Route { get; private set; }
-			public RouteAttribute(string Route) => this.Route = Route;
+		public class RouteAttribute : Attribute
+		{
+			public string Route { get; }
+			public RouteAttribute(string route) => Route = route;
 		}
 
 		/// <summary>
@@ -20,9 +23,10 @@ namespace Webserver.API {
 		/// </summary>
 		public class PermissionAttribute : Attribute { }
 
-		public class ContentTypeAttribute : Attribute{
-			public string Type { get; private set; }
-			public ContentTypeAttribute(string Type) => this.Type = Type;
+		public class ContentTypeAttribute : Attribute
+		{
+			public string Type { get; }
+			public ContentTypeAttribute(string type) => Type = type;
 		}
 		#endregion
 
@@ -62,7 +66,8 @@ namespace Webserver.API {
 		/// <summary>
 		/// The OPTIONS method is used to describe the communication options for the target resource.
 		/// </summary>
-		public void OPTIONS(){
+		public void OPTIONS()
+		{
 
 		}
 		#endregion

@@ -1,15 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 
-namespace Webserver.API.Endpoints {
+namespace Webserver.API.Endpoints
+{
 	[Route("example")]
-	class Example : APIEndpoint{
-		public override void GET(){
-			Response.Send(new JObject(){
-				{"test", "Greetings Earth" }
-			}, System.Net.HttpStatusCode.BadRequest);
+	class Example : APIEndpoint
+	{
+		public override void GET()
+		{
+			Response.Send(new JObject(){ {"test", "Greetings Earth" }},
+				System.Net.HttpStatusCode.BadRequest
+			);
 		}
 	}
 }

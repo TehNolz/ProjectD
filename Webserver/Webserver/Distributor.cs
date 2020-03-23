@@ -1,31 +1,37 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Net;
-using System.Text;
 
-namespace Webserver.Webserver {
-	class Distributor {
+namespace Webserver.Webserver
+{
+	internal static class Distributor
+	{
 		/// <summary>
 		/// Distributes relayed requests over the various worker threads.
 		/// </summary>
-		/// <param name="Addr">The address the distributor will listen on.</param>
-		/// <param name="HttpPort">The port the distributor will listen on.</param>
-		/// <param name="Queue">The BlockingCollection queue that incoming requests will be played in.</param>
-		public static void Run(IPAddress Addr, int HttpPort, BlockingCollection<ContextProvider> Queue) {
-			HttpListener Listener = new HttpListener();
-			Console.WriteLine(string.Format("Distributor listening on {0}:{1}", Addr, HttpPort));
-			Listener.Prefixes.Add(string.Format("http://{0}:{1}/", Addr.ToString(), HttpPort));
-			Listener.Start();
+		/// <param name="address">The address the distributor will listen on.</param>
+		/// <param name="port">The port the distributor will listen on.</param>
+		/// <param name="queue">The BlockingCollection queue that incoming requests will be played in.</param>
+		public static void Run(IPAddress address, int port, BlockingCollection<ContextProvider> queue)
+		{
+			// Create and start a new HttpListener for the given port and address
+			var listener = new HttpListener();
+			listener.Prefixes.Add($"http://{address.ToString()}:{port}/");
+			listener.Start();
 
-			while (true) {
-				try{
-					HttpListenerContext Context = Listener.GetContext();
-					Console.WriteLine("Received request from {0}", Context.Request.RemoteEndPoint);
-					Queue.Add(new ContextProvider(Context));
-				} catch (HttpListenerException e){
+			Console.WriteLine("Distributor listening on {0}:{1}", address, port);
+			while (true)
+			{
+				try
+				{
+					var context = listener.GetContext();
+					Console.WriteLine("Received request from {0}", context.Request.RemoteEndPoint);
+					queue.Add(new ContextProvider(context));
+				}
+				catch (HttpListenerException e)
+				{
 					Console.WriteLine(e);
-				}				
+				}
 			}
 		}
 	}

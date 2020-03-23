@@ -11,36 +11,41 @@ using Config;
 using System.IO;
 using Newtonsoft.Json;
 using System.Net.Sockets;
+using System.Linq;
 
-namespace Webserver {
-	class Program {
-		static void Main() {
+namespace Webserver
+{
+	class Program
+	{
+		static void Main()
+		{
 			//Load config file
-			if(!File.Exists("Config.json")){
+			if (!File.Exists("Config.json"))
 				ConfigFile.Write("Config.json");
-			}
-			int Missing = ConfigFile.Load("Config.json");
-			if(Missing > 0){
+
+			if (ConfigFile.Load("Config.json") is int missing && missing > 0)
+			{
 				ConfigFile.Write("Config.json");
-				Console.WriteLine("{0} configuration setting(s) are missing. The missing settings have been inserted.", Missing);
+				Console.WriteLine("{0} configuration setting(s) are missing. The missing settings have been inserted.", missing);
 			}
 
 			//Check file integrity if necessary.
-			if(MiscConfig.VerifyIntegrity){
-				int Diff = Integrity.VerifyIntegrity(WebserverConfig.wwwroot);
+			if (MiscConfig.VerifyIntegrity)
+			{
 				Console.WriteLine("Checking file integrity...");
-				if (Diff > 0) {
-					Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", Diff);
+				if (Integrity.VerifyIntegrity(WebserverConfig.WWWRoot) is int diff && diff > 0)
+				{
+					Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", diff);
 					Console.WriteLine("Some files may be corrupted. If you continue, all checksums will be recalculated.");
 					Console.WriteLine("Press enter to continue.");
 					Console.ReadLine();
-					Integrity.VerifyIntegrity(WebserverConfig.wwwroot, true);
+					Integrity.VerifyIntegrity(WebserverConfig.WWWRoot, true);
 				}
 				Console.WriteLine("No integrity issues found.");
 			}
 
 			//Crawl webpages.
-			Resource.Crawl(WebserverConfig.wwwroot);
+			Resource.Crawl(WebserverConfig.WWWRoot);
 
 			//Parse redirects
 			Redirects.LoadRedirects("Redirects.config");
@@ -50,48 +55,52 @@ namespace Webserver {
 			APIEndpoint.DiscoverEndpoints();
 
 			//Check multicast address
-			if(!IPAddress.TryParse(BalancerConfig.MulticastAddress, out IPAddress Multicast)){
+			if (!IPAddress.TryParse(BalancerConfig.MulticastAddress, out IPAddress multicast))
+			{
 				Console.WriteLine("The MulticastAddress specified in the configuration file is not a valid IP address. The server cannot start.");
 				return;
 			}
 
 			//Check addresses
-			List<IPAddress> Addresses = new List<IPAddress>();
-			if(BalancerConfig.IPAddresses.Count == 0){
+			List<IPAddress> addresses = new List<IPAddress>();
+			if (BalancerConfig.IPAddresses.Count == 0)
+			{
 				//Autodetect
 				using Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0);
 				socket.Connect("8.8.8.8", 65530);
-				Addresses.Add((socket.LocalEndPoint as IPEndPoint).Address);
-
-			} else {
-				foreach(string Addr in BalancerConfig.IPAddresses){
-					if(!IPAddress.TryParse(Addr, out IPAddress Address)){
-						Console.WriteLine("Skipping invalid address {0}", Addr);
-					} else {
-						Addresses.Add(Address);
+				addresses.Add((socket.LocalEndPoint as IPEndPoint).Address);
+			}
+			else
+			{
+				foreach (string address in BalancerConfig.IPAddresses)
+				{
+					if (!IPAddress.TryParse(address, out IPAddress Address))
+					{
+						Console.WriteLine("Skipping invalid address {0}", address);
 					}
+					else addresses.Add(Address);
 				}
 			}
-			if(Addresses.Count == 0){
+			if (!addresses.Any())
+			{
 				Console.WriteLine("No addresses were configured. The server cannot start.");
 				return;
 			}
 
 			//Start load balancer
-			IPAddress Local = Balancer.Init(Addresses, Multicast, BalancerConfig.BalancerPort, BalancerConfig.HttpRelayPort);
+			var localAddress = Balancer.Init(addresses, multicast, BalancerConfig.BalancerPort, BalancerConfig.HttpRelayPort);
 
 			//Start distributor and worker threads
-			BlockingCollection<ContextProvider> Queue = new BlockingCollection<ContextProvider>();
-			List<RequestWorker> Workers = new List<RequestWorker>();
-			for(int i = 0; i < WebserverConfig.WorkerThreadCount; i++){
-				RequestWorker Worker = new RequestWorker(Queue);
-				new Thread(() => Worker.Run()).Start();
-			}
-			Thread Distr = new Thread(() => Distributor.Run(Local, 12001, Queue));
-			Distr.Start();
+			var Queue = new BlockingCollection<ContextProvider>();
+			var Workers = new List<RequestWorker>();
+			for (int i = 0; i < WebserverConfig.WorkerThreadCount; i++)
+				new RequestWorker(Queue).Start();
+
+			Thread distributor = new Thread(() => Distributor.Run(localAddress, 12001, Queue));
+			distributor.Start();
 
 			//TODO: Implement proper shutdown
-			Distr.Join();
+			distributor.Join();
 		}
 	}
 }

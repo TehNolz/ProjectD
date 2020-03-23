@@ -7,25 +7,35 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace Webserver.LoadBalancer {
-	public static class Balancer {
-		private static bool _isMaster;
-		public static int HttpPort;
+namespace Webserver.LoadBalancer
+{
+	public static class Balancer
+	{
+		public static int Port { get; set; }
 		public static IPEndPoint MasterEndpoint { get; set; }
-		public static readonly ConcurrentDictionary<IPEndPoint, ServerProfile> Servers = new ConcurrentDictionary<IPEndPoint, ServerProfile>();
 
+		public static ConcurrentDictionary<IPEndPoint, ServerProfile> Servers { get; } = new ConcurrentDictionary<IPEndPoint, ServerProfile>();
+
+		private static bool isMaster;
 		/// <summary>
 		/// Gets or sets master mode. If true, this instance of the server will act as the server group's master.
-		/// Only one master exists at any given time.
 		/// </summary>
-		public static bool IsMaster {
-			get { return _isMaster; } 
-			set {
-				_isMaster = value;	
-				if(value == true){
+		/// <remarks>
+		/// Only one master exists at any given time.
+		/// </remarks>
+		public static bool IsMaster
+		{
+			get { return isMaster; }
+			set
+			{
+				isMaster = value;
+				if (value)
+				{
 					Slave.Stop();
 					Master.Init();
-				} else {
+				}
+				else
+				{
 					Slave.Init();
 				}
 			}
@@ -34,56 +44,67 @@ namespace Webserver.LoadBalancer {
 		/// <summary>
 		/// Starts the load balancer.
 		/// </summary>
-		/// <param name="Addresses">A list of IP addresses the listener will bind to. Only the first available address is used, which is also returned.</param>
-		/// <param name="MulticastAddress">The Multicast address that the balancer will use. Must match all other servers. Multicast addresses are in the range 224.0.0.0 - 239.255.255.255</param>
-		/// <param name="BalancerPort">The port the balancer will be using for internal communication</param>
-		/// <param name="HttpPort">The port the balancer will be using for relaying HTTP requests to the slaves</param>
-		/// <returns></returns>
-		public static IPAddress Init(List<IPAddress> Addresses, IPAddress MulticastAddress = null, int BalancerPort = 12000, int HttpPort = 12001) {
-			if (MulticastAddress == null) MulticastAddress = IPAddress.Parse("224.0.0.1"); //Default multicast address;
-			Balancer.HttpPort = HttpPort;
+		/// <param name="addresses">A list of IP addresses the listener will bind to. Only the first available address is used, which is also returned.</param>
+		/// <param name="multicastAddress">The Multicast address that the balancer will use. Must match all other servers. Multicast addresses are in the range 224.0.0.0 - 239.255.255.255</param>
+		/// <param name="balancerPort">The port the balancer will be using for internal communication</param>
+		/// <param name="port">The port the balancer will be using for relaying HTTP requests to the slaves</param>
+		public static IPAddress Init(List<IPAddress> addresses, IPAddress multicastAddress = null, int balancerPort = 12000, int port = 12001)
+		{
+			if (multicastAddress == null) multicastAddress = IPAddress.Parse("224.0.0.1"); //Default multicast address;
+			Port = port;
 
 			//Create a client and send a discover message.
-			UdpClient Client = Networking.GetClient(Addresses, MulticastAddress, BalancerPort);
-			Client.Client.ReceiveTimeout = 1000;
-			byte[] Msg = Encoding.UTF8.GetBytes(ConnectionMsg.Discover.ToString());
-			IPEndPoint EP = new IPEndPoint(MulticastAddress, BalancerPort);
-			Client.Send(Msg, EP);
+			var client = Networking.GetClient(addresses, multicastAddress, balancerPort);
+			client.Client.ReceiveTimeout = 1000;
+
+			byte[] messageBytes = Encoding.UTF8.GetBytes(ConnectionMessage.Discover.ToString());
+			var address = new IPEndPoint(multicastAddress, balancerPort);
+			client.Send(messageBytes, address);
 
 			//Wait for an answer to the discover message. If the socket times out, the server will assume
 			//that no master exists, and will promote itself.
-			try {
-				for(int i = 0; i < 100; i++) {
-					byte[] RawResponse = Client.Receive(ref EP);
-					JObject Response = null;
-					try{
-						Response = JObject.Parse(Encoding.UTF8.GetString(RawResponse));
-					} catch(JsonReaderException){
+			try
+			{
+				for (int i = 0; i < 100; i++)
+				{
+					byte[] RawResponse = client.Receive(ref address);
+					JObject response = null;
+					try
+					{
+						response = JObject.Parse(Encoding.UTF8.GetString(RawResponse));
+						if (response == null || !response.ContainsKey("Type"))
+							continue;
+					}
+					catch (JsonReaderException)
+					{
 						continue;
 					}
-					if(!Response.ContainsKey("Type")){
-						continue;
-					}
-					if((string)Response["Type"] == "MASTER"){
+					if ((string)response["Type"] == "MASTER")
+					{
 						IsMaster = false;
 						break;
 					}
 				}
-			} catch (SocketException e) {
-				if(e.SocketErrorCode == SocketError.TimedOut){
-					MasterEndpoint = EP;
+			}
+			catch (SocketException e)
+			{
+				if (e.SocketErrorCode == SocketError.TimedOut)
+				{
+					MasterEndpoint = address;
 					IsMaster = true;
-				} else {
-					throw new SocketException();
+				}
+				else
+				{
+					throw e;
 				}
 			}
-			Client.Close();
+			client.Close();
 
 			//Initialise the networking system
-			MasterEndpoint = EP;
-			Networking.Init(Addresses, MulticastAddress, BalancerPort);
-			Console.WriteLine("Local endpoint is {0}, Master endpoint is {1}", Networking.LocalEndPoint, EP);
-			Console.Title = string.Format("Local - {0} | Master - {1}", Networking.LocalEndPoint, EP);
+			MasterEndpoint = address;
+			Networking.Init(addresses, multicastAddress, balancerPort);
+			Console.WriteLine("Local endpoint is {0}, Master endpoint is {1}", Networking.LocalEndPoint, address);
+			Console.Title = $"Local - {Networking.LocalEndPoint} | Master - {address}";
 			return Networking.LocalEndPoint.Address;
 		}
 	}
