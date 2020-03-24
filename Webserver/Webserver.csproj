@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Config\Config.csproj" />
+    <ProjectReference Include="..\Database-Adapter\SQLite Adapter\SQLite Adapter.csproj" />
   </ItemGroup>
 
   <ItemGroup>

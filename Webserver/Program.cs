@@ -1,24 +1,59 @@
-﻿using System;
+﻿using Config;
+using Database.SQLite;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net;
-using System.Text;
+using System.Net.Sockets;
 using System.Threading;
 using Webserver.API;
 using Webserver.LoadBalancer;
 using Webserver.Webserver;
-using Config;
-using System.IO;
-using Newtonsoft.Json;
-using System.Net.Sockets;
-using System.Linq;
+using Webserver.Models;
+using System.Data.Common;
+using Newtonsoft.Json.Linq;
 
 namespace Webserver
 {
 	class Program
 	{
-		static void Main()
+		public static SQLiteAdapter Database;
+
+		public static void Main()
 		{
+			// Initialize database
+			if (File.Exists("Database.db"))
+				File.Delete("Database.db");
+			Database = new SQLiteAdapter("Database.db");
+			Database.CreateTable<Example>();
+			Database.Inserting += OnDatabaseInsert;
+
+			Database.Insert<Example>(new Example[] {
+				new Example()
+				{
+					Message = "yeet skeet"
+				},
+				new Example()
+				{
+					Message = "second"
+				},
+				new Example()
+				{
+					Message = "hhhhhhhhhrbrbrbbrbgbbgbgbrbrbbrbrbrb"
+				},
+				new Example()
+				{
+					Message = "It smells kinda musky in here"
+				},
+				new Example() {
+					Message = "OH GOD NOT THE JAVA BRACKETS. NOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"
+				}
+			});
+
+			return;
+
 			//Load config file
 			if (!File.Exists("Config.json"))
 				ConfigFile.Write("Config.json");
@@ -101,6 +136,30 @@ namespace Webserver
 
 			//TODO: Implement proper shutdown
 			distributor.Join();
+		}
+
+		private static void OnDatabaseInsert(SQLiteAdapter sender, CommandEventArgs args)
+		{
+			var command = args.Command;
+			//command.CommandType = System.Data.CommandType.StoredProcedure;
+
+			Console.WriteLine("---- Command Text Begin ----");
+			Console.WriteLine(command.CommandText);
+			Console.WriteLine("---- Command Text End ----");
+			Console.WriteLine();
+			Console.WriteLine("---- Parameters Begin ----");
+			var json = new JArray();
+			foreach (DbParameter param in command.Parameters)
+			{
+				json.Add(new JObject()
+				{
+					{ "name", new JValue(param.ParameterName) },
+					{ "type", new JValue(param.DbType.ToString()) },
+					{ "value", new JValue(param.Value) }
+				});
+			}
+			Console.WriteLine(json.ToString(Newtonsoft.Json.Formatting.Indented));
+			Console.WriteLine("---- Parameters End ----");
 		}
 	}
 }
