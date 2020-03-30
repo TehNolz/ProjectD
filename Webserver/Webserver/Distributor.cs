@@ -6,6 +6,8 @@ namespace Webserver.Webserver
 {
 	internal static class Distributor
 	{
+		private static HttpListener Listener { get; set; }
+
 		/// <summary>
 		/// Distributes relayed requests over the various worker threads.
 		/// </summary>
@@ -15,16 +17,16 @@ namespace Webserver.Webserver
 		public static void Run(IPAddress address, int port, BlockingCollection<ContextProvider> queue)
 		{
 			// Create and start a new HttpListener for the given port and address
-			var listener = new HttpListener();
-			listener.Prefixes.Add($"http://{address.ToString()}:{port}/");
-			listener.Start();
+			Listener = new HttpListener();
+			Listener.Prefixes.Add($"http://{address.ToString()}:{port}/");
+			Listener.Start();
 
 			Console.WriteLine("Distributor listening on {0}:{1}", address, port);
 			while (true)
 			{
 				try
 				{
-					var context = listener.GetContext();
+					var context = Listener.GetContext();
 					Console.WriteLine("Received request from {0}", context.Request.RemoteEndPoint);
 					queue.Add(new ContextProvider(context));
 				}
@@ -33,6 +35,11 @@ namespace Webserver.Webserver
 					Console.WriteLine(e);
 				}
 			}
+		}
+
+		public static void Dispose()
+		{
+			Listener.Close();
 		}
 	}
 }
