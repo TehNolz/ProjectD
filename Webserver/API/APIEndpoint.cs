@@ -9,13 +9,22 @@ namespace Webserver.API
 	{
 		#region Attributes
 		/// <summary>
-		/// Defines this endpoint's URL.
+		/// Specifies the local route of an <see cref="APIEndpoint"/>.
 		/// </summary>
-		[AttributeUsage(AttributeTargets.Class)]
+		[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 		public class RouteAttribute : Attribute
 		{
+			/// <summary>
+			/// Gets the local route to the <see cref="APIEndpoint"/>.
+			/// </summary>
 			public string Route { get; }
-			public RouteAttribute(string route) => Route = route;
+			/// <summary>
+			/// Initializes a new instance of <see cref="RouteAttribute"/> with the given
+			/// local url <paramref name="route"/>.
+			/// </summary>
+			/// <param name="route">The path to the <see cref="APIEndpoint"/>. If a leading / is omitted,
+			///	it will automatically be prepended.</param>
+			public RouteAttribute(string route) => Route = (route.StartsWith('/') ? "" : "/" ) + route;
 		}
 
 		/// <summary>
@@ -23,9 +32,21 @@ namespace Webserver.API
 		/// </summary>
 		public class PermissionAttribute : Attribute { }
 
+		/// <summary>
+		/// Specifies the content-types that are valid on an HTTP method in <see cref="APIEndpoint"/>.
+		/// </summary>
+		[AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
 		public class ContentTypeAttribute : Attribute
 		{
+			/// <summary>
+			/// Gets the accepted content type of an <see cref="APIEndpoint"/> method.
+			/// </summary>
 			public string Type { get; }
+			/// <summary>
+			/// Initializes a new instance if <see cref="ContentTypeAttribute"/> with the given
+			/// content type.
+			/// </summary>
+			/// <param name="type">The name of the content type to specify.</param>
 			public ContentTypeAttribute(string type) => Type = type;
 		}
 		#endregion
