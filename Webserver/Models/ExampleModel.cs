@@ -5,7 +5,8 @@ using Database.SQLite.Modeling;
 
 namespace Webserver.Models
 {
-	public sealed class Example
+	[Table("Example")]
+	public sealed class ExampleModel
 	{
 		[Primary]
 		public int? Id { get; set; }
