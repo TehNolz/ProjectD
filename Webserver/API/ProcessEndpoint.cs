@@ -25,7 +25,7 @@ namespace Webserver.API
 			ResponseProvider response = Context.Response;
 
 			//Check if the requested endpoint exists. If it doesn't, send a 404.
-			var endpointType = (from e in Endpoints where "/api/" + e.GetCustomAttribute<RouteAttribute>()?.Route == request.Url.LocalPath.ToLower() select e).FirstOrDefault();
+			var endpointType = (from e in Endpoints where "/api" + e.GetCustomAttribute<RouteAttribute>()?.Route == request.Url.LocalPath.ToLower() select e).FirstOrDefault();
 			if (endpointType == null)
 			{
 				response.Send(HttpStatusCode.NotFound);
@@ -61,7 +61,9 @@ namespace Webserver.API
 				switch (contentType.Type)
 				{
 					case "application/json":
-						string json = new StreamReader(request.InputStream, request.ContentEncoding).ReadToEnd();
+						var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+						string json = reader.ReadToEnd();
+						reader.Dispose();
 						try
 						{
 							endpoint.Data = JObject.Parse(json);
