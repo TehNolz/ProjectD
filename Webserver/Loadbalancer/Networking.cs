@@ -32,8 +32,8 @@ namespace Webserver.LoadBalancer
 			Port = port;
 
 			Client = GetClient(Addresses, multicastAddress, port);
-			new Thread(() => ReceiveThread()).Start();
-			new Thread(() => SenderThread_Run()).Start();
+			new Thread(() => ReceiveThread()) { Name = "ReceiverThread" }.Start();
+			new Thread(() => SenderThread_Run()) { Name = "SenderThread" }.Start();
 		}
 
 		/// <summary>
@@ -59,7 +59,7 @@ namespace Webserver.LoadBalancer
 				try
 				{
 					response = JObject.Parse(Encoding.UTF8.GetString(data));
-					if (response == null || !response.ContainsKey("Type"))
+					if (response == null || !response.ContainsKey("$type"))
 						continue;
 				}
 				catch (JsonReaderException)
@@ -67,8 +67,12 @@ namespace Webserver.LoadBalancer
 					continue;
 				}
 
-				//If this message has a Destination key, check if the message was directed at this slave
-				if (response.TryGetValue<string>("Destination", out JToken value) && value.ToString() != LocalEndPoint.ToString())
+				//If this message has a $destination key, check if the message was directed at this slave
+				if (response.TryGetValue<string>("$destination", out JToken destination) && destination.ToString() != LocalEndPoint.ToString())
+					continue;
+
+				// If this message has an $except key, proceed only if it is not equal to this server's endpoint
+				if (response.TryGetValue<string>("$except", out JToken except) && except.ToString() == LocalEndPoint.ToString())
 					continue;
 
 				Callback(response, address);
@@ -79,7 +83,7 @@ namespace Webserver.LoadBalancer
 		/// Transmit a JObject
 		/// </summary>
 		/// <param name="data"></param>
-		public static void SendData(JObject data) => TransmitQueue.Add(Encoding.UTF8.GetBytes(data.ToString()));
+		public static void SendData(JObject data) => TransmitQueue.Add(Encoding.UTF8.GetBytes(data.ToString(Formatting.None)));
 
 		/// <summary>
 		/// Sender thread. Takes items from the queue and transmits them to all servers.

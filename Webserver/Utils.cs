@@ -2,10 +2,14 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 
 namespace Webserver
 {
-	class Utils
+	/// <summary>
+	/// Static package-private class containing miscellaneos utility methods.
+	/// </summary>
+	internal static class Utils
 	{
 		public static Dictionary<string, List<string>> NameValueToDict(NameValueCollection data)
 		{
@@ -14,6 +18,26 @@ namespace Webserver
 				result.Add(key?.ToLower() ?? "null", new List<string>(data[key]?.Split(',')));
 			return result;
 		}
+
+		/// <summary>
+		/// Invokes a generic function with the specified <see cref="Type"/> and parameter and
+		/// returns the result.
+		/// </summary>
+		/// <typeparam name="T">The return type of the <paramref name="func"/>.</typeparam>
+		/// <param name="func">The generic function to invoke.</param>
+		/// <param name="type">The type to use as generic type parameter.</param>
+		/// <param name="args">An array of arguments to pass to the function.</param>
+		public static T InvokeGenericMethod<T>(dynamic func, Type type, object[] args)
+		{
+			// Cast the generic type to a specific type
+			var concreteMethod = func.Method.GetGenericMethodDefinition().MakeGenericMethod(new[] { type });
+			// Invoke and return the new concretely typed method
+			return (T)concreteMethod.Invoke(func.Target, args);
+		}
+
+		private static IEnumerable<A> Cast<A>(IEnumerable<dynamic> yeet) => yeet.Cast<A>().ToArray();
+		public static dynamic[] Cast<T>(this IEnumerable<T> obj, Type type)
+			=> InvokeGenericMethod<dynamic[]>((Func<IEnumerable<dynamic>, object>)Cast<object>, type, new[] { obj });
 	}
 
 	/// <summary>
