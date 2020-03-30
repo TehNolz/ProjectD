@@ -10,6 +10,7 @@ namespace Webserver.Webserver
 	{
 		public BlockingCollection<ContextProvider> Queue;
 		private readonly bool Debug = false;
+		private readonly Thread Thread;
 
 		/// <summary>
 		/// Create a new RequestWorker, which processes incoming HTTP requests.
@@ -20,15 +21,16 @@ namespace Webserver.Webserver
 		{
 			Queue = queue;
 			Debug = debug;
+			Thread = new Thread(Run) { Name = GetType().Name };
 		}
 
 		/// <summary>
 		/// Launches a new <see cref="Thread"/> that calls <see cref="RequestWorker.Run"/>.
 		/// </summary>
-		public void Start()
-		{
-			new Thread(Run).Start();
-		}
+		public void Start() => Thread.Start();
+
+		/// <inheritdoc cref="Thread.Join"/>
+		public void Join() => Thread.Join();
 
 		/// <summary>
 		/// Start this RequestWorker. Should be run in its own thread.
@@ -69,8 +71,8 @@ namespace Webserver.Webserver
 					continue;
 				}
 
-				//If the
-				if (url.StartsWith("/api"))
+				// If the url starts with /api, pass the request to the API Endpoints
+				if (url.StartsWith("/api/")) // TODO: Remove hardcoded string
 				{
 					APIEndpoint.ProcessEndpoint(context);
 				}
