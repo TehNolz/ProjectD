@@ -26,10 +26,18 @@ namespace Webserver.LoadBalancer
 			{
 				var context = listener.GetContext();
 				string URL = GetBestSlave() + context.Request.Url.LocalPath;
-				
+
 				var requestRelay = (HttpWebRequest)WebRequest.Create(URL);
+
+				// Transfer the contents of the NameValueCollection into the WebHeaderCollection
+				foreach (string headerName in context.Request.Headers.AllKeys)
+					foreach (string headerValue in context.Request.Headers.GetValues(headerName))
+						requestRelay.Headers.Add(headerName, headerValue);
+
+				requestRelay.Method = context.Request.HttpMethod;
 				requestRelay.UserAgent = context.Request.UserAgent;
 
+				context.Request.InputStream.CopyTo(requestRelay.GetRequestStream());
 				requestRelay.BeginGetResponse(Respond, new RequestState(requestRelay, context));
 			}
 		}
@@ -68,6 +76,7 @@ namespace Webserver.LoadBalancer
 			var response = data.Context.Response;
 			response.Headers = workerResponse.Headers;
 			response.StatusCode = (int)workerResponse.StatusCode;
+			response.StatusDescription = workerResponse.StatusDescription;
 
 			using var outStream = workerResponse.GetResponseStream();
 			outStream.CopyTo(response.OutputStream);
