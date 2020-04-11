@@ -25,7 +25,7 @@ namespace Webserver.API
 			ResponseProvider response = Context.Response;
 
 			//Check if the requested endpoint exists. If it doesn't, send a 404.
-			var endpointType = (from e in Endpoints where "/api" + e.GetCustomAttribute<RouteAttribute>()?.Route == request.Url.LocalPath.ToLower() select e).FirstOrDefault();
+			var endpointType = (from e in Endpoints where ("/api" + E.GetCustomAttribute<RouteAttribute>()?.Route).ToLower() == Request.Url.LocalPath.ToLower() select e).FirstOrDefault();
 			if (endpointType == null)
 			{
 				response.Send(HttpStatusCode.NotFound);
