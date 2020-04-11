@@ -1,0 +1,3 @@
+[submodule "Database-Adapter"]
+	path = Database-Adapter
+	url = https://github.com/Snerble/.NET-CS-Database-Adapter.git

@@ -9,28 +9,32 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Webserver.Webserver;
 
-namespace Webserver.API {
-	public abstract partial class APIEndpoint {
+namespace Webserver.API
+{
+	public abstract partial class APIEndpoint
+	{
 		public static List<Type> Endpoints;
 		/// <summary>
 		/// Discover all existing endpoints.
 		/// </summary>
 		public static void DiscoverEndpoints() => Endpoints = (from T in Assembly.GetExecutingAssembly().GetTypes() where typeof(APIEndpoint).IsAssignableFrom(T) && !T.IsAbstract select T).ToList();
 
-		public static void ProcessEndpoint(ContextProvider Context) {
-			RequestProvider Request = Context.Request;
-			ResponseProvider Response = Context.Response;
+		public static void ProcessEndpoint(ContextProvider Context)
+		{
+			RequestProvider request = Context.Request;
+			ResponseProvider response = Context.Response;
 
 			//Check if the requested endpoint exists. If it doesn't, send a 404.
-			Type EPType = (from E in Endpoints where "/api/"+E.GetCustomAttribute<RouteAttribute>()?.Route == Request.Url.LocalPath.ToLower() select E).FirstOrDefault();
-			if(EPType == null){
-				Response.Send(HttpStatusCode.NotFound);
+			var endpointType = (from e in Endpoints where "/api" + e.GetCustomAttribute<RouteAttribute>()?.Route == request.Url.LocalPath.ToLower() select e).FirstOrDefault();
+			if (endpointType == null)
+			{
+				response.Send(HttpStatusCode.NotFound);
 				return;
 			}
 
 			//Create a new instance of the endpoint
-			APIEndpoint EP = (APIEndpoint)Activator.CreateInstance(EPType);
-			EP.Context = Context;
+			APIEndpoint endpoint = (APIEndpoint)Activator.CreateInstance(endpointType);
+			endpoint.Context = Context;
 
 			//TODO: Set headers for CORS support
 			/* List<string> AllowedMethods = (from MethodInfo M in EPType.GetMethods() where M.DeclaringType == EPType select M.Name).ToList();
@@ -38,28 +42,36 @@ namespace Webserver.API {
 			 */
 
 			//Get the required endpoint method
-			MethodInfo M = EPType.GetMethod(Request.HttpMethod.ToString());
+			var method = endpointType.GetMethod(request.HttpMethod.ToString());
 
 			//TODO: Permission check
 
 			//Check content type if necessary
-			ContentTypeAttribute Attr = M.GetCustomAttribute<ContentTypeAttribute>();
-			if(Attr != null){
+			var contentType = method.GetCustomAttribute<ContentTypeAttribute>();
+			if (contentType != null)
+			{
 				//If the content type doesn't match, send an Unsupported Media Type status code and cancel.
-				if(Attr.Type != Request.ContentType){
-					Response.Send(HttpStatusCode.UnsupportedMediaType);
+				if (contentType.Type != request.ContentType)
+				{
+					response.Send(HttpStatusCode.UnsupportedMediaType);
 					return;
 				}
 
 				//Additional parsing for content types, if necessary.
-				switch(Attr.Type){
+				switch (contentType.Type)
+				{
 					case "application/json":
-						string RawJSON = new StreamReader(Request.InputStream, Request.ContentEncoding).ReadToEnd();
-						try {
-							EP.Data = JObject.Parse(RawJSON);
-						} catch(JsonReaderException){
-							Console.WriteLine("Received invalid request for endpoint {0}.{1}. Could not parse JSON", EPType.Name, M.Name);
-							Response.Send(HttpStatusCode.BadRequest);
+						var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+						string json = reader.ReadToEnd();
+						reader.Dispose();
+						try
+						{
+							endpoint.Data = JObject.Parse(json);
+						}
+						catch (JsonReaderException)
+						{
+							Console.WriteLine("Received invalid request for endpoint {0}.{1}. Could not parse JSON", endpointType.Name, method.Name);
+							response.Send(HttpStatusCode.BadRequest);
 							return;
 						}
 						break;
@@ -67,11 +79,14 @@ namespace Webserver.API {
 			}
 
 			//Invoke the method
-			try {
-				M.Invoke(EP, null);
-			} catch (Exception e){
+			try
+			{
+				method.Invoke(endpoint, null);
+			}
+			catch (Exception e)
+			{
 				Console.WriteLine(e);
-				Response.Send(HttpStatusCode.InternalServerError);
+				response.Send(HttpStatusCode.InternalServerError);
 			}
 		}
 	}

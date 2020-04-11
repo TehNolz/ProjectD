@@ -3,16 +3,28 @@ using System.Collections.Generic;
 using System.Text;
 using Webserver.Webserver;
 
-namespace Webserver.API {
-	public abstract partial class APIEndpoint {
+namespace Webserver.API
+{
+	public abstract partial class APIEndpoint
+	{
 		#region Attributes
 		/// <summary>
-		/// Defines this endpoint's URL.
+		/// Specifies the local route of an <see cref="APIEndpoint"/>.
 		/// </summary>
-		[AttributeUsage(AttributeTargets.Class)]
-		public class RouteAttribute : Attribute {
-			public string Route { get; private set; }
-			public RouteAttribute(string Route) => this.Route = Route;
+		[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+		public class RouteAttribute : Attribute
+		{
+			/// <summary>
+			/// Gets the local route to the <see cref="APIEndpoint"/>.
+			/// </summary>
+			public string Route { get; }
+			/// <summary>
+			/// Initializes a new instance of <see cref="RouteAttribute"/> with the given
+			/// local url <paramref name="route"/>.
+			/// </summary>
+			/// <param name="route">The path to the <see cref="APIEndpoint"/>. If a leading / is omitted,
+			///	it will automatically be prepended.</param>
+			public RouteAttribute(string route) => Route = (route.StartsWith('/') ? "" : "/" ) + route;
 		}
 
 		/// <summary>
@@ -20,9 +32,22 @@ namespace Webserver.API {
 		/// </summary>
 		public class PermissionAttribute : Attribute { }
 
-		public class ContentTypeAttribute : Attribute{
-			public string Type { get; private set; }
-			public ContentTypeAttribute(string Type) => this.Type = Type;
+		/// <summary>
+		/// Specifies the content-types that are valid on an HTTP method in <see cref="APIEndpoint"/>.
+		/// </summary>
+		[AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = false)]
+		public class ContentTypeAttribute : Attribute
+		{
+			/// <summary>
+			/// Gets the accepted content type of an <see cref="APIEndpoint"/> method.
+			/// </summary>
+			public string Type { get; }
+			/// <summary>
+			/// Initializes a new instance if <see cref="ContentTypeAttribute"/> with the given
+			/// content type.
+			/// </summary>
+			/// <param name="type">The name of the content type to specify.</param>
+			public ContentTypeAttribute(string type) => Type = type;
 		}
 		#endregion
 
@@ -62,7 +87,8 @@ namespace Webserver.API {
 		/// <summary>
 		/// The OPTIONS method is used to describe the communication options for the target resource.
 		/// </summary>
-		public void OPTIONS(){
+		public void OPTIONS()
+		{
 
 		}
 		#endregion
