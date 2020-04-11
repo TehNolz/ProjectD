@@ -1,124 +1,142 @@
-﻿using System;
+
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
-using System.Threading;
-using Newtonsoft.Json.Linq;
+using System.Net.Sockets;
 
-namespace Webserver.LoadBalancer {
-	/// <summary>
-	/// Load balancer slave. Slave servers act as extra RequestWorkers for the master server.
-	/// Should the master server fail (or otherwise become unresponsive), the slaves will elect a new master amongst themselves.
-	/// </summary>
-	public static class Slave {
+namespace Webserver.LoadBalancer
+{
+	public static class Slave
+	{
 		/// <summary>
-		/// Whether this slave is running. There's probably a better way to keep track of this.
+		/// Sets this server as slave.
 		/// </summary>
-		private static bool Running = false;
-		/// <inheritdoc cref="Slave.HeartbeatCheck"/>
-		private static Timer HeartbeatTimer;
+		/// <param name="masterAddress">The endpoint of the master server to connect to.</param>
+		/// <returns>The local IP address.</returns>
+		public static void Init(IPAddress masterAddress)
+		{
+			Console.WriteLine("Server is running as slave. Connecting to the Master server at {0}", masterAddress);
+			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
+			new ServerProfile(Balancer.LocalAddress);
+
+			//Bind events;
+			ServerConnection.OnServerTimeout += Timeout;
+			ServerConnection.OnMessageReceived += TimeoutMessage;
+			ServerConnection.OnMessageReceived += RegistrationResponse;
+			ServerConnection.OnMessageReceived += NewServer;
+
+			//Create a TcpClient.
+			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
+			client.Connect(new IPEndPoint(masterAddress, BalancerConfig.BalancerPort));
+
+			//Convert the client into a ServerConnection
+			var connection = new ServerConnection(client);
+			Balancer.MasterServer = connection;
+
+			//Send registration request.
+			connection.Send(new Message(InternalMessageType.Register, null));
+
+			Console.WriteLine("Connected to master at {0}. Local address is {1}", masterAddress, (IPEndPoint)client.Client.LocalEndPoint);
+		}
+
 		/// <summary>
-		/// The time at which the last heartbeat from the master server was received.
+		/// Event handler for registration responses.
 		/// </summary>
-		private static DateTime LastHeartbeat = new DateTime();
+		/// <param name="server">The master server who sent the response</param>
+		/// <param name="message">The response</param>
+		public static void RegistrationResponse(ServerConnection server, Message message)
+		{
+			//If this message isn't a registration response, ignore it.
+			if (message.Type != InternalMessageType.RegisterResponse.ToString())
+				return;
 
-		/// <summary>
-		/// Receiver callback for the slave thread.
-		/// </summary>
-		/// <param name="Message">The JSON message that was received.</param>
-		/// <param name="Endpoint">The IPEndPoint of the server that sent the message.</param>
-		public static void Receive(JObject Message, IPEndPoint Endpoint) {
-			switch((string)Message["Type"]) {
-
-				//Confirm a heartbeat request.
-				case "HEARTBEAT":
-					Networking.SendData(ConnectionMsg.Confirm("HEARTBEAT", Endpoint));
-					LastHeartbeat = DateTime.Now;
-					break;
-
-				//Master informs slaves that a slave has timed out
-				case "TIMEOUT":
-					//Get the slave address and port. If either of them are missing, consider the message to be invalid and ignore it.
-					if(!Message.TryGetValue<string>("Slave", out JToken Address))
-						return;
-					if(!Message.TryGetValue<int>("Port", out JToken Port))
-						return;
-
-					//Remove the server from the list.
-					IPEndPoint Slave = new IPEndPoint(IPAddress.Parse((string)Address), (int)Port);
-					if(Balancer.Servers.ContainsKey(Slave)) {
-						Balancer.Servers.Remove(Slave, out _);
-						Console.WriteLine("TIMEOUT received for slave " + Slave.Address);
-					} else {
-						Console.WriteLine("TIMEOUT received for unknown slave " + Slave.Address);
-					}
-
-					break;
-
-				//Ignore messages that we don't have any special handling for. They probably weren't meant for us anyway.
-				default:
-					return;
+			//Register all servers the Master has informed us about.
+			var receivedAddresses = (List<IPAddress>)message.Data;
+			foreach (IPAddress address in receivedAddresses)
+			{
+				if (address.ToString() == Balancer.MasterServer.Address.ToString())
+					continue;
+				new ServerProfile(address);
 			}
 		}
 
 		/// <summary>
-		/// Initialises this slave, setting the Networking callback to this slave's Receive function.
+		/// Event handler for new server announcements
 		/// </summary>
-		public static void Init() {
-			Networking.Callback = Receive;
-			Running = true;
-			HeartbeatTimer = new Timer((object _) => HeartbeatCheck(), null, 0, 100);
+		/// <param name="server">The master server that sent the announcement</param>
+		/// <param name="message">The announcement</param>
+		public static void NewServer(ServerConnection _, Message message)
+		{
+			//If this message isn't an announcement, ignore it.
+			if (message.Type != InternalMessageType.NewServer.ToString())
+				return;
+
+			IPAddress endpoint = IPAddress.Parse(message.Data);
+
+			//Ignore this message if it just announces our own registration
+			if (endpoint.ToString() == Balancer.LocalAddress.ToString())
+				return;
+
+			Console.WriteLine($"Master announced new server at {endpoint}");
+			new ServerProfile(endpoint);
 		}
 
 		/// <summary>
-		/// Stops this slave, disposing of its heartbeat timer.
+		/// Processes timeout announcements from the master.
 		/// </summary>
-		public static void Stop() {
-			if(!Running)
+		/// <param name="server"></param>
+		/// <param name="message"></param>
+		public static void TimeoutMessage(ServerConnection _, Message message)
+		{
+			if (message.Type != InternalMessageType.Timeout.ToString())
 				return;
-			HeartbeatTimer.Dispose();
+
+			Console.WriteLine($"Master lost connection with slave at {message.Data}");
+			ServerProfile.KnownServers.TryRemove(IPAddress.Parse(message.Data), out ServerProfile _);
 		}
-
 		/// <summary>
-		/// Checks whether or not the master server has sent a heartbeat in the last 2 seconds.
-		/// If no heartbeat was received, a new master will be automatically elected amongst the existing slaves.
-		/// Note: Must keep a reference to this check's timer object at all times.
+		/// Handles a connection timeout with the master server, electing a new master as replacement.
 		/// </summary>
-		private static void HeartbeatCheck() {
-			//Skip this check if Ticks is 0, because in that case the master hasn't even had a chance to send a heartbeat yet.
-			if(LastHeartbeat.Ticks == 0)
-				return;
+		/// <param name="server"></param>
+		public static void Timeout(ServerProfile server, string message)
+		{
+			Console.WriteLine($"Connection lost to master: {message}");
+			ServerProfile.KnownServers.Remove(server.Address, out _);
 
-			///If the last heartbeat was received more than 2 seconds ago, elect a new master.
-			if(LastHeartbeat < DateTime.Now.AddSeconds(-2)) {
-				Console.WriteLine("Lost connection to master");
+			Console.WriteLine("Electing a new master.");
 
-				//Elect a new master.
-				IPEndPoint Endpoint = null;
-				int Min = int.MaxValue;
-				foreach(IPEndPoint Entry in Balancer.Servers.Keys) {
-					//TODO: Support subnets larger than /24
-					int HostNum = Entry.Address.GetAddressBytes()[3];
-					if(HostNum < Min) {
-						Min = HostNum;
-						Endpoint = Entry;
-					}
+			//Elect a new master by finding the slave with the lowest IPv4 address. This is guaranteed to give the same result on every slave.
+			//TODO: Maybe find a better algorithm to elect a master?
+			ServerProfile newMaster = null;
+			int minAddress = int.MaxValue;
+			foreach (IPAddress adress in ServerProfile.KnownServers.Keys)
+			{
+				int num = BitConverter.ToInt32(adress.GetAddressBytes(), 0);
+				if (num < minAddress)
+				{
+					newMaster = ServerProfile.KnownServers[adress];
+					minAddress = num;
 				}
+			}
 
-				Console.Title = string.Format("Local - {0} | Master - {1}", Networking.LocalEndPoint, Endpoint);
+			//Check if this server was chosen as the new master. If it is, start promotion. If it isn't, connect to the new master.
+			Console.Title = $"Local address {Balancer.LocalAddress} | Master address {newMaster.Address}";
 
-				//Remove the old master from the list
-				Balancer.Servers.Remove(Balancer.MasterEndpoint, out _);
+			//Dispose the connection and reset all event bindings.
+			Balancer.MasterServer.Dispose();
+			ServerConnection.ResetEvents();
 
-				//Check if this server was elected
-				if(Endpoint?.Address.ToString() == Networking.LocalEndPoint.Address.ToString()) {
-					//This server was elected. Stop this slave thread and start a master thread.
-					Console.WriteLine("Elected this server as new master");
-					Balancer.IsMaster = true;
-				} else {
-					//Another server was elected. Switch the MasterEndPoint to the newly elected master.
-					Console.WriteLine("Eelected " + Endpoint + " as new master");
-					Balancer.MasterEndpoint = Endpoint;
-				}
+			//If this slave was selected, promote to Master. Otherwise, restart the slave using the new master's address.
+			if (newMaster.Address.ToString() == Balancer.LocalAddress.ToString())
+			{
+				Console.WriteLine("Elected this slave as new master. Promoting.");
+				Master.Init();
+			}
+			else
+			{
+				Console.WriteLine("Elected {0} as new master. Connecting.", newMaster.Address);
+				Slave.Init(newMaster.Address);
 			}
 		}
 	}

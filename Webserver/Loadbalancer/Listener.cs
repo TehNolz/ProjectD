@@ -1,98 +1,134 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.IO;
+using System.Linq;
 using System.Net;
+using System.Threading;
 
-namespace Webserver.LoadBalancer {
-	public static class Listener {
+namespace Webserver.LoadBalancer
+{
+	class Listener
+	{
 		/// <summary>
-		/// Listen for incoming HTTP requests and relay them to slave servers.
-		/// This is the main entry point for all HTTP traffic in the system. The clients connect to- and will receive answers from this listener.
+		/// Listener thread. Waits for incoming HTTP requests and relays them to slaves.
 		/// </summary>
-		public static void Listen() {
-			Console.WriteLine("Load Balancer Listener now listening on http://{0}:{1}/", Networking.LocalEndPoint.Address, BalancerConfig.HttpPort);
+		public static Thread ListenerThread;
+		///<inheritdoc cref="ListenerThread"/>
+		public static void Listen(IPAddress address, int port)
+		{
+			///Create a new HttpListener.
+			var listener = new HttpListener();
+			listener.Prefixes.Add($"http://{address}:{port}/");
+			listener.Prefixes.Add($"http://localhost:{port}/");
+			listener.Start();
+			Console.WriteLine("Load Balancer Listener now listening on {0}:{1}", address, port);
 
-			//Create a new HttpListener
-			HttpListener Listener = new HttpListener();
-			Listener.Prefixes.Add(string.Format("http://{0}:{1}/", Networking.LocalEndPoint.Address, BalancerConfig.HttpPort));
-			Listener.Prefixes.Add(string.Format("http://localhost:{0}/", BalancerConfig.HttpPort));
-			Listener.Start();
+			//Main loop
+			while (true)
+			{
+				//Get incoming requests
+				HttpListenerContext context = listener.GetContext();
+				string slaveAddress = GetBestSlave();
+				string URL = slaveAddress + context.Request.Url.LocalPath;
+				Console.WriteLine($"Relaying request for {URL} to {slaveAddress}");
 
-			// Main loop. Accepts incoming requests, then relays them to the Distributors running on each server.
-			while(true) {
-				//Accept the request
-				HttpListenerContext Context = Listener.GetContext();
-				string URL = GetBestSlave() + Context.Request.Url.LocalPath;
+				//Start relaying the request.
+				var requestRelay = (HttpWebRequest)WebRequest.Create(URL);
 
-				//Relay to a Distributor
-				HttpWebRequest RelayRequest = (HttpWebRequest)WebRequest.Create(URL);
-				RelayRequest.UserAgent = Context.Request.UserAgent;
-				RelayRequest.BeginGetResponse(Respond, new RequestState(RelayRequest, Context));
+				// Transfer headers.
+				foreach (string headerName in context.Request.Headers.AllKeys)
+					foreach (string headerValue in context.Request.Headers.GetValues(headerName))
+						requestRelay.Headers.Add(headerName, headerValue);
 
+				//Transfer method, user agent.
+				requestRelay.Method = context.Request.HttpMethod;
+				requestRelay.UserAgent = context.Request.UserAgent;
+
+				//Only set the body stream if the HTTP method is not GET
+				//Relaying message-body for GET requests is a protocol violation. 
+				if (context.Request.HttpMethod != "GET")
+					context.Request.InputStream.CopyTo(requestRelay.GetRequestStream());
+
+				//Wait for a response from the slave.
+				requestRelay.BeginGetResponse(Respond, new RequestState(requestRelay, context));
 			}
+		}
+
+		//TODO: Implement better load balancing algorithm.
+		private static int ServerIndex;
+		/// <summary>
+		/// Find the best slave to relay incoming requests to.
+		/// </summary>
+		/// <returns>The URL of the chosen slave</returns>
+		private static string GetBestSlave()
+		{
+			//Get the IP addresses of all servers, including ourselves.
+			var allServers = (from S in ServerProfile.KnownServers.Keys select S).ToList();
+			allServers.Add(Balancer.LocalAddress);
+
+			//TODO: Implement a better load balancing algorithm. Roundabout works, but surely we can do something fancier!
+			ServerIndex = Math.Clamp(ServerIndex, 0, allServers.Count - 1);
+			ServerIndex++;
+			if (ServerIndex == allServers.Count)
+				ServerIndex = 0;
+
+			//Return the URL of the slave.
+			return string.Format("http://{0}:{1}", allServers[ServerIndex], BalancerConfig.HttpRelayPort);
 		}
 
 		/// <summary>
 		/// Respond to an incoming HTTP request
 		/// </summary>
-		/// <param name="Result"></param>
-		private static void Respond(IAsyncResult Result) {
-			RequestState Data = (RequestState)Result.AsyncState;
+		/// <param name="result"></param>
+		private static void Respond(IAsyncResult result)
+		{
+			//Get the RequestState
+			var data = (RequestState)result.AsyncState;
 
-			//Get the response from the server that processed the request.
-			//We have to ignore whatever WebException we get, because someone decided to throw an exception when a 4xx or 5xx status code is received. They're an idiot.
-			HttpWebResponse WorkerResponse;
-			try {
-				WorkerResponse = (HttpWebResponse)Data.WebRequest.EndGetResponse(Result);
-			} catch(WebException e) {
-				WorkerResponse = e.Response as HttpWebResponse;
-				if(WorkerResponse == null)
-					throw;
+			//Attempt to retrieve the slave's response to this request.
+			HttpWebResponse workerResponse;
+			try
+			{
+				workerResponse = (HttpWebResponse)data.WebRequest.EndGetResponse(result);
+			}
+			catch (WebException e)
+			{
+				//We don't care about exceptions here; they need to be transferred to the client.
+				workerResponse = e.Response as HttpWebResponse;
 			}
 
-			//Relay the response to the client.
-			HttpListenerResponse Response = Data.Context.Response;
-			Response.Headers = WorkerResponse.Headers;
-			Response.StatusCode = (int)WorkerResponse.StatusCode;
-			using Stream WorkerResponseStream = WorkerResponse.GetResponseStream();
-			WorkerResponseStream.CopyTo(Response.OutputStream);
-			//If an exception is thrown while sending the message, it means the client aborted the connection before
-			//a response could be send. There's nothing we can do about it.
-			try {
-				Response.OutputStream.Close();
-			} catch(Exception) { }
-			WorkerResponse.Dispose();
-		}
+			//Set the response headers, status code, status description
+			HttpListenerResponse response = data.Context.Response;
+			response.Headers = workerResponse.Headers;
+			response.StatusCode = (int)workerResponse.StatusCode;
+			response.StatusDescription = workerResponse.StatusDescription;
 
-
-		private static int ServerIterator;
-		/// <summary>
-		/// Find the best slave to relay incoming requests to.
-		/// </summary>
-		/// <returns>The URL of the chosen slave</returns>
-		private static string GetBestSlave() {
-			//Cycle to the next server
-			//TODO: Implement a better load balancing algorithm.
-			List<ServerProfile> Servers = new List<ServerProfile>(Balancer.Servers.Values);
-			if(ServerIterator + 1 == Servers.Count) {
-				ServerIterator = 0;
-			} else {
-				ServerIterator++;
+			//Set the output stream.
+			using Stream outStream = workerResponse.GetResponseStream();
+			outStream.CopyTo(response.OutputStream);
+			try
+			{
+				response.OutputStream.Close();
 			}
-			ServerProfile Server = Servers[ServerIterator];
-			return string.Format("http://{0}:{1}", Server.Endpoint.Address.ToString(), BalancerConfig.HttpRelayPort);
+			catch (Exception) { }
+
+			//Dispose the response, transmitting it to the client.
+			workerResponse.Dispose();
 		}
 
 		/// <summary>
-		/// Record class for temporarily storing connection info about the request.
+		/// Record class, containing information about a request.
 		/// </summary>
-		public class RequestState {
+		// TODO: Convert into proper record class once C# 9.0 is (assuming the proposal is accepted)
+		// See https://github.com/dotnet/csharplang/blob/master/proposals/records.md
+		public struct RequestState
+		{
 			public readonly HttpWebRequest WebRequest;
 			public readonly HttpListenerContext Context;
 
-			public RequestState(HttpWebRequest Request, HttpListenerContext Context) {
-				this.WebRequest = Request;
-				this.Context = Context;
+			public RequestState(HttpWebRequest request, HttpListenerContext context)
+			{
+				WebRequest = request;
+				Context = context;
 			}
 		}
 	}

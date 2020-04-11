@@ -1,51 +1,63 @@
-﻿using System;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
-namespace Webserver {
-	class Integrity {
+namespace Webserver
+{
+	class Integrity
+	{
 		/// <summary>
 		/// Checks file integrity for the given directory, comparing it with the MD5 hashes stored in Checksums.json.
 		/// If Checksums.json doesn't exist, this function will assume all files are OK and return 0.
 		/// </summary>
-		/// <param name="Dir">The directory to check</param>
-		/// <param name="Recalculate">If true, Checksums.json will be ignored and new checksums will be calculated.</param>
+		/// <param name="directory">The directory to check</param>
+		/// <param name="recalculate">If true, Checksums.json will be ignored and new checksums will be calculated.</param>
 		/// <returns>The amount of files that didn't pass the integrity check</returns>
-		public static int VerifyIntegrity(string Dir, bool Recalculate = false) {
-			Dictionary<string, string> Checksums = GetChecksums(Dir);
+		public static int VerifyIntegrity(string directory, bool recalculate = false)
+		{
+			Dictionary<string, string> Checksums = GetChecksums(directory);
 
-			if(File.Exists("Checksums.json") && !Recalculate) {
+			if (File.Exists("Checksums.json") && !recalculate)
+			{
 				//File exists. Check if the file contains an entry for the chosen directory.
-				JObject SavedChecksums = JObject.Parse(File.ReadAllText("Checksums.json"));
-				if(SavedChecksums.ContainsKey(Dir)) {
+				var savedChecksumsJson = JObject.Parse(File.ReadAllText("Checksums.json"));
+				if (savedChecksumsJson.ContainsKey(directory))
+				{
 					//Search for differences
 					//TODO: File deletions aren't detected.
-					Dictionary<string, string> Saved = SavedChecksums[Dir].ToObject<Dictionary<string, string>>();
-					int Diff = 0;
-					foreach(KeyValuePair<string, string> Entry in Checksums) {
-						if(!Saved.ContainsKey(Entry.Key) || Entry.Value != Saved[Entry.Key]) {
-							Diff++;
+					Dictionary<string, string> savedChecksums = savedChecksumsJson[directory].ToObject<Dictionary<string, string>>();
+					int diffCount = 0;
+					foreach (KeyValuePair<string, string> Entry in Checksums)
+					{
+						if (!savedChecksums.ContainsKey(Entry.Key) || Entry.Value != savedChecksums[Entry.Key])
+						{
+							diffCount++;
 							continue;
 						}
 					}
-					return Diff;
+					return diffCount;
 
-				} else {
+				}
+				else
+				{
 					//No entry exists. Add it.
 					File.WriteAllText("Checksums.json", new JObject(){
-						{ Dir, JObject.FromObject(Checksums)}
+						{ directory, JObject.FromObject(Checksums)}
 					}.ToString(Formatting.Indented));
 					return 0;
 				}
 
-			} else {
+			}
+			else
+			{
 				//File doesn't exist. Create it.
 				File.WriteAllText("Checksums.json", new JObject(){
-					{ Dir, JObject.FromObject(Checksums)}
+					{ directory, JObject.FromObject(Checksums)}
 				}.ToString(Formatting.Indented));
 				return 0;
 			}
@@ -56,27 +68,31 @@ namespace Webserver {
 		/// </summary>
 		/// <param name="Dir">The directory to crawl</param>
 		/// <returns>A dictionary, where the key is the filepath and the value is the MD5 checksum</returns>
-		private static Dictionary<string, string> GetChecksums(string Dir) {
-			Dictionary<string, string> Result = new Dictionary<string, string>();
+		private static Dictionary<string, string> GetChecksums(string Dir)
+		{
+			var result = new Dictionary<string, string>();
 
 			//If given folder doesn't exist, create it and return an empty dict
-			if(!Directory.Exists(Dir)) {
+			if (!Directory.Exists(Dir))
+			{
 				Directory.CreateDirectory(Dir);
 				return new Dictionary<string, string>();
 			}
 
 			//Check files
-			using MD5 md5 = MD5.Create();
-			foreach(string F in Directory.GetFiles(Dir)) {
-				Result.Add(F, BitConverter.ToString(md5.ComputeHash(File.ReadAllBytes(F))).Replace("-", "").ToLower());
+			using var md5 = MD5.Create();
+			foreach (string filename in Directory.GetFiles(Dir))
+			{
+				result.Add(filename, BitConverter.ToString(md5.ComputeHash(File.ReadAllBytes(filename))).Replace("-", "").ToLower());
 			}
 
 			//Recursively check subdirectories
-			foreach(string D in Directory.GetDirectories(Dir)) {
-				Result = Result.Concat(GetChecksums(D)).ToDictionary(x => x.Key, x => x.Value);
+			foreach (string directory in Directory.GetDirectories(Dir))
+			{
+				result = result.Concat(GetChecksums(directory)).ToDictionary(x => x.Key, x => x.Value);
 			}
 
-			return Result;
+			return result;
 		}
 	}
 }

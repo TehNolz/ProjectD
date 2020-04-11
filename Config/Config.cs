@@ -1,68 +1,94 @@
-﻿using System;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
-namespace Config {
-	public static class ConfigFile {
-
-		public static void Write(string Path) {
-			using StringWriter SW = new StringWriter();
-			using JsonTextWriter Writer = new JsonTextWriter(SW) {
+namespace Config
+{
+	public static class ConfigFile
+	{
+		/// <summary>
+		/// Write a configuration file to disk, using the current settings.
+		/// </summary>
+		/// <param name="Path">The path the file will be written to. Existing files will be overwritten.</param>
+		public static void Write(string Path)
+		{
+			//Create writers.
+			using var SW = new StringWriter();
+			using var writer = new JsonTextWriter(SW)
+			{
 				Formatting = Formatting.Indented,
 			};
 
-			Writer.WriteStartObject();
+			writer.WriteStartObject();
 			//Go through all ConfigSection classes
-			foreach(Type T in from T in Assembly.GetCallingAssembly().GetTypes() where T.GetCustomAttribute<ConfigSectionAttribute>() != null select T) {
-				Writer.WritePropertyName(T.Name);
-				Writer.WriteStartObject();
+			foreach (Type T in from T in Assembly.GetCallingAssembly().GetTypes() where T.GetCustomAttribute<ConfigSectionAttribute>() != null select T)
+			{
+				writer.WritePropertyName(T.Name);
+				writer.WriteStartObject();
 
 				//Get all fields
-				foreach(FieldInfo F in T.GetFields()) {
+				foreach (FieldInfo F in T.GetFields())
+				{
 					CommentAttribute Attr = F.GetCustomAttribute<CommentAttribute>();
-					if(Attr != null) {
-						Writer.WriteWhitespace("\n");
-						Writer.WriteComment(Attr.Comment);
+					if (Attr != null)
+					{
+						writer.WriteWhitespace("\n");
+						writer.WriteComment(Attr.Comment);
 					}
 
-					//Write field
-					Writer.WritePropertyName(F.Name);
+					//Write fields
+					writer.WritePropertyName(F.Name);
 					//If the field is a list, write it as an array.
-					if(F.FieldType.IsGenericType && F.FieldType.GetGenericTypeDefinition() == typeof(List<>)) {
-						Writer.WriteStartArray();
-						IList L = (IList)F.GetValue(null);
-						foreach(object Entry in L) {
-							Writer.WriteValue(Entry);
+					if (F.FieldType.IsGenericType && F.FieldType.GetGenericTypeDefinition() == typeof(List<>))
+					{
+						writer.WriteStartArray();
+						var L = (IList)F.GetValue(null);
+						foreach (object Entry in L)
+						{
+							writer.WriteValue(Entry);
 						}
-						Writer.WriteEndArray();
-					} else {
-						Writer.WriteValue(F.GetValue(null));
+						writer.WriteEndArray();
+					}
+					else
+					{
+						writer.WriteValue(F.GetValue(null));
 					}
 				}
-				Writer.WriteEndObject();
+				writer.WriteEndObject();
 			}
-			Writer.WriteEndObject();
+			writer.WriteEndObject();
 
 			File.WriteAllText(Path, SW.ToString());
 		}
 
-		public static int Load(string Path) {
+		/// <summary>
+		/// Load the configuration file at the specified path. The amount of missing values will be returned.
+		/// </summary>
+		/// <param name="Path">The path of the configuration file to load.</param>
+		/// <returns>The amount of missing values.</returns>
+		public static int Load(string Path)
+		{
 			int Missing = 0;
 
-			JObject ConfigFile = JObject.Parse(File.ReadAllText(Path));
-			foreach(Type T in from T in Assembly.GetCallingAssembly().GetTypes() where T.GetCustomAttribute<ConfigSectionAttribute>() != null select T) {
-				if(!ConfigFile.ContainsKey(T.Name)) {
+			var ConfigFile = JObject.Parse(File.ReadAllText(Path));
+			foreach (Type T in from T in Assembly.GetCallingAssembly().GetTypes() where T.GetCustomAttribute<ConfigSectionAttribute>() != null select T)
+			{
+				if (!ConfigFile.ContainsKey(T.Name))
+				{
 					Missing += T.GetFields().Length;
 					continue;
 				}
-				JObject Fields = (JObject)ConfigFile[T.Name];
-				foreach(FieldInfo F in T.GetFields()) {
-					if(!Fields.ContainsKey(F.Name)) {
+				var Fields = (JObject)ConfigFile[T.Name];
+				foreach (FieldInfo F in T.GetFields())
+				{
+					if (!Fields.ContainsKey(F.Name))
+					{
 						Missing++;
 						continue;
 					}
@@ -74,12 +100,22 @@ namespace Config {
 		}
 	}
 
+	/// <summary>
+	/// Marks a class as a configuration file section.
+	/// </summary>
 	[AttributeUsage(AttributeTargets.Class)]
 	public class ConfigSectionAttribute : Attribute { }
 
+	/// <summary>
+	/// Adds a comment to a configuration value.
+	/// </summary>
 	[AttributeUsage(AttributeTargets.Field)]
-	public class CommentAttribute : Attribute {
+	public class CommentAttribute : Attribute
+	{
 		public readonly string Comment;
-		public CommentAttribute(string Comment) => this.Comment = Comment;
+		public CommentAttribute(string Comment)
+		{
+			this.Comment = Comment;
+		}
 	}
 }

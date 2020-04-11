@@ -1,28 +1,35 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
 using Newtonsoft.Json.Linq;
 
-namespace Webserver {
-	class Utils {
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+
+namespace Webserver
+{
+	class Utils
+	{
 		/// <summary>
-		/// Converts a NameValueCollection to a Dictionary, allowing the data to be easily accessible.
+		/// Converts a NameValueCollection to a Dictionary, allowing the data to be more easily accessible.
 		/// </summary>
 		/// <param name="Data">The NameValueCollection to convert.</param>
 		/// <returns></returns>
-		public static Dictionary<string, List<string>> NameValueToDict(NameValueCollection Data) {
-			Dictionary<string, List<string>> Result = new Dictionary<string, List<string>>();
-			foreach(string key in Data) {
-				Result.Add(key?.ToLower() ?? "null", new List<string>(Data[key]?.Split(',')));
+		/// TLDR: NameValueCollections are terrible.
+		public static Dictionary<string, List<string>> NameValueToDict(NameValueCollection Data)
+		{
+			var result = new Dictionary<string, List<string>>();
+			foreach (string key in Data)
+			{
+				result.Add(key?.ToLower() ?? "null", new List<string>(Data[key]?.Split(',')));
 			}
-			return Result;
+			return result;
 		}
 	}
 
 	/// <summary>
-	/// JObject extension class
+	/// Extension method class.
 	/// </summary>
-	public static class JObjectExtension {
+	public static class Extensions
+	{
 		/// <summary>
 		/// Tries to get the JToken with the specified property name. Returns false if the JToken can't be cast to the specified type, or if it doesn't exist.
 		/// </summary>
@@ -30,18 +37,25 @@ namespace Webserver {
 		/// <param name="PropertyName">The name of the property to retrieve</param>
 		/// <param name="Value">The resulting JToken, if it exists.</param>
 		/// <returns></returns>
-		public static bool TryGetValue<T>(this JObject O, string PropertyName, out JToken Value) {
+		public static bool TryGetValue<T>(this JObject O, string PropertyName, out JToken Value)
+		{
 			//Try to get the value. If it can't be found, return false.
-			if(!O.TryGetValue(PropertyName, out Value)) {
+			if (!O.TryGetValue(PropertyName, out Value))
+			{
 				return false;
 			}
 
 			//Check if the value can be cast to T. If it can't, return false.
-			try {
+			try
+			{
 				Value.ToObject<T>();
-			} catch(ArgumentException) {
+			}
+			catch (ArgumentException)
+			{
 				return false;
-			} catch(InvalidCastException) {
+			}
+			catch (InvalidCastException)
+			{
 				return false;
 			}
 			return true;
