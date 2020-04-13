@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using Webserver.API;
+using Webserver.API.Endpoints;
 using Webserver.LoadBalancer;
 using Webserver.Models;
 using Webserver.Webserver;
@@ -106,7 +107,7 @@ namespace Webserver
 				worker.Start();
 			}
 
-			var distributor = new Thread(() => Distributor.Run(localAddress, 12001, queue));
+			var distributor = new Thread(() => Distributor.Run(localAddress, BalancerConfig.HttpRelayPort, queue));
 			distributor.Start();
 
 			foreach (var worker in workers)
