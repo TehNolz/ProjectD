@@ -44,7 +44,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server who sent the response</param>
 		/// <param name="message">The response</param>
-		public static void RegistrationResponse(ServerConnection server, Message message)
+		public static void RegistrationResponse(Message message)
 		{
 			//If this message isn't a registration response, ignore it.
 			if (message.Type != InternalMessageType.RegisterResponse.ToString())
@@ -65,7 +65,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server that sent the announcement</param>
 		/// <param name="message">The announcement</param>
-		public static void NewServer(ServerConnection _, Message message)
+		public static void NewServer(Message message)
 		{
 			//If this message isn't an announcement, ignore it.
 			if (message.Type != InternalMessageType.NewServer.ToString())
@@ -86,7 +86,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server"></param>
 		/// <param name="message"></param>
-		public static void TimeoutMessage(ServerConnection _, Message message)
+		public static void TimeoutMessage(Message message)
 		{
 			if (message.Type != InternalMessageType.Timeout.ToString())
 				return;

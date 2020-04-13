@@ -66,7 +66,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="sender">The server who sent the message</param>
 		/// <param name="message">The message that was received</param>
-		public delegate void ReceiveEventHandler(ServerConnection sender, Message message);
+		public delegate void ReceiveEventHandler(Message message);
 		/// <summary>
 		/// Triggers whenever a connected server sends us a message.
 		/// </summary>
@@ -139,6 +139,40 @@ namespace Webserver.LoadBalancer
 		}
 
 		/// <summary>
+		/// Dictionary containing messages that are waiting for a reply.
+		/// </summary>
+		private ConcurrentDictionary<string, Message> SentMessages = new ConcurrentDictionary<string, Message>();
+		/// <summary>
+		/// Dictionary containing replies that were received for messages that were sent.
+		/// </summary>
+		private ConcurrentDictionary<string, Message> MessageReplies = new ConcurrentDictionary<string, Message>();
+		/// <summary>
+		/// Send a message and wait for a response.
+		/// </summary>
+		/// <param name="message">The message to send.</param>
+		/// <param name="timeout">The amount of milliseconds to wait for the reply to arrive. If no message is received within this time, a SocketException is thrown with the TimedOut status code.</param>
+		public Message SendAndWait(Message message, int timeout = 500)
+		{
+			//Send the message (duh).
+			SentMessages.TryAdd(message.ID, message);
+			Send(message);
+
+			//Wait for the message to arrive.
+			Message reply;
+			while(!MessageReplies.TryGetValue(message.ID, out reply))
+			{
+				//Wait 10ms and decrease the timeout. If the timeout is zero, throw a SocketException with the TimedOut status code.
+				Thread.Sleep(10);
+				timeout -= 10;
+				if (timeout == 0)
+					throw new SocketException((int)SocketError.TimedOut);
+			}
+
+			SentMessages.TryRemove(message.ID, out _);
+			return reply;
+		}
+
+		/// <summary>
 		/// Send data to all known servers
 		/// </summary>
 		/// <param name="message">The message that will be sent.</param>
@@ -203,7 +237,13 @@ namespace Webserver.LoadBalancer
 					byte[] rawMessage = Utils.ReadBytes(messageLength, Stream);
 
 					//Read the incoming message and convert it into a Message object.
-					message = new Message(rawMessage);
+					message = new Message(rawMessage, this);
+					
+					if (message.ID != null)
+						if (SentMessages.ContainsKey(message.ID))
+							MessageReplies.TryAdd(message.ID, message);
+					else
+						OnMessageReceived(message);
 				}
 				catch (SocketException e)
 				{
@@ -212,8 +252,6 @@ namespace Webserver.LoadBalancer
 					Dispose();
 					continue;
 				}
-
-				OnMessageReceived(this, message);
 			}
 		}
 
