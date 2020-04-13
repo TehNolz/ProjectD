@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -41,7 +41,7 @@ namespace Webserver
 	}
 
 	/// <summary>
-	/// JObject extension class
+	/// Extension method class.
 	/// </summary>
 	public static class JObjectExtension
 	{
@@ -73,7 +73,6 @@ namespace Webserver
 			{
 				return false;
 			}
-#pragma warning restore CA1031
 			return true;
 		}
 	}

@@ -1,15 +1,11 @@
-﻿using Config;
+using Config;
 using Database.SQLite;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using Webserver.API;
 using Webserver.LoadBalancer;
@@ -45,13 +41,25 @@ namespace Webserver
 				Console.WriteLine("{0} configuration setting(s) are missing. The missing settings have been inserted.", missing);
 			}
 
-			//Check file integrity if necessary.
+			//Check for duplicate network ports. Each port setting needs to be unique as we can't bind to one port multiple times.
+			var ports = new List<int>() { BalancerConfig.BalancerPort, BalancerConfig.DiscoveryPort, BalancerConfig.HttpRelayPort, BalancerConfig.HttpPort };
+			if (ports.Distinct().Count() != ports.Count)
+			{
+				Console.WriteLine("One or more duplicate network port settings have been detected. The server cannot start.");
+				Console.WriteLine("Press any key to exit.");
+				Console.ReadKey();
+				return;
+			}
+
+			//If the VerifyIntegrity config option is enabled, check all files in wwwroot for corruption.
+			//If at least one checksum mismatch is found, pause startup and show a warning.
 			if (MiscConfig.VerifyIntegrity)
 			{
 				Console.WriteLine("Checking file integrity...");
-				if (Integrity.VerifyIntegrity(WebserverConfig.WWWRoot) is int diff && diff > 0)
+				int Diff = Integrity.VerifyIntegrity(WebserverConfig.WWWRoot);
+				if (Diff > 0)
 				{
-					Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", diff);
+					Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", Diff);
 					Console.WriteLine("Some files may be corrupted. If you continue, all checksums will be recalculated.");
 					Console.WriteLine("Press enter to continue.");
 					Console.ReadLine();
@@ -60,51 +68,33 @@ namespace Webserver
 				Console.WriteLine("No integrity issues found.");
 			}
 
-			//Crawl webpages.
+
+			//Crawl through the wwwroot folder to find all resources.
 			Resource.Crawl(WebserverConfig.WWWRoot);
 
-			//Parse redirects
+
+			//Parse Redirects.config to register all HTTP redirections.
 			Redirects.LoadRedirects("Redirects.config");
 			Console.WriteLine("Registered {0} redirections", Redirects.RedirectDict.Count);
 
-			//Discover endpoints
+
+			//Register all API endpoints
 			APIEndpoint.DiscoverEndpoints();
 
-			//Check multicast address
-			if (!IPAddress.TryParse(BalancerConfig.MulticastAddress, out IPAddress multicast))
-			{
-				Console.WriteLine("The MulticastAddress specified in the configuration file is not a valid IP address. The server cannot start.");
-				return;
-			}
-
-			//Check addresses
-			List<IPAddress> addresses = new List<IPAddress>();
-			if (BalancerConfig.IPAddresses.Count == 0)
-			{
-				//Autodetect
-				using Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0);
-				socket.Connect("8.8.8.8", 65530);
-				addresses.Add((socket.LocalEndPoint as IPEndPoint).Address);
-			}
-			else
-			{
-				foreach (string address in BalancerConfig.IPAddresses)
-				{
-					if (!IPAddress.TryParse(address, out IPAddress Address))
-					{
-						Console.WriteLine("Skipping invalid address {0}", address);
-					}
-					else addresses.Add(Address);
-				}
-			}
-			if (!addresses.Any())
-			{
-				Console.WriteLine("No addresses were configured. The server cannot start.");
-				return;
-			}
-
 			//Start load balancer
-			var localAddress = Balancer.Init(addresses, multicast, BalancerConfig.BalancerPort, BalancerConfig.HttpRelayPort);
+			IPAddress localAddress;
+			try
+			{
+				localAddress = Balancer.Init();
+				Console.WriteLine("Started load balancer.");
+			}
+			catch (ArgumentException e)
+			{
+				Console.WriteLine(e.Message);
+				Console.WriteLine("The server could not start.");
+				Console.ReadLine();
+				return;
+			}
 
 			//Start distributor and worker threads
 			var queue = new BlockingCollection<ContextProvider>();

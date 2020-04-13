@@ -1,9 +1,10 @@
-﻿using System;
+using Newtonsoft.Json.Linq;
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
-using Newtonsoft.Json.Linq;
 
 namespace Webserver.Webserver
 {
@@ -12,18 +13,30 @@ namespace Webserver.Webserver
 	/// </summary>
 	public class ContextProvider
 	{
+		/// <inheritdoc cref="HttpListenerContext.Request"/>
 		public RequestProvider Request;
+		/// <inheritdoc cref="HttpListenerContext.Response"/>
 		public ResponseProvider Response;
-		public ContextProvider(RequestProvider Request, ResponseProvider Response)
+		/// <summary>
+		/// Manually create a new ContextProvider by combining a Request- and ResponseProvider.
+		/// Used to create mock requests for unit testing.
+		/// </summary>
+		/// <param name="request">The RequestProvider that will represent the incoming request.</param>
+		/// <param name="response">The ResponseProvider that will represent the outgoing response.</param>
+		public ContextProvider(RequestProvider request, ResponseProvider response)
 		{
-			this.Request = Request;
-			this.Response = Response;
+			Request = request;
+			Response = response;
 		}
 
-		public ContextProvider(HttpListenerContext Context)
+		/// <summary>
+		/// Convert a HttpListenerContext into a ContextProvider.
+		/// </summary>
+		/// <param name="context"></param>
+		public ContextProvider(HttpListenerContext context)
 		{
-			this.Request = new RequestProvider(Context.Request);
-			this.Response = new ResponseProvider(Context.Response);
+			Request = new RequestProvider(context.Request);
+			Response = new ResponseProvider(context.Response);
 		}
 	}
 
@@ -32,23 +45,18 @@ namespace Webserver.Webserver
 	/// </summary>
 	public class RequestProvider
 	{
+		/// <summary>
+		/// The HttpListenerRequest that represents the incoming request. Null when the RequestProvider was created as part of a unit test.
+		/// </summary>
 		private readonly HttpListenerRequest Request;
-
-		public int Yeet;
 
 		#region Uri
 		private Uri _url;
 		/// <inheritdoc cref="HttpListenerRequest.Url"/>
 		public Uri Url
 		{
-			get
-			{
-				return Request == null ? _url : Request.Url;
-			}
-			private set
-			{
-				_url = value;
-			}
+			get => Request == null ? _url : Request.Url;
+			private set => _url = value;
 		}
 		#endregion
 
@@ -57,14 +65,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.RemoteEndPoint"/>
 		public IPEndPoint RemoteEndPoint
 		{
-			get
-			{
-				return Request == null ? _remoteEndPoint : Request.RemoteEndPoint;
-			}
-			private set
-			{
-				_remoteEndPoint = value;
-			}
+			get => Request == null ? _remoteEndPoint : Request.RemoteEndPoint;
+			private set => _remoteEndPoint = value;
 		}
 		#endregion
 
@@ -73,19 +75,15 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.LocalEndPoint"/>
 		public IPEndPoint LocalEndPoint
 		{
-			get
-			{
-				return Request == null ? _localEndPoint : Request.LocalEndPoint;
-			}
-			private set
-			{
-				_localEndPoint = value;
-			}
+			get => Request == null ? _localEndPoint : Request.LocalEndPoint;
+			private set => _localEndPoint = value;
 		}
 		#endregion
 
 		#region Params
-		/// <inheritdoc cref="HttpListenerRequest.QueryString"/>
+		/// <summary>
+		/// The QueryString of the request, converted into a dictionary for ease of access.
+		/// </summary>
 		public Dictionary<string, List<string>> Params;
 		#endregion
 
@@ -94,14 +92,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.HttpMethod"/>
 		public HttpMethod HttpMethod
 		{
-			get
-			{
-				return Request == null ? _httpMethod : Enum.Parse<HttpMethod>(Request.HttpMethod);
-			}
-			private set
-			{
-				_httpMethod = value;
-			}
+			get => Request == null ? _httpMethod : Enum.Parse<HttpMethod>(Request.HttpMethod);
+			private set => _httpMethod = value;
 		}
 		#endregion
 
@@ -110,14 +102,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.ContentType"/>
 		public string ContentType
 		{
-			get
-			{
-				return Request == null ? _contentType : Request.ContentType;
-			}
-			private set
-			{
-				_contentType = value;
-			}
+			get => Request == null ? _contentType : Request.ContentType;
+			private set => _contentType = value;
 		}
 		#endregion
 
@@ -126,14 +112,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.InputStream"/>
 		public Stream InputStream
 		{
-			get
-			{
-				return Request == null ? _inputStream : Request.InputStream;
-			}
-			private set
-			{
-				_inputStream = value;
-			}
+			get => Request == null ? _inputStream : Request.InputStream;
+			private set => _inputStream = value;
 		}
 		#endregion
 
@@ -142,25 +122,19 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.ContentEncoding"/>
 		public Encoding ContentEncoding
 		{
-			get
-			{
-				return Request == null ? _contentEncoding : Request.ContentEncoding;
-			}
-			private set
-			{
-				_contentEncoding = value;
-			}
+			get => Request == null ? _contentEncoding : Request.ContentEncoding;
+			private set => _contentEncoding = value;
 		}
 		#endregion
 
 		/// <summary>
 		/// Convert a HttpListenerRequest into a RequestProvider
 		/// </summary>
-		/// <param name="Request"></param>
-		public RequestProvider(HttpListenerRequest Request)
+		/// <param name="request"></param>
+		public RequestProvider(HttpListenerRequest request)
 		{
-			this.Request = Request;
-			this.Params = Utils.NameValueToDict(Request.QueryString);
+			Request = request;
+			Params = Utils.NameValueToDict(request.QueryString);
 		}
 	}
 
@@ -173,28 +147,18 @@ namespace Webserver.Webserver
 		/// <summary>
 		/// Convert a HttpListenerResponse into a ResponseProvider
 		/// </summary>
-		/// <param name="Response"></param>
-		public ResponseProvider(HttpListenerResponse Response) => this.Response = Response;
-
+		/// <param name="response"></param>
+		public ResponseProvider(HttpListenerResponse response)
+		{
+			Response = response;
+		}
 
 		#region StatusCode
 		public HttpStatusCode _statusCode;
-		/// <summary>
-		/// Gets or sets the HTTP status code to be returned to the client.
-		/// </summary>
+		/// <inheritdoc cref="HttpListenerResponse.StatusCode"/>
 		public HttpStatusCode StatusCode
 		{
-			get
-			{
-				if (Response == null)
-				{
-					return _statusCode;
-				}
-				else
-				{
-					return (HttpStatusCode)Response.StatusCode;
-				}
-			}
+			get => Response == null ? _statusCode : (HttpStatusCode)Response.StatusCode;
 			set
 			{
 				if (Response != null)
@@ -208,15 +172,10 @@ namespace Webserver.Webserver
 
 		#region ContentType
 		private string _contentType;
-		/// <summary>
-		/// Gets or sets the MIME type of the content returned.
-		/// </summary>
+		/// <inheritdoc cref="HttpListenerResponse.ContentType"/>
 		public string ContentType
 		{
-			get
-			{
-				return Response == null ? _contentType : Response.ContentType;
-			}
+			get => Response == null ? _contentType : Response.ContentType;
 			set
 			{
 				if (Response != null)
@@ -235,10 +194,7 @@ namespace Webserver.Webserver
 		/// </summary>
 		public string Redirect
 		{
-			get
-			{
-				return _redirect;
-			}
+			get => _redirect;
 			set
 			{
 				Response?.Redirect(value);
@@ -278,13 +234,15 @@ namespace Webserver.Webserver
 		/// </summary>
 		/// <param name="data">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
-		/// <param name="ContentType">The ContentType of the response. Defaults to "text/html"</param>
-		public void Send(byte[] data, HttpStatusCode statusCode = HttpStatusCode.OK, string ContentType = "text/html")
+		/// <param name="contentType">The ContentType of the response. Defaults to "text/html"</param>
+		public void Send(byte[] data, HttpStatusCode statusCode = HttpStatusCode.OK, string contentType = "text/html")
 		{
-			if (data == null) data = Array.Empty<byte>();
-			this.Data = data;
-			this.StatusCode = statusCode;
-			this.ContentType = ContentType;
+			if (data == null)
+				data = Array.Empty<byte>();
+
+			Data = data;
+			StatusCode = statusCode;
+			ContentType = contentType;
 
 			if (Response != null)
 			{
@@ -302,6 +260,9 @@ namespace Webserver.Webserver
 		#endregion
 	}
 
+	/// <summary>
+	/// Enum of HTTP Methods
+	/// </summary>
 	public enum HttpMethod
 	{
 		GET,

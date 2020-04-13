@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -19,7 +19,7 @@ namespace Webserver
 		/// <returns>The amount of files that didn't pass the integrity check</returns>
 		public static int VerifyIntegrity(string dir, bool recalculate = false)
 		{
-			var checksums = GetChecksums(dir);
+			Dictionary<string, string> checksums = GetChecksums(dir);
 
 			if (!recalculate && File.Exists("Checksums.json"))
 			{
@@ -46,8 +46,8 @@ namespace Webserver
 			else
 			{
 				//File doesn't exist. Create it.
-				File.WriteAllText("Checksums.json", ((JObject)new JObject(){
-					{ dir, JObject.FromObject((object)checksums)}
+				File.WriteAllText("Checksums.json", (new JObject(){
+					{ dir, JObject.FromObject(checksums)}
 				}).ToString(Formatting.Indented));
 				return 0;
 			}

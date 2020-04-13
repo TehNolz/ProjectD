@@ -1,129 +1,141 @@
-﻿using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
-using System.Reflection;
-using System.Threading;
+using System.Net.Sockets;
 
 namespace Webserver.LoadBalancer
 {
 	public static class Slave
 	{
-		private static Timer HeartbeatTimer;
-		private static DateTime LastHeartbeat = new DateTime();
-		private static bool running = false;
-
-		public static void Receive(JObject message, IPEndPoint sender)
+		/// <summary>
+		/// Sets this server as slave.
+		/// </summary>
+		/// <param name="masterAddress">The endpoint of the master server to connect to.</param>
+		/// <returns>The local IP address.</returns>
+		public static void Init(IPAddress masterAddress)
 		{
-			switch (message["$type"].ToString())
+			Console.WriteLine("Server is running as slave. Connecting to the Master server at {0}", masterAddress);
+			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
+			new ServerProfile(Balancer.LocalAddress);
+
+			//Bind events;
+			ServerConnection.OnServerTimeout += Timeout;
+			ServerConnection.OnMessageReceived += TimeoutMessage;
+			ServerConnection.OnMessageReceived += RegistrationResponse;
+			ServerConnection.OnMessageReceived += NewServer;
+
+			//Create a TcpClient.
+			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
+			client.Connect(new IPEndPoint(masterAddress, BalancerConfig.BalancerPort));
+
+			//Convert the client into a ServerConnection
+			var connection = new ServerConnection(client);
+			Balancer.MasterServer = connection;
+
+			//Send registration request.
+			connection.Send(new Message(InternalMessageType.Register, null));
+
+			Console.WriteLine("Connected to master at {0}. Local address is {1}", masterAddress, (IPEndPoint)client.Client.LocalEndPoint);
+		}
+
+		/// <summary>
+		/// Event handler for registration responses.
+		/// </summary>
+		/// <param name="server">The master server who sent the response</param>
+		/// <param name="message">The response</param>
+		public static void RegistrationResponse(ServerConnection server, Message message)
+		{
+			//If this message isn't a registration response, ignore it.
+			if (message.Type != InternalMessageType.RegisterResponse.ToString())
+				return;
+
+			//Register all servers the Master has informed us about.
+			var receivedAddresses = (List<IPAddress>)message.Data;
+			foreach (IPAddress address in receivedAddresses)
 			{
-				//Confirm a heartbeat request.
-				case "HEARTBEAT":
-					Networking.SendData(ConnectionMessage.Confirm("HEARTBEAT", sender));
-					LastHeartbeat = DateTime.Now;
-					break;
-
-				//Master informs slaves that a slave has timed out
-				case "TIMEOUT":
-					if (!message.TryGetValue<string>("Slave", out JToken address)) return;
-					if (!message.TryGetValue<int>("Port", out JToken aort)) return;
-					IPEndPoint Slave = new IPEndPoint(IPAddress.Parse((string)address), (int)aort);
-
-					if (Balancer.Servers.ContainsKey(Slave))
-					{
-						Balancer.Servers.Remove(Slave, out _);
-						Console.WriteLine("TIMEOUT received for slave " + Slave.Address);
-					}
-					else
-					{
-						Console.WriteLine("TIMEOUT received for unknown slave " + Slave.Address);
-					}
-					break;
-
-				case "QUERY_INSERT":
-					// Parse the type string into a Type object from this assembly
-					var modelType = Assembly.GetExecutingAssembly().GetType(message["type"].Value<string>());
-
-					// Get the collection of objects from the message
-					var items = message["items"].Select(x => x.ToObject(modelType)).Cast(modelType);
-
-					// Insert the collection into the database
-					Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Balancer.Database.Insert,
-						modelType,
-						new[] { items }
-					);
-					break;
-
-				case "ACK":
-					switch ((string)message["$ack_type"])
-					{
-						case "QUERY_INSERT":
-							QUERY_INSERT_ACK(null, new QUERY_INSERT_ACK_EventArgs(message["type"].ToString(), (JArray)message["items"]));
-							break;
-					}
-					break;
+				if (address.ToString() == Balancer.MasterServer.Address.ToString())
+					continue;
+				new ServerProfile(address);
 			}
 		}
 
-		public static event EventHandler<QUERY_INSERT_ACK_EventArgs> QUERY_INSERT_ACK;
-
-		public class QUERY_INSERT_ACK_EventArgs
+		/// <summary>
+		/// Event handler for new server announcements
+		/// </summary>
+		/// <param name="server">The master server that sent the announcement</param>
+		/// <param name="message">The announcement</param>
+		public static void NewServer(ServerConnection _, Message message)
 		{
-			public Type ModelType { get; }
-			public IList<object> Collection { get; }
+			//If this message isn't an announcement, ignore it.
+			if (message.Type != InternalMessageType.NewServer.ToString())
+				return;
 
-			public QUERY_INSERT_ACK_EventArgs(string modelTypeName, JArray collection)
+			IPAddress endpoint = IPAddress.Parse(message.Data);
+
+			//Ignore this message if it just announces our own registration
+			if (endpoint.ToString() == Balancer.LocalAddress.ToString())
+				return;
+
+			Console.WriteLine($"Master announced new server at {endpoint}");
+			new ServerProfile(endpoint);
+		}
+
+		/// <summary>
+		/// Processes timeout announcements from the master.
+		/// </summary>
+		/// <param name="server"></param>
+		/// <param name="message"></param>
+		public static void TimeoutMessage(ServerConnection _, Message message)
+		{
+			if (message.Type != InternalMessageType.Timeout.ToString())
+				return;
+
+			Console.WriteLine($"Master lost connection with slave at {message.Data}");
+			ServerProfile.KnownServers.TryRemove(IPAddress.Parse(message.Data), out ServerProfile _);
+		}
+		/// <summary>
+		/// Handles a connection timeout with the master server, electing a new master as replacement.
+		/// </summary>
+		/// <param name="server"></param>
+		public static void Timeout(ServerProfile server, string message)
+		{
+			Console.WriteLine($"Connection lost to master: {message}");
+			ServerProfile.KnownServers.Remove(server.Address, out _);
+
+			Console.WriteLine("Electing a new master.");
+
+			//Elect a new master by finding the slave with the lowest IPv4 address. This is guaranteed to give the same result on every slave.
+			//TODO: Maybe find a better algorithm to elect a master?
+			ServerProfile newMaster = null;
+			int minAddress = int.MaxValue;
+			foreach (IPAddress adress in ServerProfile.KnownServers.Keys)
 			{
-				ModelType = Assembly.GetExecutingAssembly().GetType(modelTypeName);
-				Collection = collection.Select(x => x.ToObject(ModelType)).ToArray();
+				int num = BitConverter.ToInt32(adress.GetAddressBytes(), 0);
+				if (num < minAddress)
+				{
+					newMaster = ServerProfile.KnownServers[adress];
+					minAddress = num;
+				}
 			}
-		}
 
-		public static void Init()
-		{
-			Networking.Callback = Receive;
-			running = true;
-			HeartbeatTimer = new Timer((object _) => HeartbeatCheck(), null, 0, 100);
-		}
+			//Check if this server was chosen as the new master. If it is, start promotion. If it isn't, connect to the new master.
+			Console.Title = $"Local address {Balancer.LocalAddress} | Master address {newMaster.Address}";
 
-		public static void Stop()
-		{
-			if (!running) return;
-			HeartbeatTimer.Dispose();
-		}
+			//Dispose the connection and reset all event bindings.
+			Balancer.MasterServer.Dispose();
+			ServerConnection.ResetEvents();
 
-		private static void HeartbeatCheck()
-		{
-			if (LastHeartbeat.Ticks == 0) return;
-			if (LastHeartbeat < DateTime.Now.AddSeconds(-2))
+			//If this slave was selected, promote to Master. Otherwise, restart the slave using the new master's address.
+			if (newMaster.Address.ToString() == Balancer.LocalAddress.ToString())
 			{
-				Console.WriteLine("Lost connection to master");
-
-				IPEndPoint masterAddress = null;
-				int minAddress = int.MaxValue;
-				foreach (IPEndPoint serverAddress in Balancer.Servers.Keys)
-				{
-					int serverIpValue = serverAddress.Address.GetAddressBytes()[3];
-					if (serverIpValue < minAddress)
-					{
-						minAddress = serverIpValue;
-						masterAddress = serverAddress;
-					}
-				}
-
-				Console.Title = $"Local - {Networking.LocalEndPoint} | Master - {masterAddress}";
-				Balancer.Servers.Remove(Balancer.MasterEndpoint, out _);
-				if (masterAddress?.Address.ToString() == Networking.LocalEndPoint.Address.ToString())
-				{
-					Console.WriteLine("Elected this server as new master");
-					Balancer.IsMaster = true;
-				}
-				else
-				{
-					Console.WriteLine("Eelected " + masterAddress + " as new master");
-					Balancer.MasterEndpoint = masterAddress;
-				}
+				Console.WriteLine("Elected this slave as new master. Promoting.");
+				Master.Init();
+			}
+			else
+			{
+				Console.WriteLine("Elected {0} as new master. Connecting.", newMaster.Address);
+				Slave.Init(newMaster.Address);
 			}
 		}
 	}

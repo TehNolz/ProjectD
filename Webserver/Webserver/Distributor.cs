@@ -1,13 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Net;
 
 namespace Webserver.Webserver
 {
-	internal static class Distributor
+	class Distributor
 	{
-		private static HttpListener Listener { get; set; }
-
 		/// <summary>
 		/// Distributes relayed requests over the various worker threads.
 		/// </summary>
@@ -16,30 +14,27 @@ namespace Webserver.Webserver
 		/// <param name="queue">The BlockingCollection queue that incoming requests will be played in.</param>
 		public static void Run(IPAddress address, int port, BlockingCollection<ContextProvider> queue)
 		{
-			// Create and start a new HttpListener for the given port and address
-			Listener = new HttpListener();
-			Listener.Prefixes.Add($"http://{address.ToString()}:{port}/");
-			Listener.Start();
+			//Create and start the HttpListener. Localhost is not allowed because we do not want these to be used directly. All traffic should go through the load balancer first.
+			var listener = new HttpListener();
+			listener.Prefixes.Add(string.Format("http://{0}:{1}/", address.ToString(), port));
+			listener.Start();
 
 			Console.WriteLine("Distributor listening on {0}:{1}", address, port);
+
+			//Main loop. Accepts incoming requests and places them in the queue.
 			while (true)
 			{
 				try
 				{
-					var context = Listener.GetContext();
-					Console.WriteLine("Received request from {0}", context.Request.RemoteEndPoint);
-					queue.Add(new ContextProvider(context));
+					HttpListenerContext Context = listener.GetContext();
+					Console.WriteLine("Received request from {0}", Context.Request.RemoteEndPoint);
+					queue.Add(new ContextProvider(Context));
 				}
 				catch (HttpListenerException e)
 				{
 					Console.WriteLine(e);
 				}
 			}
-		}
-
-		public static void Dispose()
-		{
-			Listener.Close();
 		}
 	}
 }
