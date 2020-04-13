@@ -23,14 +23,14 @@ namespace Webserver.API
 		/// <summary>
 		/// Processes an incoming request to an endpoint.
 		/// </summary>
-		/// <param name="Context">The ContextProvider representing the request</param>
-		public static void ProcessEndpoint(ContextProvider Context)
+		/// <param name="context">The ContextProvider representing the request</param>
+		public static void ProcessEndpoint(ContextProvider context)
 		{
-			RequestProvider request = Context.Request;
-			ResponseProvider response = Context.Response;
+			RequestProvider request = context.Request;
+			ResponseProvider response = context.Response;
 
 			//Check if the requested endpoint exists. If it doesn't, send a 404.
-			Type endpointType = (from E in Endpoints where ("/api/" + E.GetCustomAttribute<RouteAttribute>()?.Route).ToLower() == request.Url.LocalPath.ToLower() select E).FirstOrDefault();
+			Type endpointType = (from E in Endpoints where ("/api" + E.GetCustomAttribute<RouteAttribute>()?.Route).ToLower() == request.Url.LocalPath.ToLower() select E).FirstOrDefault();
 			if (endpointType == null)
 			{
 				response.Send(HttpStatusCode.NotFound);
@@ -39,7 +39,7 @@ namespace Webserver.API
 
 			//Create a new instance of the endpoint
 			var endpoint = (APIEndpoint)Activator.CreateInstance(endpointType);
-			endpoint.Context = Context;
+			endpoint.Context = context;
 
 			//TODO: Set headers for CORS support
 			/* List<string> AllowedMethods = (from MethodInfo M in EPType.GetMethods() where M.DeclaringType == EPType select M.Name).ToList();
@@ -47,12 +47,12 @@ namespace Webserver.API
 			 */
 
 			//Get the required endpoint method
-			MethodInfo method = endpointType.GetMethod(request.HttpMethod.ToString());
+			var method = endpointType.GetMethod(request.HttpMethod.ToString());
 
 			//TODO: Permission check
 
 			//Check content type if necessary
-			ContentTypeAttribute contentTypeAttribute = method.GetCustomAttribute<ContentTypeAttribute>();
+			var contentTypeAttribute = method.GetCustomAttribute<ContentTypeAttribute>();
 			if (contentTypeAttribute != null)
 			{
 				//If the content type doesn't match, send an Unsupported Media Type status code and cancel.
@@ -66,14 +66,16 @@ namespace Webserver.API
 				switch (contentTypeAttribute.Type)
 				{
 					case "application/json":
-						string rawJSON = new StreamReader(request.InputStream, request.ContentEncoding).ReadToEnd();
+						var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+						string json = reader.ReadToEnd();
+						reader.Dispose();
 						try
 						{
-							endpoint.Data = JObject.Parse(rawJSON);
+							endpoint.Data = JObject.Parse(json);
 						}
 						catch (JsonReaderException)
 						{
-							Console.WriteLine("Received invalid request for endpoint {0}.{1}. Could not parse JSON", endpointType.Name, method.Name);
+							Console.WriteLine($"Received invalid request for endpoint {0}.{1}. Could not parse JSON", endpointType.Name, method.Name);
 							response.Send(HttpStatusCode.BadRequest);
 							return;
 						}
@@ -81,7 +83,7 @@ namespace Webserver.API
 				}
 			}
 
-			//Invoke the method. If this fails for whatever reason, return a 500 Internal Server Error.
+			//Invoke the method, or send a 500 - Internal Server Error if any exception was thrown
 			try
 			{
 				method.Invoke(endpoint, null);

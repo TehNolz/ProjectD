@@ -1,7 +1,5 @@
 using Config;
-
-using Newtonsoft.Json;
-
+using Database.SQLite;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,38 +7,35 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
-
 using Webserver.API;
 using Webserver.LoadBalancer;
+using Webserver.Models;
 using Webserver.Webserver;
 
 namespace Webserver
 {
 	class Program
 	{
-		static void Main()
+		public static SQLiteAdapter Database;
+
+		public static void Main()
 		{
-			//If the config file doesn't exist, create a new one with the default values.
-			if (!File.Exists("Config.json"))
-			{
-				ConfigFile.Write("Config.json");
-			}
-
-
-			//Load the configuration file. If any values are missing, they will be inserted.
-			int missing;
+			// Initialize database
+			//if (File.Exists("Database.db"))
+			//	File.Delete("Database.db");
+			Database = new SQLiteAdapter("Database.db");
 			try
 			{
-				missing = ConfigFile.Load("Config.json");
+				// TODO: Add TryCreateTable
+				Database.CreateTable<ExampleModel>();
 			}
-			catch (JsonReaderException e)
-			{
-				Console.WriteLine(e);
-				Console.WriteLine("The configuration file is not a valid JSON file. The server cannot start.");
-				return;
-			}
+			catch (Exception) { }
 
-			if (missing > 0)
+			//Load config file
+			if (!File.Exists("Config.json"))
+				ConfigFile.Write("Config.json");
+
+			if (ConfigFile.Load("Config.json") is int missing && missing > 0)
 			{
 				ConfigFile.Write("Config.json");
 				Console.WriteLine("{0} configuration setting(s) are missing. The missing settings have been inserted.", missing);
@@ -61,21 +56,21 @@ namespace Webserver
 			if (MiscConfig.VerifyIntegrity)
 			{
 				Console.WriteLine("Checking file integrity...");
-				int Diff = Integrity.VerifyIntegrity(WebserverConfig.wwwroot);
+				int Diff = Integrity.VerifyIntegrity(WebserverConfig.WWWRoot);
 				if (Diff > 0)
 				{
 					Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", Diff);
 					Console.WriteLine("Some files may be corrupted. If you continue, all checksums will be recalculated.");
 					Console.WriteLine("Press enter to continue.");
 					Console.ReadLine();
-					Integrity.VerifyIntegrity(WebserverConfig.wwwroot, true);
+					Integrity.VerifyIntegrity(WebserverConfig.WWWRoot, true);
 				}
 				Console.WriteLine("No integrity issues found.");
 			}
 
 
 			//Crawl through the wwwroot folder to find all resources.
-			Resource.Crawl(WebserverConfig.wwwroot);
+			Resource.Crawl(WebserverConfig.WWWRoot);
 
 
 			//Parse Redirects.config to register all HTTP redirections.
@@ -106,13 +101,19 @@ namespace Webserver
 			var workers = new List<RequestWorker>();
 			for (int i = 0; i < WebserverConfig.WorkerThreadCount; i++)
 			{
-				var Worker = new RequestWorker(queue);
-				new Thread(() => Worker.Run()).Start();
+				var worker = new RequestWorker(queue);
+				workers.Add(worker);
+				worker.Start();
 			}
-			var distributor = new Thread(() => Distributor.Run(localAddress, BalancerConfig.HttpRelayPort, queue));
+
+			var distributor = new Thread(() => Distributor.Run(localAddress, 12001, queue));
 			distributor.Start();
 
+			foreach (var worker in workers)
+				worker.Join();
+
 			//TODO: Implement proper shutdown
+			Distributor.Dispose();
 			distributor.Join();
 		}
 	}

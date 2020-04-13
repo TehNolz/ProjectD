@@ -9,153 +9,139 @@ namespace Webserver.Webserver
 {
 	public static class Redirects
 	{
-		/// <summary>
-		/// Contains all redirection mappings. Keys are source URLs, values are the destinations they map to.
-		/// </summary>
-		public static readonly Dictionary<string, string> RedirectDict = new Dictionary<string, string>();
-		/// <summary>
-		/// Contains all error page mappings. Key is the HTTP status codes, value is the destination they map to.
-		/// </summary>
-		public static readonly Dictionary<HttpStatusCode, string> ErrorPageDict = new Dictionary<HttpStatusCode, string>();
+		public static Dictionary<string, string> RedirectDict { get; } = new Dictionary<string, string>();
+		public static Dictionary<HttpStatusCode, string> ErrorPageDict { get; } = new Dictionary<HttpStatusCode, string>();
 
 		/// <summary>
 		/// Parses a redirection configuration file, registering all redirects and error pages.
+		/// </summary>
+		/// <remarks>
 		/// Each line in the file is in the format of "source => destination" (or its a comment prefixed with //). 
 		/// Source is either a HTTP error status code (4xx and 5xx) or a relative URL. Destination is always a relative URL.
-		/// </summary>
-		/// <param name="RedirectsFile">The path to the config file.</param>
-		public static void LoadRedirects(string RedirectsFile)
+		/// </remarks>
+		/// <param name="redirectsFile"></param>
+		public static void LoadRedirects(string redirectsFile)
 		{
 			//If the specified file doesn't exist, create it and return.
-			if (!File.Exists(RedirectsFile))
+			if (!File.Exists(redirectsFile))
 			{
-				File.Create(RedirectsFile);
+				File.Create(redirectsFile);
 				return;
 			}
 
-			//Open redirects file for reading
-			using StreamReader SR = File.OpenText(RedirectsFile);
-			int lineCount = 1;
+			using var reader = File.OpenText(redirectsFile);
 			string line;
-
-			//Loop through each line.
-			while ((line = SR.ReadLine()) != null)
+			int lineCount = 0;
+			while ((line = reader.ReadLine()) != null)
 			{
+				lineCount++;
 				bool isErrorPageEntry = false;
 
 				//Ignore empty lines, comments
-				if (line.Length == 0)
-					continue;
-				if (line.StartsWith("//"))
+				if (line.Length == 0 || line.StartsWith("//"))
 					continue;
 
 				//Split the line
-				string[] split = line.Split(" => ");
-				if (split.Length != 2)
+				string[] Split = line.Split(" => ");
+				if (Split.Length != 2)
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid format", RedirectsFile, lineCount);
+					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid format", redirectsFile, lineCount);
 					continue;
 				}
 
 				//Check if source is in the right format.
-				if (int.TryParse(split[0], out int res))
+				if (int.TryParse(Split[0], out int result))
 				{
-					if (Enum.IsDefined(typeof(HttpStatusCode), res) && res >= 400 && res < 600)
-					{
-						isErrorPageEntry = true;
-					}
+					isErrorPageEntry = Enum.IsDefined(typeof(HttpStatusCode), result) && result >= 400 && result < 600;
 				}
 				else if (!Regex.IsMatch(line, @"[A-Za-z-_/]{1,}$"))
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid source", RedirectsFile, lineCount);
+					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid source", redirectsFile, lineCount);
 					continue;
 				}
 
 				//Check if the destination is in the correct format.
-				if (!Regex.IsMatch(split[1], @"[A-Za-z-_/]{1,}$"))
+				if (!Regex.IsMatch(Split[1], @"[A-Za-z-_/]{1,}$"))
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid destination", RedirectsFile, lineCount);
+					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid destination", redirectsFile, lineCount);
 					continue;
 				}
 
 				//Check if the source is the same as the destination
-				if (split[0] == split[1])
+				if (Split[0] == Split[1])
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Destination same as source", RedirectsFile, lineCount);
+					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Destination same as source", redirectsFile, lineCount);
 					continue;
 				}
 
 				//Check for duplicate source
-				if (RedirectDict.ContainsKey(split[0]))
+				if (RedirectDict.ContainsKey(Split[0]))
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Duplicate source URL", RedirectsFile, lineCount);
+					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Duplicate source URL", redirectsFile, lineCount);
 					continue;
 				}
 
 				//Add to dict
 				if (isErrorPageEntry)
 				{
-					ErrorPageDict.Add((HttpStatusCode)int.Parse(split[0]), split[1]);
+					ErrorPageDict.Add((HttpStatusCode)int.Parse(Split[0]), Split[1]);
 				}
 				else
 				{
-					RedirectDict.Add(split[0], split[1]);
+					RedirectDict.Add(Split[0], Split[1]);
 				}
-				lineCount++;
 			}
 		}
 
 		/// <summary>
 		/// Resolves an URL, returning whatever URL it redirects to.
-		/// Returns null if the redirection results in a loop.
 		/// </summary>
-		/// <param name="URL"></param>
-		public static string Resolve(string URL)
+		/// <param name="url"></param>
+		/// <returns>Null if the redirection results in a loop. Otherwise returns the target redirect url.</returns>
+		public static string Resolve(string url)
 		{
-			var ResolveStack = new Stack<string>();
-			while (RedirectDict.ContainsKey(URL))
+			var resolveStack = new Stack<string>();
+			while (RedirectDict.ContainsKey(url))
 			{
-				if (ResolveStack.Contains(URL))
+				if (resolveStack.Contains(url))
 				{
-					Console.WriteLine("Redirection loop for URL: {0}", URL);
+					Console.WriteLine("Redirection loop for URL: {0}", url);
 					return null;
 				}
 
-				ResolveStack.Push(URL);
-				URL = RedirectDict[URL];
+				resolveStack.Push(url);
+				url = RedirectDict[url];
 			}
-			return URL;
+			return url;
 		}
 
 		/// <summary>
 		/// Given a status code, returns the corresponding error page. If no custom page exists, a default will be returned.
 		/// </summary>
-		/// <param name="StatusCode"></param>
+		/// <param name="statusCode"></param>
 		/// <returns></returns>
-		public static string GetErrorPage(HttpStatusCode StatusCode)
+		public static string GetErrorPage(HttpStatusCode statusCode)
 		{
-			//Check if a custom error code is registered for this status code.
-			if (ErrorPageDict.TryGetValue(StatusCode, out string Path))
+			if (ErrorPageDict.TryGetValue(statusCode, out string url))
 			{
-				Path = Resolve(Path);
-				if (Path == null)
+				url = Resolve(url);
+				if (url == null)
 				{
-					Console.WriteLine("Failed to get error page for statuscode {0}: Infinite loop", StatusCode);
+					Console.WriteLine("Failed to get error page for statuscode {0}: Infinite loop", statusCode);
 				}
 			}
 
-			//If no page was found, take the default ErrorPage.html template, fill it in, then return that instead.
-			if (Path == null)
+			if (url == null)
 			{
 				using var reader = new StreamReader(Assembly.GetExecutingAssembly().GetManifestResourceStream("Webserver.Webserver.ErrorPage.html"));
 				return reader.ReadToEnd()
-					.Replace("{ERRORTEXT}", StatusCode.ToString())
-					.Replace("{STATUSCODE}", ((int)StatusCode).ToString())
+					.Replace("{ERRORTEXT}", statusCode.ToString())
+					.Replace("{STATUSCODE}", ((int)statusCode).ToString())
 					.Replace("{MSG}", "An error occured, and the resource could not be loaded.");
 			}
 			else
 			{
-				return File.ReadAllText(WebserverConfig.wwwroot + Path);
+				return File.ReadAllText(WebserverConfig.WWWRoot + url);
 			}
 		}
 	}

@@ -4,10 +4,14 @@ using System.Collections.Generic;
 
 namespace Webserver
 {
-	//Configuration classes for use with the Config module. These classes are used to create the Config.json, and to find missing values within it.
-	//Their values will be replaced by the values from Config.json on startup.
+	/// <summary>
+	/// Configuration classes for use with the Config module. These classes are used to create the Config.json,
+	/// and to find missing values within it.
+	/// <para/>
+	/// This class' values will be replaced by the values from Config.json on startup.
+	/// </summary>
 	[ConfigSection]
-	public static class BalancerConfig
+	internal static class BalancerConfig
 	{
 		[Comment("The port the load balancer will use for internal communication.")]
 		public static int BalancerPort = 12000;
@@ -21,18 +25,28 @@ namespace Webserver
 		public static int HttpPort = 80;
 	}
 
+	/// <summary>
+	/// JSON configuration section regarding miscellaneous settings such as integrity verification.
+	/// <para/>
+	/// This class' values will be replaced by the values from Config.json on startup.
+	/// </summary>
 	[ConfigSection]
-	public static class MiscConfig
+	internal static class MiscConfig
 	{
 		[Comment("Whether the automatic file integrity check should be enabled. If true, the system will automatically check for file corruption within the wwwroot folder.")]
 		public static bool VerifyIntegrity = true;
 	}
 
+	/// <summary>
+	/// JSON configuration section for the webserver functionality such as thread count.
+	/// <para/>
+	/// This class' values will be replaced by the values from Config.json on startup.
+	/// </summary>
 	[ConfigSection]
-	public static class WebserverConfig
+	internal static class WebserverConfig
 	{
 		[Comment("The path to the folder that contains the webpages and other resources. Any file in this folder will be accessible through the webserver.")]
-		public static string wwwroot = "./wwwroot";
+		public static string WWWRoot = "./wwwroot";
 
 		[Comment("The amount of worker threads the server will use. More threads means that more simultaneous requests can be processed, but increases hardware usage.")]
 		public static int WorkerThreadCount = 5;

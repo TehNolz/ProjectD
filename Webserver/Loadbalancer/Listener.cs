@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -53,26 +54,17 @@ namespace Webserver.LoadBalancer
 			}
 		}
 
-		//TODO: Implement better load balancing algorithm.
-		private static int ServerIndex;
+		private static int serverIndex;
 		/// <summary>
 		/// Find the best slave to relay incoming requests to.
 		/// </summary>
 		/// <returns>The URL of the chosen slave</returns>
 		private static string GetBestSlave()
 		{
-			//Get the IP addresses of all servers, including ourselves.
-			var allServers = (from S in ServerProfile.KnownServers.Keys select S).ToList();
-			allServers.Add(Balancer.LocalAddress);
-
-			//TODO: Implement a better load balancing algorithm. Roundabout works, but surely we can do something fancier!
-			ServerIndex = Math.Clamp(ServerIndex, 0, allServers.Count - 1);
-			ServerIndex++;
-			if (ServerIndex == allServers.Count)
-				ServerIndex = 0;
-
-			//Return the URL of the slave.
-			return string.Format("http://{0}:{1}", allServers[ServerIndex], BalancerConfig.HttpRelayPort);
+			ICollection<ServerProfile> servers = ServerProfile.KnownServers.Values;
+			// Increment the server index and wrap back to 0 when the index reaches servers.Count
+			serverIndex = (serverIndex + 1) % servers.Count;
+			return $"http://{servers.ElementAt(serverIndex).Address}:{BalancerConfig.HttpRelayPort}";
 		}
 
 		/// <summary>
@@ -81,7 +73,6 @@ namespace Webserver.LoadBalancer
 		/// <param name="result"></param>
 		private static void Respond(IAsyncResult result)
 		{
-			//Get the RequestState
 			var data = (RequestState)result.AsyncState;
 
 			//Attempt to retrieve the slave's response to this request.
@@ -96,15 +87,14 @@ namespace Webserver.LoadBalancer
 				workerResponse = e.Response as HttpWebResponse;
 			}
 
-			//Set the response headers, status code, status description
-			HttpListenerResponse response = data.Context.Response;
+			var response = data.Context.Response;
 			response.Headers = workerResponse.Headers;
 			response.StatusCode = (int)workerResponse.StatusCode;
 			response.StatusDescription = workerResponse.StatusDescription;
 
-			//Set the output stream.
-			using Stream outStream = workerResponse.GetResponseStream();
+			using var outStream = workerResponse.GetResponseStream();
 			outStream.CopyTo(response.OutputStream);
+
 			try
 			{
 				response.OutputStream.Close();
