@@ -64,7 +64,7 @@ namespace Webserver.LoadBalancer
 			ICollection<ServerProfile> servers = ServerProfile.KnownServers.Values;
 			// Increment the server index and wrap back to 0 when the index reaches servers.Count
 			serverIndex = (serverIndex + 1) % servers.Count;
-			return $"http://{servers.ElementAt(serverIndex).Endpoint.Address}:{BalancerConfig.HttpRelayPort}";
+			return $"http://{servers.ElementAt(serverIndex).Address}:{BalancerConfig.HttpRelayPort}";
 		}
 
 		/// <summary>
