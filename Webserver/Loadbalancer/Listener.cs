@@ -62,8 +62,14 @@ namespace Webserver.LoadBalancer
 		private static string GetBestSlave()
 		{
 			ICollection<ServerProfile> servers = ServerProfile.KnownServers.Values;
+
+			//If the server list is empty, we're still starting up. Wait until startup finishes.
+			while (ServerProfile.KnownServers.Count == 0)
+				Thread.Sleep(10);
+
 			// Increment the server index and wrap back to 0 when the index reaches servers.Count
 			serverIndex = (serverIndex + 1) % servers.Count;
+
 			return $"http://{servers.ElementAt(serverIndex).Address}:{BalancerConfig.HttpRelayPort}";
 		}
 
