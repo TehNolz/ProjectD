@@ -258,6 +258,33 @@ namespace Webserver.Webserver
 			}
 		}
 		#endregion
+
+		/// <summary>
+		/// Send a cookie to the client.
+		/// </summary>
+		/// <param name="cookie">The Cookie object to send. Only the Name and Value fields will be used.</param>
+		public void AddCookie(Cookie cookie) => AddCookie(cookie.Name, cookie.Value, (int)cookie.Expires.Subtract(new DateTime(1970, 1, 1, 0, 0, 0)).TotalSeconds);
+
+		/// <summary>
+		/// Send a cookie to the client. Always use this function to add cookies, as the built-in functions don't work properly.
+		/// </summary>
+		/// <param name="name">The cookie's name</param>
+		/// <param name="value">The cookie's value</param>
+		public void AddCookie(string name, string value, long expire)
+		{
+			string cookieVal = name + "=" + value;
+
+			if (expire < 0)
+			{
+				throw new ArgumentOutOfRangeException("Negative cookie expiration");
+			}
+			cookieVal += "; Max-Age=" + expire;
+
+			//We manually set the cookie header instead of setting Response.Cookies because some twat decided that HTTPListener should use folded cookies, which every
+			//major browser has no support for. Using folded cookies, we would be limited to only 1 cookie per response, because browsers would otherwise incorrectly
+			//interpret the 2nd cookie's key and value to be part of the 1st cookie's value.
+			Response.AppendHeader("Set-Cookie", cookieVal);
+		}
 	}
 
 	/// <summary>
