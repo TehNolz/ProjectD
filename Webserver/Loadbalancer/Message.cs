@@ -107,7 +107,7 @@ namespace Webserver.LoadBalancer
 		/// <returns></returns>
 		public Message SendAndWait(ServerConnection connection, int timeout = 500)
 		{
-			ID = new Guid().ToString();
+			ID = Guid.NewGuid().ToString();
 			return connection.SendAndWait(this, timeout);
 		}
 
