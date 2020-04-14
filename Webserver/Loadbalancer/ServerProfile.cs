@@ -70,7 +70,7 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// Triggers whenever a connected server sends us a message.
 		/// </summary>
-		public static event ReceiveEventHandler OnMessageReceived;
+		public static event ReceiveEventHandler MessageReceived;
 		/// <summary>
 		/// Delegate for the OnServerTimeout event
 		/// </summary>
@@ -80,15 +80,15 @@ namespace Webserver.LoadBalancer
 		/// Triggers whenever a connected server times out.
 		/// Note: NOT triggered when the Master server informs us that it has lost connection.
 		/// </summary>
-		public static event TimeoutEventHandler OnServerTimeout;
+		public static event TimeoutEventHandler ServerTimeout;
 
 		/// <summary>
 		/// Unsubscribe all event handlers from the ServerConnection events.
 		/// </summary>
 		public static void ResetEvents()
 		{
-			OnServerTimeout = null;
-			OnMessageReceived = null;
+			ServerTimeout = null;
+			MessageReceived = null;
 		}
 
 		/// <summary>
@@ -203,7 +203,7 @@ namespace Webserver.LoadBalancer
 				}
 				catch (IOException e)
 				{
-					OnServerTimeout(this, e.Message);
+					ServerTimeout(this, e.Message);
 					Dispose();
 				}
 			}
@@ -243,12 +243,12 @@ namespace Webserver.LoadBalancer
 						if (SentMessages.ContainsKey(message.ID))
 							MessageReplies.TryAdd(message.ID, message);
 					else
-						OnMessageReceived(message);
+						MessageReceived(message);
 				}
 				catch (SocketException e)
 				{
 					//A connection issue occured. Trigger the OnServerTimeout event and drop this connection.
-					OnServerTimeout(this, e.Message);
+					ServerTimeout(this, e.Message);
 					Dispose();
 					continue;
 				}

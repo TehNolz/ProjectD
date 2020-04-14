@@ -20,7 +20,7 @@ namespace Webserver.LoadBalancer
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
 
 			//Bind events
-			ServerConnection.OnServerTimeout += Timeout;
+			ServerConnection.ServerTimeout += OnServerTimeout;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
@@ -40,7 +40,7 @@ namespace Webserver.LoadBalancer
 		/// Processes connection timeouts. If a master detects a timeout, it removes the server from its list of known servers and informs all other slaves about it.
 		/// </summary>
 		/// <param name="server">The server that timed out.</param>
-		public static void Timeout(ServerProfile server, string message)
+		public static void OnServerTimeout(ServerProfile server, string message)
 		{
 			ServerProfile.KnownServers.TryRemove(server.Address, out _);
 			Console.WriteLine($"Lost connection to slave at {server.Address}: {message}");
