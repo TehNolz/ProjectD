@@ -11,6 +11,10 @@ namespace Webserver.Webserver
 		public BlockingCollection<ContextProvider> Queue;
 		private readonly bool Debug = false;
 		private readonly Thread Thread;
+		/// <summary>
+		/// This worker thread's database connection.
+		/// </summary>
+		private readonly SQLiteAdapter Database = new SQLiteAdapter(Program.DatabaseName);
 
 		/// <summary>
 		/// Create a new RequestWorker, which processes incoming HTTP requests.
