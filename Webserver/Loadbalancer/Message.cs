@@ -69,7 +69,7 @@ namespace Webserver.LoadBalancer
 			//Deserialize data if necessary
 			if (dataValue.Type != JTokenType.Null)
 			{
-				Data = JsonConvert.DeserializeObject(dataValue.ToString(), Utils.JsonSettings);
+				Data = JsonConvert.DeserializeObject(dataValue.ToString(), NetworkUtils.JsonSettings);
 			}
 		}
 
@@ -80,7 +80,7 @@ namespace Webserver.LoadBalancer
 		public byte[] GetBytes() => Encoding.UTF8.GetBytes(new JObject()
 			{
 				{"Type",  Type},
-				{"Data", Data == null? null : JsonConvert.SerializeObject(Data, Utils.JsonSettings) },
+				{"Data", Data == null? null : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings) },
 				{"MessageID", ID }
 			}.ToString(Formatting.None));
 

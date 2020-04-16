@@ -1,3 +1,4 @@
+using Database.SQLite;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -24,7 +25,8 @@ namespace Webserver.API
 		/// Processes an incoming request to an endpoint.
 		/// </summary>
 		/// <param name="context">The ContextProvider representing the request</param>
-		public static void ProcessEndpoint(ContextProvider context)
+		/// <param name="database">The database connection to use when processing this request</param>
+		public static void ProcessEndpoint(ContextProvider context, SQLiteAdapter database)
 		{
 			RequestProvider request = context.Request;
 			ResponseProvider response = context.Response;
@@ -40,6 +42,7 @@ namespace Webserver.API
 			//Create a new instance of the endpoint
 			var endpoint = (APIEndpoint)Activator.CreateInstance(endpointType);
 			endpoint.Context = context;
+			endpoint.Database = database;
 
 			//TODO: Set headers for CORS support
 			/* List<string> AllowedMethods = (from MethodInfo M in EPType.GetMethods() where M.DeclaringType == EPType select M.Name).ToList();

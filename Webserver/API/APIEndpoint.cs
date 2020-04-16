@@ -1,3 +1,4 @@
+using Database.SQLite;
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -8,6 +9,11 @@ namespace Webserver.API
 {
 	public abstract partial class APIEndpoint
 	{
+		/// <summary>
+		/// The database connection that was assigned to this endpoint.
+		/// </summary>
+		public SQLiteAdapter Database;
+
 		#region Attributes
 		/// <summary>
 		/// Specifies the local route of an <see cref="APIEndpoint"/>.

@@ -7,7 +7,7 @@ using System.Net.Sockets;
 
 namespace Webserver.LoadBalancer
 {
-	public static class Utils
+	public static class NetworkUtils
 	{
 		/// <summary>
 		/// Settings for the JSON Serializer. Add converters where needed.

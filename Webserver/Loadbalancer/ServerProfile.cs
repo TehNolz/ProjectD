@@ -233,15 +233,14 @@ namespace Webserver.LoadBalancer
 					}
 
 					//Get the length of the incoming message
-					int messageLength = BitConverter.ToInt32(Utils.ReadBytes(sizeof(int), Stream));
-					byte[] rawMessage = Utils.ReadBytes(messageLength, Stream);
+					int messageLength = BitConverter.ToInt32(NetworkUtils.ReadBytes(sizeof(int), Stream));
+					byte[] rawMessage = NetworkUtils.ReadBytes(messageLength, Stream);
 
 					//Read the incoming message and convert it into a Message object.
 					message = new Message(rawMessage, this);
 					
-					if (message.ID != null)
-						if (SentMessages.ContainsKey(message.ID))
-							MessageReplies.TryAdd(message.ID, message);
+					if (message.ID != null && SentMessages.ContainsKey(message.ID))
+						MessageReplies.TryAdd(message.ID, message);
 					else
 						OnMessageReceived(message);
 				}
