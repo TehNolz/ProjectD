@@ -185,7 +185,7 @@ namespace Webserver.LoadBalancer
 					}
 
 					//If the Type key isn't set to Discover, ignore this message.
-					if ((string)value != InternalMessageType.Discover.ToString())
+					if ((string)value != MessageType.Discover.ToString())
 					{
 						continue;
 					}
