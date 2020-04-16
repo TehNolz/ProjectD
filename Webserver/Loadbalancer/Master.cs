@@ -11,9 +11,17 @@ namespace Webserver.LoadBalancer
 	public static class Master
 	{
 		/// <summary>
+		/// Server registration thread. Waits for incoming registration requests from new slaves.
+		/// </summary>
+		public static Thread RegistryThread;
+		/// <summary>
+		/// Discovery response thread. Waits for- and responds to incoming discovery requests.
+		/// </summary>
+		public static Thread DiscoveryThread;
+
+		/// <summary>
 		/// Promotes this server to master.
 		/// </summary>
-		/// <returns></returns>
 		public static void Init()
 		{
 			Console.WriteLine("Server is running as master");
@@ -47,10 +55,6 @@ namespace Webserver.LoadBalancer
 			ServerConnection.Broadcast(new Message(InternalMessageType.Timeout, server.Address));
 		}
 
-		/// <summary>
-		/// Server registration thread. Waits for incoming registration requests from new slaves.
-		/// </summary>
-		public static Thread RegistryThread;
 		///<inheritdoc cref="RegistryThread"/>
 		public static void RegistrationHandler(TcpListener listener)
 		{
@@ -89,10 +93,6 @@ namespace Webserver.LoadBalancer
 			}
 		}
 
-		/// <summary>
-		/// Discovery response thread. Waits for- and responds to incoming discovery requests.
-		/// </summary>
-		public static Thread DiscoveryThread;
 		///<inheritdoc cref="DiscoveryThread"/>
 		public static void DiscoveryHandler()
 		{
