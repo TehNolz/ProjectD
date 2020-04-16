@@ -1,9 +1,12 @@
 using Database.SQLite;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using Webserver.API;
+using Webserver.LoadBalancer;
 
 namespace Webserver.Webserver
 {
@@ -27,6 +30,41 @@ namespace Webserver.Webserver
 			Queue = queue;
 			Debug = debug;
 			Thread = new Thread(Run) { Name = GetType().Name };
+
+			Database.Inserting += OnDatabaseInserting;
+		}
+
+		private void OnDatabaseInserting(SQLiteAdapter sender, InsertEventArgs args)
+		{
+			if (Balancer.IsMaster)
+			{
+				// TODO Implement an Inserted event in SQLiteAdapter
+			}
+			else
+			{
+				// Create the message body
+				var items = new JArray();
+				var json = new JObject() {
+					{ "Type", args.ModelType.FullName },
+					{ "Items", items }
+				};
+
+				// Fill the items JArray
+				foreach (var item in args.Collection)
+					items.Add(JObject.FromObject(item));
+
+				Console.WriteLine("Sending batch to master");
+				// Get a message containing an updated collection
+				Message response = Balancer.MasterServer.SendAndWait(new Message(MessageType.QueryInsert, json));
+				Console.WriteLine("Got updated batch from master");
+
+				Console.WriteLine(((JObject)response.Data).ToString());
+
+				// Swap the elements in the collections
+				object[] newItems = ((JArray)response.Data.Items).Select(x => x.ToObject(args.ModelType)).ToArray();
+				for (int i = 0; i < args.Collection.Count; ++i)
+					args.Collection[i] = newItems[i];
+			}
 		}
 
 		/// <summary>

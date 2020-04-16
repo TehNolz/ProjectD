@@ -28,6 +28,7 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += TimeoutMessage;
 			ServerConnection.MessageReceived += RegistrationResponse;
 			ServerConnection.MessageReceived += NewServer;
+			ServerConnection.MessageReceived += OnQueryInsert;
 
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
@@ -41,6 +42,27 @@ namespace Webserver.LoadBalancer
 			connection.Send(new Message(MessageType.Register, null));
 
 			Console.WriteLine("Connected to master at {0}. Local address is {1}", masterAddress, (IPEndPoint)client.Client.LocalEndPoint);
+		}
+
+		private static void OnQueryInsert(Message message)
+		{
+			// Check if the type is QueryInsert
+			if (message.Type != MessageType.QueryInsert)
+				return;
+
+			Console.WriteLine("Got QueryInsert from master");
+
+			// Parse the type string into a Type object from this assembly
+			Type modelType = Assembly.GetExecutingAssembly().GetType(message.Data.Type);
+
+			Console.WriteLine("Inserting object batch");
+			// Convert the message item array to an object array and insert it into the database
+			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
+			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
+				modelType,
+				new[] { items }
+			);
+			Console.WriteLine("Done inserting batch");
 		}
 
 		/// <summary>
