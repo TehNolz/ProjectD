@@ -1,6 +1,5 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -93,13 +92,25 @@ namespace Webserver.LoadBalancer
 			byte[] discoveryMessage = new Message(MessageType.Discover, null).GetBytes();
 			var serverEndpoint = new IPEndPoint(IPAddress.Any, 0);
 			bool foundMaster = false;
+			bool preventEcho = false;
 			for (int i = 0; i < 10; i++)
 			{
 				try
 				{
-					//Send a broadcast and wait for a response
-					Client.Send(discoveryMessage, discoveryMessage.Length, new IPEndPoint(IPAddress.Broadcast, BalancerConfig.DiscoveryPort));
+					if (!preventEcho)
+					{
+						//Send a broadcast and wait for a response
+						Client.Send(discoveryMessage, discoveryMessage.Length, new IPEndPoint(IPAddress.Broadcast, BalancerConfig.DiscoveryPort));
+					}
+					preventEcho = false;
+
 					string rawResponse = Encoding.UTF8.GetString(Client.Receive(ref serverEndpoint));
+					if (serverEndpoint.Equals(Client.Client.LocalEndPoint))
+					{
+						i--;
+						preventEcho = true;
+						continue;
+					}
 
 					//Try to parse the message. If its not a valid JObject, ignore it.
 					JObject response;
