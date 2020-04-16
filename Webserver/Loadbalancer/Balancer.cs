@@ -96,7 +96,7 @@ namespace Webserver.LoadBalancer
 					Client.Send(discoveryMessage, discoveryMessage.Length, new IPEndPoint(IPAddress.Broadcast, BalancerConfig.DiscoveryPort));
 					string rawResponse = Encoding.UTF8.GetString(Client.Receive(ref serverEndpoint));
 
-					//Try to parse the message. If its not a valid JObject, ignore it.
+					//Parse the response. If its not valid JSON, ignore it.
 					JObject response;
 					try
 					{

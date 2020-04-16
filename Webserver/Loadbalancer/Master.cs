@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -111,7 +113,30 @@ namespace Webserver.LoadBalancer
 				{
 					//Wait for a discovery message
 					var clientEndPoint = new IPEndPoint(IPAddress.Any, 0);
-					string ClientRequest = Encoding.UTF8.GetString(Balancer.Client.Receive(ref clientEndPoint));
+					string clientRequest = Encoding.UTF8.GetString(Balancer.Client.Receive(ref clientEndPoint));
+
+					//Parse the response. If its not valid JSON, ignore it.
+					JObject json;
+					try
+					{
+						json = JObject.Parse(clientRequest);
+					}
+					catch (JsonReaderException)
+					{
+						continue;
+					}
+
+					//If the message JObject doesn't contain a Type key, ignore it.
+					if (!json.TryGetValue<string>("Type", out JToken value))
+					{
+						continue;
+					}
+
+					//If the Type key isn't set to Discover, ignore this message.
+					if ((string)value != InternalMessageType.Discover.ToString())
+					{
+						continue;
+					}
 
 					//Answer it.
 					Balancer.Client.Send(response, response.Length, clientEndPoint);
