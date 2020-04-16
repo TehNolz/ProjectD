@@ -166,8 +166,6 @@ namespace Webserver.LoadBalancer
 					var clientEndPoint = new IPEndPoint(IPAddress.Any, 0);
 					string ClientRequest = Encoding.UTF8.GetString(Balancer.Client.Receive(ref clientEndPoint));
 
-					Console.WriteLine(clientEndPoint);
-
 					//Answer it.
 					Balancer.Client.Send(response, response.Length, clientEndPoint);
 					Console.WriteLine($"Recived discovery message from {clientEndPoint.Address}.");
