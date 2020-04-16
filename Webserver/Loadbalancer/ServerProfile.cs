@@ -44,11 +44,6 @@ namespace Webserver.LoadBalancer
 	public class ServerConnection : ServerProfile, IDisposable
 	{
 		/// <summary>
-		/// Track whether this connection is still active.
-		/// </summary>
-		private bool Disposed = false;
-
-		/// <summary>
 		/// The TcpClient representing the connection to this server.
 		/// </summary>
 		private TcpClient Client { get; set; }
@@ -62,34 +57,50 @@ namespace Webserver.LoadBalancer
 		private BlockingCollection<Message> TransmitQueue = new BlockingCollection<Message>();
 
 		/// <summary>
-		/// Delegate for the OnMessageReceived event
+		/// Sender thread, which sents the data received by SendData to this server.
 		/// </summary>
-		/// <param name="sender">The server who sent the message</param>
+		private Thread SenderThread;
+		/// <summary>
+		/// Receiver thread, which receives data sent to us by this server.
+		/// </summary>
+		private Thread ReceiverThread;
+
+		/// <summary>
+		/// Track whether this connection is still active.
+		/// </summary>
+		private bool disposed = false;
+
+		#region Delegates
+		/// <summary>
+		/// Delegate for the <see cref="MessageReceived"/> and <see cref="ReplyReceived"/> events.
+		/// </summary>
 		/// <param name="message">The message that was received</param>
 		public delegate void ReceiveEventHandler(Message message);
+		/// <summary>
+		/// Delegate for the <see cref="ServerTimeout"/> event.
+		/// </summary>
+		/// <param name="server">The <see cref="ServerProfile"/> that has reported a timeout.</param>
+		public delegate void TimeoutEventHandler(ServerProfile sender, string message);
+		#endregion
+
+		#region Events
 		/// <summary>
 		/// Triggers whenever a connected server sends us a message.
 		/// </summary>
 		public static event ReceiveEventHandler MessageReceived;
 		/// <summary>
-		/// Delegate for the OnServerTimeout event
-		/// </summary>
-		/// <param name="server"></param>
-		public delegate void TimeoutEventHandler(ServerProfile server, string message);
-		/// <summary>
 		/// Triggers whenever a connected server times out.
-		/// Note: NOT triggered when the Master server informs us that it has lost connection.
 		/// </summary>
+		/// <remarks>
+		/// NOT triggered when the Master server informs us that it has lost connection.
+		/// </remarks>
 		public static event TimeoutEventHandler ServerTimeout;
 
 		/// <summary>
-		/// Unsubscribe all event handlers from the ServerConnection events.
+		/// Invoked when a <see cref="ServerProfile"/> has received a response to it's message.
 		/// </summary>
-		public static void ResetEvents()
-		{
-			ServerTimeout = null;
-			MessageReceived = null;
-		}
+		protected static event ReceiveEventHandler ReplyReceived; 
+		#endregion
 
 		/// <summary>
 		/// Converts a TcpClient into a server connection.
@@ -105,9 +116,9 @@ namespace Webserver.LoadBalancer
 			Client = client;
 
 			//Start this connection's send and receive thread.
-			SenderThread = new Thread(() => Sender());
+			SenderThread = new Thread(() => Sender_Run());
 			SenderThread.Start();
-			ReceiverThread = new Thread(() => Receiver());
+			ReceiverThread = new Thread(() => Receiver_Run());
 			ReceiverThread.Start();
 		}
 
@@ -117,11 +128,11 @@ namespace Webserver.LoadBalancer
 		/// <param name="message">The message to send.</param>
 		public void Send(Message message)
 		{
-			//Throw an exception if this connection is no longer active.
-			if (Disposed)
-				throw new ObjectDisposedException("Connection closed.");
+			// Throw an exception if this connection is no longer active.
+			if (disposed)
+				throw new ObjectDisposedException(GetType().Name);
 
-			//Add message to the queue
+			// Add message to the queue
 			TransmitQueue.Add(message);
 		}
 
@@ -139,36 +150,35 @@ namespace Webserver.LoadBalancer
 		}
 
 		/// <summary>
-		/// Dictionary containing messages that are waiting for a reply.
-		/// </summary>
-		private ConcurrentDictionary<string, Message> SentMessages = new ConcurrentDictionary<string, Message>();
-		/// <summary>
-		/// Dictionary containing replies that were received for messages that were sent.
-		/// </summary>
-		private ConcurrentDictionary<string, Message> MessageReplies = new ConcurrentDictionary<string, Message>();
-		/// <summary>
 		/// Send a message and wait for a response.
 		/// </summary>
 		/// <param name="message">The message to send.</param>
 		/// <param name="timeout">The amount of milliseconds to wait for the reply to arrive. If no message is received within this time, a SocketException is thrown with the TimedOut status code.</param>
 		public Message SendAndWait(Message message, int timeout = 500)
 		{
-			//Send the message (duh).
-			SentMessages.TryAdd(message.ID, message);
-			Send(message);
+			// Create a semaphore to block this function untill a reply is received
+			var responseLock = new SemaphoreSlim(0, 1);
 
-			//Wait for the message to arrive.
-			Message reply;
-			while(!MessageReplies.TryGetValue(message.ID, out reply))
+			// Unlocker function that unblocks SendAndAwait
+			Message reply = null;
+			void unlocker(Message _reply)
 			{
-				//Wait 10ms and decrease the timeout. If the timeout is zero, throw a SocketException with the TimedOut status code.
-				Thread.Sleep(10);
-				timeout -= 10;
-				if (timeout == 0)
-					throw new SocketException((int)SocketError.TimedOut);
+				// Check if the _reply is in response to the sent message
+				if (message.ID != _reply.ID)
+					return;
+
+				reply = _reply;
+				responseLock.Release();
 			}
 
-			SentMessages.TryRemove(message.ID, out _);
+			// Subscribe the unlocker and send the message
+			ReplyReceived += unlocker;
+			Send(message);
+
+			// Block until the reply event handler unlocks the semaphore. Otherwise throw an exception
+			if (!responseLock.Wait(timeout))
+				throw new SocketException((int)SocketError.TimedOut);
+
 			return reply;
 		}
 
@@ -183,11 +193,10 @@ namespace Webserver.LoadBalancer
 		}
 
 		/// <summary>
-		/// Sender thread, which sents the data received by SendData to this server.
+		/// Main loop of the <see cref="SenderThread"/>.
 		/// </summary>
-		private Thread SenderThread;
-		/// <inheritdoc cref="SenderThread"/>
-		private void Sender()
+		/// <seealso cref="SenderThread"/>
+		private void Sender_Run()
 		{
 			while (Client.Connected)
 			{
@@ -208,13 +217,11 @@ namespace Webserver.LoadBalancer
 				}
 			}
 		}
-
 		/// <summary>
-		/// Receiver thread, which receives data sent to us by this server.
+		/// Main loop of the <see cref="ReceiverThread"/>.
 		/// </summary>
-		private Thread ReceiverThread;
-		///<inheritdoc cref="ReceiverThread"/>
-		private void Receiver()
+		/// <seealso cref="ReceiverThread"/>
+		private void Receiver_Run()
 		{
 			//Keep receiving data as long as the client is connected.
 			while (Client.Connected)
@@ -238,16 +245,15 @@ namespace Webserver.LoadBalancer
 
 					//Read the incoming message and convert it into a Message object.
 					message = new Message(rawMessage, this);
-					
+
 					if (message.ID != null)
-						if (SentMessages.ContainsKey(message.ID))
-							MessageReplies.TryAdd(message.ID, message);
+						ReplyReceived(message);
 					else
 						MessageReceived(message);
 				}
 				catch (SocketException e)
 				{
-					//A connection issue occured. Trigger the OnServerTimeout event and drop this connection.
+					// A connection issue occured. Trigger the OnServerTimeout event and drop this connection.
 					ServerTimeout(this, e.Message);
 					Dispose();
 					continue;
@@ -256,8 +262,26 @@ namespace Webserver.LoadBalancer
 		}
 
 		/// <summary>
+		/// Unsubscribe all event handlers from the ServerConnection events.
+		/// </summary>
+		public static void ResetEvents()
+		{
+			ServerTimeout = null;
+			MessageReceived = null;
+			ReplyReceived = null;
+		}
+
+		/// <summary>
 		/// Disposes this server connection, stopping all its threads and disposing the underlying TcpClient.
 		/// </summary>
-		public void Dispose() => Client.Dispose();
+		public void Dispose()
+		{
+			// Detect redundant calls
+			if (disposed)
+				return;
+
+			Client.Dispose();
+			disposed = true;
+		}
 	}
 }
