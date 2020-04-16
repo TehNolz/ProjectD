@@ -72,7 +72,7 @@ namespace Webserver.LoadBalancer
 					var message = new Message(client.GetStream().Read(messageLength));
 
 					//Check if the client sent a registration request. Drop the connection if it didn't.
-					if (message.Type != MessageType.Register.ToString())
+					if (message.Type != MessageType.Register)
 					{
 						Console.WriteLine("Dropped connection to server {0} during registration: invalid registration request", client.Client.RemoteEndPoint);
 						client.Close();

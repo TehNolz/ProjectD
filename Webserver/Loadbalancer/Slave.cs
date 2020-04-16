@@ -1,8 +1,11 @@
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 
 namespace Webserver.LoadBalancer
@@ -48,7 +51,7 @@ namespace Webserver.LoadBalancer
 		public static void RegistrationResponse(Message message)
 		{
 			//If this message isn't a registration response, ignore it.
-			if (message.Type != MessageType.RegisterResponse.ToString())
+			if (message.Type != MessageType.RegisterResponse)
 				return;
 
 			//Register all servers the Master has informed us about.
@@ -69,7 +72,7 @@ namespace Webserver.LoadBalancer
 		public static void NewServer(Message message)
 		{
 			//If this message isn't an announcement, ignore it.
-			if (message.Type != MessageType.NewServer.ToString())
+			if (message.Type != MessageType.NewServer)
 				return;
 
 			IPAddress endpoint = IPAddress.Parse(message.Data);
@@ -89,7 +92,7 @@ namespace Webserver.LoadBalancer
 		/// <param name="message"></param>
 		public static void TimeoutMessage(Message message)
 		{
-			if (message.Type != MessageType.Timeout.ToString())
+			if (message.Type != MessageType.Timeout)
 				return;
 
 			Console.WriteLine($"Master lost connection with slave at {message.Data}");

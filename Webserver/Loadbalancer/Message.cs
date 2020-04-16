@@ -23,25 +23,22 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// The message type. Used to determine how this message should be processed.
 		/// </summary>
-		public readonly string Type;
+		public readonly MessageType Type;
 		/// <summary>
 		/// The data that this message contains.
 		/// </summary>
 		public dynamic Data { get; private set; }
-
+		
 		/// <summary>
-		/// Create a new server communication message
+		/// Initializes a new instance of <see cref="Message"/> with the specified type and data.
 		/// </summary>
-		/// <param name="type">The message type. Used by the receiver to determine how this message should be processed.</param>
-		/// <param name="data">The data to be transmitted. Can be any serializable object</param>
-		public Message(string type, dynamic data)
+		/// <param name="type">The type of the message indicating how it should be processed.</param>
+		/// <param name="data"></param>
+		public Message(MessageType type, object data)
 		{
-			Type = type ?? throw new ArgumentNullException("Type cannot be null");
+			Type = type;
 			Data = data;
 		}
-
-		///<inheritdoc cref="Message(string, object, bool)"/>
-		public Message(Enum type, object data) : this(type.ToString(), data) { }
 
 		/// <summary>
 		/// Converts a received server communication message into a Message object.
@@ -63,7 +60,7 @@ namespace Webserver.LoadBalancer
 			}
 
 			//Assign values
-			Type = (string)typeValue;
+			Type = Enum.Parse<MessageType>((string)typeValue);
 			ID = (string)IDValue;
 
 			//Deserialize data if necessary
@@ -77,12 +74,14 @@ namespace Webserver.LoadBalancer
 		/// Get a byte representation of this message.
 		/// </summary>
 		/// <returns></returns>
-		public byte[] GetBytes() => Encoding.UTF8.GetBytes(new JObject()
-			{
-				{"Type",  Type},
-				{"Data", Data == null? null : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings) },
-				{"MessageID", ID }
+		public byte[] GetBytes()
+		{
+			return Encoding.UTF8.GetBytes(new JObject() {
+				{ "Type", Type.ToString() },
+				{ "Data", Data == null? null : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings) },
+				{ "MessageID", ID }
 			}.ToString(Formatting.None));
+		}
 
 		/// <summary>
 		/// Send this message to the specified server.
