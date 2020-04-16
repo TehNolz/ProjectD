@@ -35,7 +35,7 @@ namespace Webserver.LoadBalancer
 			Balancer.MasterServer = connection;
 
 			//Send registration request.
-			connection.Send(new Message(InternalMessageType.Register, null));
+			connection.Send(new Message(MessageType.Register, null));
 
 			Console.WriteLine("Connected to master at {0}. Local address is {1}", masterAddress, (IPEndPoint)client.Client.LocalEndPoint);
 		}
@@ -48,7 +48,7 @@ namespace Webserver.LoadBalancer
 		public static void RegistrationResponse(Message message)
 		{
 			//If this message isn't a registration response, ignore it.
-			if (message.Type != InternalMessageType.RegisterResponse.ToString())
+			if (message.Type != MessageType.RegisterResponse.ToString())
 				return;
 
 			//Register all servers the Master has informed us about.
@@ -69,7 +69,7 @@ namespace Webserver.LoadBalancer
 		public static void NewServer(Message message)
 		{
 			//If this message isn't an announcement, ignore it.
-			if (message.Type != InternalMessageType.NewServer.ToString())
+			if (message.Type != MessageType.NewServer.ToString())
 				return;
 
 			IPAddress endpoint = IPAddress.Parse(message.Data);
@@ -89,7 +89,7 @@ namespace Webserver.LoadBalancer
 		/// <param name="message"></param>
 		public static void TimeoutMessage(Message message)
 		{
-			if (message.Type != InternalMessageType.Timeout.ToString())
+			if (message.Type != MessageType.Timeout.ToString())
 				return;
 
 			Console.WriteLine($"Master lost connection with slave at {message.Data}");

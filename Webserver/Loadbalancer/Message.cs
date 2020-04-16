@@ -41,7 +41,7 @@ namespace Webserver.LoadBalancer
 		}
 
 		///<inheritdoc cref="Message(string, object, bool)"/>
-		public Message(InternalMessageType type, object data) : this(type.ToString(), data) { }
+		public Message(Enum type, object data) : this(type.ToString(), data) { }
 
 		/// <summary>
 		/// Converts a received server communication message into a Message object.
@@ -127,13 +127,19 @@ namespace Webserver.LoadBalancer
 	/// <summary>
 	/// Enum of message types used for internal server communication.
 	/// </summary>
-	public enum InternalMessageType
+	public enum MessageType
 	{
+		// Load balancer message types
 		Timeout,
 		Discover,
 		DiscoverResponse,
 		Register,
 		RegisterResponse,
 		NewServer,
+
+		// Database replication message types
+		QueryInsert,
+		QueryUpdate,
+		QueryDelete
 	}
 }

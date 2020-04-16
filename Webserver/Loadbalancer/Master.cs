@@ -53,7 +53,7 @@ namespace Webserver.LoadBalancer
 		{
 			ServerProfile.KnownServers.TryRemove(server.Address, out _);
 			Console.WriteLine($"Lost connection to slave at {server.Address}: {message}");
-			ServerConnection.Broadcast(new Message(InternalMessageType.Timeout, server.Address));
+			ServerConnection.Broadcast(new Message(MessageType.Timeout, server.Address));
 		}
 
 		///<inheritdoc cref="RegistryThread"/>
@@ -72,7 +72,7 @@ namespace Webserver.LoadBalancer
 					var message = new Message(client.GetStream().Read(messageLength));
 
 					//Check if the client sent a registration request. Drop the connection if it didn't.
-					if (message.Type != InternalMessageType.Register.ToString())
+					if (message.Type != MessageType.Register.ToString())
 					{
 						Console.WriteLine("Dropped connection to server {0} during registration: invalid registration request", client.Client.RemoteEndPoint);
 						client.Close();
@@ -81,9 +81,9 @@ namespace Webserver.LoadBalancer
 
 					//Register the server and answer its request.
 					var connection = new ServerConnection(client);
-					connection.Send(new Message(InternalMessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
+					connection.Send(new Message(MessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
 
-					ServerConnection.Broadcast(new Message(InternalMessageType.NewServer, connection.Address));
+					ServerConnection.Broadcast(new Message(MessageType.NewServer, connection.Address));
 					Console.WriteLine("Successfully registered the server at {0}. Informed other slaves.", connection.Address);
 				}
 				catch (SocketException e)
@@ -102,7 +102,7 @@ namespace Webserver.LoadBalancer
 			Balancer.Client = new UdpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.DiscoveryPort));
 
 			//Create the standard response message, so that we don't have to constantly recreate it. It's always the same message anyway.
-			byte[] response = new Message(InternalMessageType.DiscoverResponse, Balancer.LocalAddress).GetBytes();
+			byte[] response = new Message(MessageType.DiscoverResponse, Balancer.LocalAddress).GetBytes();
 
 			//Main loop
 			while (true)

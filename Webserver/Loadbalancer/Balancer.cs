@@ -85,7 +85,7 @@ namespace Webserver.LoadBalancer
 			Console.WriteLine($"Local address is {LocalAddress}");
 
 			//Use 10 UDP broadcasts to try and find the master server (if one exists).
-			byte[] discoveryMessage = new Message(InternalMessageType.Discover, null).GetBytes();
+			byte[] discoveryMessage = new Message(MessageType.Discover, null).GetBytes();
 			var serverEndpoint = new IPEndPoint(IPAddress.Any, 0);
 			bool foundMaster = false;
 			for (int i = 0; i < 10; i++)
@@ -114,7 +114,7 @@ namespace Webserver.LoadBalancer
 					}
 
 					//If the Type key isn't set to DiscoverResponse, ignore this message.
-					if ((string)value != InternalMessageType.DiscoverResponse.ToString())
+					if ((string)value != MessageType.DiscoverResponse.ToString())
 					{
 						continue;
 					}
