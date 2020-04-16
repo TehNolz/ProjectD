@@ -112,7 +112,7 @@ namespace Webserver.LoadBalancer
 						continue;
 					}
 
-					//Try to parse the message. If its not a valid JObject, ignore it.
+					//Parse the response. If its not valid JSON, ignore it.
 					JObject response;
 					try
 					{
