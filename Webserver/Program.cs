@@ -60,17 +60,10 @@ namespace Webserver
 			}
 
 			// Initialize database
-			//if (File.Exists("Database.db"))
-			//	File.Delete("Database.db");
 			Database = new SQLiteAdapter(DatabaseName);
-			try
-			{
-				// TODO: Add TryCreateTable
-				Database.CreateTable<ExampleModel>();
-				Database.CreateTable<User>();
-			}
-			catch (Exception) { }
-
+			Database.TryCreateTable<ExampleModel>();
+			Database.TryCreateTable<User>();
+			
 			//Crawl through the wwwroot folder to find all resources.
 			Resource.Crawl(WebserverConfig.WWWRoot);
 

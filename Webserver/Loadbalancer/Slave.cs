@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 
 namespace Webserver.LoadBalancer
 {
@@ -20,10 +21,10 @@ namespace Webserver.LoadBalancer
 			new ServerProfile(Balancer.LocalAddress);
 
 			//Bind events;
-			ServerConnection.OnServerTimeout += Timeout;
-			ServerConnection.OnMessageReceived += TimeoutMessage;
-			ServerConnection.OnMessageReceived += RegistrationResponse;
-			ServerConnection.OnMessageReceived += NewServer;
+			ServerConnection.ServerTimeout += OnServerTimeout;
+			ServerConnection.MessageReceived += TimeoutMessage;
+			ServerConnection.MessageReceived += RegistrationResponse;
+			ServerConnection.MessageReceived += NewServer;
 
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
@@ -98,7 +99,7 @@ namespace Webserver.LoadBalancer
 		/// Handles a connection timeout with the master server, electing a new master as replacement.
 		/// </summary>
 		/// <param name="server"></param>
-		public static void Timeout(ServerProfile server, string message)
+		public static void OnServerTimeout(ServerProfile server, string message)
 		{
 			Console.WriteLine($"Connection lost to master: {message}");
 			ServerProfile.KnownServers.Remove(server.Address, out _);

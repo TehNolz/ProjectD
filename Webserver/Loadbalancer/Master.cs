@@ -11,9 +11,17 @@ namespace Webserver.LoadBalancer
 	public static class Master
 	{
 		/// <summary>
+		/// Server registration thread. Waits for incoming registration requests from new slaves.
+		/// </summary>
+		public static Thread RegistryThread;
+		/// <summary>
+		/// Discovery response thread. Waits for- and responds to incoming discovery requests.
+		/// </summary>
+		public static Thread DiscoveryThread;
+
+		/// <summary>
 		/// Promotes this server to master.
 		/// </summary>
-		/// <returns></returns>
 		public static void Init()
 		{
 			Console.WriteLine("Server is running as master");
@@ -21,7 +29,7 @@ namespace Webserver.LoadBalancer
 			ServerProfile.KnownServers.TryAdd(Balancer.LocalAddress, new ServerProfile(Balancer.LocalAddress));
 
 			//Bind events
-			ServerConnection.OnServerTimeout += Timeout;
+			ServerConnection.ServerTimeout += OnServerTimeout;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
@@ -41,17 +49,13 @@ namespace Webserver.LoadBalancer
 		/// Processes connection timeouts. If a master detects a timeout, it removes the server from its list of known servers and informs all other slaves about it.
 		/// </summary>
 		/// <param name="server">The server that timed out.</param>
-		public static void Timeout(ServerProfile server, string message)
+		public static void OnServerTimeout(ServerProfile server, string message)
 		{
 			ServerProfile.KnownServers.TryRemove(server.Address, out _);
 			Console.WriteLine($"Lost connection to slave at {server.Address}: {message}");
 			ServerConnection.Broadcast(new Message(InternalMessageType.Timeout, server.Address));
 		}
 
-		/// <summary>
-		/// Server registration thread. Waits for incoming registration requests from new slaves.
-		/// </summary>
-		public static Thread RegistryThread;
 		///<inheritdoc cref="RegistryThread"/>
 		public static void RegistrationHandler(TcpListener listener)
 		{
@@ -63,9 +67,9 @@ namespace Webserver.LoadBalancer
 				{
 					//Wait for the server's registration request.
 					//Get the length of the incoming message
-					int messageLength = BitConverter.ToInt32(NetworkUtils.ReadBytes(sizeof(int), client.GetStream()));
+					int messageLength = BitConverter.ToInt32(client.GetStream().Read(sizeof(int)));
 					//Read the incoming message and convert it into a Message object.
-					var message = new Message(NetworkUtils.ReadBytes(messageLength, client.GetStream()));
+					var message = new Message(client.GetStream().Read(messageLength));
 
 					//Check if the client sent a registration request. Drop the connection if it didn't.
 					if (message.Type != InternalMessageType.Register.ToString())
@@ -90,10 +94,6 @@ namespace Webserver.LoadBalancer
 			}
 		}
 
-		/// <summary>
-		/// Discovery response thread. Waits for- and responds to incoming discovery requests.
-		/// </summary>
-		public static Thread DiscoveryThread;
 		///<inheritdoc cref="DiscoveryThread"/>
 		public static void DiscoveryHandler()
 		{
