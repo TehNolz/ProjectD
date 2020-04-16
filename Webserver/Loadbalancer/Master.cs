@@ -26,6 +26,7 @@ namespace Webserver.LoadBalancer
 		{
 			Console.WriteLine("Server is running as master");
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
+			ServerProfile.KnownServers.TryAdd(Balancer.LocalAddress, new ServerProfile(Balancer.LocalAddress));
 
 			//Bind events
 			ServerConnection.ServerTimeout += OnServerTimeout;
@@ -66,9 +67,9 @@ namespace Webserver.LoadBalancer
 				{
 					//Wait for the server's registration request.
 					//Get the length of the incoming message
-					int messageLength = BitConverter.ToInt32(Utils.ReadBytes(sizeof(int), client.GetStream()));
+					int messageLength = BitConverter.ToInt32(NetworkUtils.ReadBytes(sizeof(int), client.GetStream()));
 					//Read the incoming message and convert it into a Message object.
-					var message = new Message(Utils.ReadBytes(messageLength, client.GetStream()));
+					var message = new Message(NetworkUtils.ReadBytes(messageLength, client.GetStream()));
 
 					//Check if the client sent a registration request. Drop the connection if it didn't.
 					if (message.Type != InternalMessageType.Register.ToString())
@@ -80,7 +81,7 @@ namespace Webserver.LoadBalancer
 
 					//Register the server and answer its request.
 					var connection = new ServerConnection(client);
-					connection.Send(new Message(InternalMessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) select SP.Address).ToList()));
+					connection.Send(new Message(InternalMessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
 
 					ServerConnection.Broadcast(new Message(InternalMessageType.NewServer, connection.Address));
 					Console.WriteLine("Successfully registered the server at {0}. Informed other slaves.", connection.Address);

@@ -17,21 +17,11 @@ namespace Webserver
 {
 	class Program
 	{
+		public const string DatabaseName = "Database.db";
 		public static SQLiteAdapter Database;
 
 		public static void Main()
 		{
-			// Initialize database
-			//if (File.Exists("Database.db"))
-			//	File.Delete("Database.db");
-			Database = new SQLiteAdapter("Database.db");
-			try
-			{
-				// TODO: Add TryCreateTable
-				Database.CreateTable<ExampleModel>();
-			}
-			catch (Exception) { }
-
 			//Load config file
 			if (!File.Exists("Config.json"))
 				ConfigFile.Write("Config.json");
@@ -69,6 +59,17 @@ namespace Webserver
 				Console.WriteLine("No integrity issues found.");
 			}
 
+			// Initialize database
+			//if (File.Exists("Database.db"))
+			//	File.Delete("Database.db");
+			Database = new SQLiteAdapter(DatabaseName);
+			try
+			{
+				// TODO: Add TryCreateTable
+				Database.CreateTable<ExampleModel>();
+				Database.CreateTable<User>();
+			}
+			catch (Exception) { }
 
 			//Crawl through the wwwroot folder to find all resources.
 			Resource.Crawl(WebserverConfig.WWWRoot);
