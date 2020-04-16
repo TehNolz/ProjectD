@@ -141,7 +141,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="servers">A list of servers to send the message to.</param>
 		/// <param name="message">The message to send to each server.</param>
-		public static void Send(List<ServerConnection> servers, Message message)
+		public static void Send(IEnumerable<ServerConnection> servers, Message message)
 		{
 			foreach (ServerConnection connection in servers)
 			{
