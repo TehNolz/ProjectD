@@ -33,11 +33,11 @@ namespace Webserver.LoadBalancer
 		}
 
 		/// <summary>
-		/// Reads a certain amount of bytes from a network stream.
+		/// Reads a certain amount of bytes from the network stream.
 		/// </summary>
 		/// <param name="count">The amount of bytes to read.</param>
 		/// <param name="stream">The network stream to read from</param>
-		public static byte[] ReadBytes(int count, NetworkStream stream)
+		public static byte[] Read(this NetworkStream stream, int count)
 		{
 			byte[] buffer = new byte[count];
 			int totalBytesRead = 0;

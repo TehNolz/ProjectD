@@ -67,9 +67,9 @@ namespace Webserver.LoadBalancer
 				{
 					//Wait for the server's registration request.
 					//Get the length of the incoming message
-					int messageLength = BitConverter.ToInt32(NetworkUtils.ReadBytes(sizeof(int), client.GetStream()));
+					int messageLength = BitConverter.ToInt32(client.GetStream().Read(sizeof(int)));
 					//Read the incoming message and convert it into a Message object.
-					var message = new Message(NetworkUtils.ReadBytes(messageLength, client.GetStream()));
+					var message = new Message(client.GetStream().Read(messageLength));
 
 					//Check if the client sent a registration request. Drop the connection if it didn't.
 					if (message.Type != InternalMessageType.Register.ToString())

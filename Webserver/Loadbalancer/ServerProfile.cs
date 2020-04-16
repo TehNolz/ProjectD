@@ -240,8 +240,8 @@ namespace Webserver.LoadBalancer
 					}
 
 					//Get the length of the incoming message
-					int messageLength = BitConverter.ToInt32(Utils.ReadBytes(sizeof(int), Stream));
-					byte[] rawMessage = Utils.ReadBytes(messageLength, Stream);
+					int messageLength = BitConverter.ToInt32(Stream.Read(sizeof(int)));
+					byte[] rawMessage = Stream.Read(messageLength);
 
 					//Read the incoming message and convert it into a Message object.
 					message = new Message(rawMessage, this);
