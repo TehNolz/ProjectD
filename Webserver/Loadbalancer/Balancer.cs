@@ -29,6 +29,11 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		public static UdpClient Client { get; set; }
 		/// <summary>
+		/// Gets whether this server is the master server.
+		/// </summary>
+		public static bool IsMaster => MasterServer == null;
+		
+		/// <summary>
 		/// Starts the load balancer system.
 		/// </summary>
 		/// <returns>This address this instance is bound to.</returns>
