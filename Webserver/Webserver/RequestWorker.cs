@@ -74,7 +74,7 @@ namespace Webserver.Webserver
 				// If the url starts with /api, pass the request to the API Endpoints
 				if (url.StartsWith("/api/")) // TODO: Remove hardcoded string
 				{
-					APIEndpoint.ProcessEndpoint(context);
+					APIEndpoint.ProcessEndpoint(context, Database);
 				}
 				else
 				{
