@@ -2,9 +2,12 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+
+using Webserver.Config;
 
 namespace Webserver.LoadBalancer
 {
@@ -125,15 +128,12 @@ namespace Webserver.LoadBalancer
 
 					//If the message JObject doesn't contain a Type key, ignore it.
 					if (!response.TryGetValue<string>("Type", out JToken value))
-					{
 						continue;
-					}
 
 					//If the Type key isn't set to DiscoverResponse, ignore this message.
 					if ((string)value != MessageType.DiscoverResponse.ToString())
 					{
 						continue;
-					}
 
 					//If we got this far, we found our master.
 					foundMaster = true;
@@ -154,6 +154,7 @@ namespace Webserver.LoadBalancer
 
 			Console.Title = $"Local address {LocalAddress} | Master address {serverEndpoint.Address}";
 			return LocalAddress;
+			}
 		}
 	}
-}
+ 

@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -29,7 +30,7 @@ namespace Webserver
 				{
 					//Search for differences
 					//TODO: File deletions aren't detected.
-					var saved = savedChecksums[dir].ToObject<Dictionary<string, string>>();
+					Dictionary<string, string> saved = savedChecksums[dir].ToObject<Dictionary<string, string>>();
 
 					// Return the amount of differences between the checksum sets
 					return checksums.Count(x => !saved.ContainsKey(x.Key) || x.Value != saved[x.Key]);
@@ -70,7 +71,7 @@ namespace Webserver
 			}
 
 			//Check files
-			using MD5 md5 = MD5.Create();
+			using var md5 = MD5.Create();
 			foreach (string file in Directory.GetFiles(path))
 				result.Add(file, BitConverter.ToString(md5.ComputeHash(File.ReadAllBytes(file))).Replace("-", "").ToLower());
 

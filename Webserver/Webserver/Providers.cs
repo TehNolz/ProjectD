@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Web;
 
 namespace Webserver.Webserver
 {
@@ -23,10 +24,10 @@ namespace Webserver.Webserver
 		/// </summary>
 		/// <param name="request">The RequestProvider that will represent the incoming request.</param>
 		/// <param name="response">The ResponseProvider that will represent the outgoing response.</param>
-		public ContextProvider(RequestProvider request, ResponseProvider response)
+		public ContextProvider(RequestProvider request)
 		{
 			Request = request;
-			Response = response;
+			Response = new ResponseProvider();
 		}
 
 		/// <summary>
@@ -56,7 +57,7 @@ namespace Webserver.Webserver
 		public Uri Url
 		{
 			get => Request == null ? _url : Request.Url;
-			private set => _url = value;
+			set => _url = value;
 		}
 		#endregion
 
@@ -66,7 +67,7 @@ namespace Webserver.Webserver
 		public IPEndPoint RemoteEndPoint
 		{
 			get => Request == null ? _remoteEndPoint : Request.RemoteEndPoint;
-			private set => _remoteEndPoint = value;
+			set => _remoteEndPoint = value;
 		}
 		#endregion
 
@@ -76,7 +77,7 @@ namespace Webserver.Webserver
 		public IPEndPoint LocalEndPoint
 		{
 			get => Request == null ? _localEndPoint : Request.LocalEndPoint;
-			private set => _localEndPoint = value;
+			set => _localEndPoint = value;
 		}
 		#endregion
 
@@ -93,7 +94,7 @@ namespace Webserver.Webserver
 		public HttpMethod HttpMethod
 		{
 			get => Request == null ? _httpMethod : Enum.Parse<HttpMethod>(Request.HttpMethod);
-			private set => _httpMethod = value;
+			set => _httpMethod = value;
 		}
 		#endregion
 
@@ -103,7 +104,7 @@ namespace Webserver.Webserver
 		public string ContentType
 		{
 			get => Request == null ? _contentType : Request.ContentType;
-			private set => _contentType = value;
+			set => _contentType = value;
 		}
 		#endregion
 
@@ -113,7 +114,7 @@ namespace Webserver.Webserver
 		public Stream InputStream
 		{
 			get => Request == null ? _inputStream : Request.InputStream;
-			private set => _inputStream = value;
+			set => _inputStream = value;
 		}
 		#endregion
 
@@ -123,9 +124,18 @@ namespace Webserver.Webserver
 		public Encoding ContentEncoding
 		{
 			get => Request == null ? _contentEncoding : Request.ContentEncoding;
-			private set => _contentEncoding = value;
+			set => _contentEncoding = value;
 		}
 		#endregion
+
+		#region Cookies
+		private CookieCollection _cookies;
+		public CookieCollection Cookies
+		{
+			get => Request == null ? _cookies : Request.Cookies;
+			set => _cookies = value;
+		}
+		#endregion Cookies
 
 		/// <summary>
 		/// Convert a HttpListenerRequest into a RequestProvider
@@ -135,6 +145,20 @@ namespace Webserver.Webserver
 		{
 			Request = request;
 			Params = Utils.NameValueToDict(request.QueryString);
+		}
+
+		/// <summary>
+		/// Create 
+		/// </summary>
+		/// <param name="Url"></param>
+		/// <param name="HttpMethod"></param>
+		public RequestProvider(Uri Url, HttpMethod HttpMethod)
+		{
+			this.Url = Url;
+			Params = Utils.NameValueToDict(HttpUtility.ParseQueryString(Url.Query));
+			this.HttpMethod = HttpMethod;
+			ContentEncoding = Encoding.UTF8;
+			Cookies = new CookieCollection();
 		}
 	}
 
@@ -152,6 +176,11 @@ namespace Webserver.Webserver
 		{
 			Response = response;
 		}
+
+		/// <summary>
+		/// Create a new blank ResponseProvider for unit testing purposes.
+		/// </summary>
+		public ResponseProvider() { }
 
 		#region StatusCode
 		public HttpStatusCode _statusCode;
@@ -204,9 +233,25 @@ namespace Webserver.Webserver
 		#endregion
 
 		/// <summary>
-		/// The data sent to the client.
+		/// The headers sent to the client.
 		/// </summary>
-		public byte[] Data { get; private set; }
+		public readonly WebHeaderCollection Headers = new WebHeaderCollection();
+
+		/// <summary>
+		/// Append a new header.
+		/// </summary>
+		/// <param name="name">The name of the header</param>
+		/// <param name="value">The value of the header</param>
+		public void AppendHeader(string name, string value)
+		{
+			Response?.AppendHeader(name, value);
+			Headers.Add(name, value);
+		}
+
+		/// <summary>
+		/// The data that was sent to the client.
+		/// </summary>
+		public string Data { get; private set; }
 
 		#region Send
 		/// <summary>
@@ -219,7 +264,11 @@ namespace Webserver.Webserver
 		/// </summary>
 		/// <param name="json">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
-		public void Send(JObject json, HttpStatusCode statusCode = HttpStatusCode.OK) => Send(json.ToString(), statusCode, "application/json");
+		public void Send(JToken json, HttpStatusCode statusCode = HttpStatusCode.OK)
+		{
+			Data = json.ToString();
+			Send(json.ToString(), statusCode, "application/json");
+		}
 
 		/// <summary>
 		/// Sends a string to the client.
@@ -227,7 +276,11 @@ namespace Webserver.Webserver
 		/// <param name="text">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
 		/// <param name="contentType">The ContentType of the response. Defaults to "text/html"</param>
-		public void Send(string text, HttpStatusCode statusCode, string contentType = "text/html") => Send(Encoding.UTF8.GetBytes(text), statusCode, contentType);
+		public void Send(string text, HttpStatusCode statusCode, string contentType = "text/html")
+		{
+			Data = text;
+			Send(Encoding.UTF8.GetBytes(text), statusCode, contentType);
+		}
 
 		/// <summary>
 		/// Sends a byte array to the client.
@@ -240,7 +293,6 @@ namespace Webserver.Webserver
 			if (data == null)
 				data = Array.Empty<byte>();
 
-			Data = data;
 			StatusCode = statusCode;
 			ContentType = contentType;
 
@@ -283,7 +335,7 @@ namespace Webserver.Webserver
 			//We manually set the cookie header instead of setting Response.Cookies because some twat decided that HTTPListener should use folded cookies, which every
 			//major browser has no support for. Using folded cookies, we would be limited to only 1 cookie per response, because browsers would otherwise incorrectly
 			//interpret the 2nd cookie's key and value to be part of the 1st cookie's value.
-			Response.AppendHeader("Set-Cookie", cookieVal);
+			AppendHeader("Set-Cookie", cookieVal);
 		}
 	}
 

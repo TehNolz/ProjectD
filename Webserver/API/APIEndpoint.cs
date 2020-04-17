@@ -1,8 +1,10 @@
 using Database.SQLite;
+
 using System;
 using System.Collections.Generic;
 using System.Net;
 
+using Webserver.Models;
 using Webserver.Webserver;
 
 namespace Webserver.API
@@ -31,13 +33,23 @@ namespace Webserver.API
 			/// </summary>
 			/// <param name="route">The path to the <see cref="APIEndpoint"/>. If a leading / is omitted,
 			///	it will automatically be prepended.</param>
-			public RouteAttribute(string route) => Route = (route.StartsWith('/') ? "" : "/" ) + route;
+			public RouteAttribute(string route)
+			{
+				Route = (route.StartsWith('/') ? "" : "/") + route;
+			}
 		}
 
 		/// <summary>
 		/// TODO: Implement permission system
 		/// </summary>
-		public class PermissionAttribute : Attribute { }
+		public class PermissionAttribute : Attribute
+		{
+			public PermissionLevel PermissionLevel { get; }
+			public PermissionAttribute(PermissionLevel level)
+			{
+				PermissionLevel = level;
+			}
+		}
 
 		/// <summary>
 		/// Specifies the content-types that are valid on an HTTP method in <see cref="APIEndpoint"/>.
@@ -61,7 +73,10 @@ namespace Webserver.API
 			/// content type.
 			/// </summary>
 			/// <param name="type">The name of the content type to specify.</param>
-			public ContentTypeAttribute(string type) => Type = type;
+			public ContentTypeAttribute(string type)
+			{
+				Type = type;
+			}
 		}
 		#endregion
 
@@ -101,21 +116,34 @@ namespace Webserver.API
 		/// <summary>
 		/// The OPTIONS method is used to describe the communication options for the target resource.
 		/// </summary>
-		public void OPTIONS()
-		{
+		public void OPTIONS() =>
 			//TODO: Implement CORS support
 			Response.Send(HttpStatusCode.NoContent);
-		}
 		#endregion
 
 		/// <summary>
 		/// The ContextProvider that represents the communication between client and server.
 		/// </summary>
 		public ContextProvider Context { get; set; }
-		/// <inheritdoc cref="ContextProvider.Request"/>
+		/// <summary>
+		/// The RequestProvider that represents the client's request.
+		/// </summary>
 		public RequestProvider Request => Context.Request;
-		/// <inheritdoc cref="ContextProvider.Response"/>
+		/// <summary>
+		/// The ResponseProvider that represents the server's response.
+		/// </summary>
 		public ResponseProvider Response => Context.Response;
+
+		#region Userdata;
+		/// <summary>
+		/// The user who sent the request. Null if the user is not logged in.
+		/// </summary>
+		public User User;
+		/// <summary>
+		/// The session of the user who sent the request. Null if the user is not logged in.
+		/// </summary>
+		public Session UserSession;
+		#endregion
 
 		/// <inheritdoc cref="RequestProvider.Params"/>
 		public Dictionary<string, List<string>> Params => Context.Request.Params;

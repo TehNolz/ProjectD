@@ -1,7 +1,9 @@
-﻿using Database.SQLite;
+
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Net;
+
 using Webserver.Models;
 
 namespace Webserver.API.Endpoints
@@ -9,13 +11,11 @@ namespace Webserver.API.Endpoints
 	[Route("add")]
 	class AddThing : APIEndpoint
 	{
-		private static SQLiteAdapter Database => Program.Database;
-
 		[ContentType("application/json")]
 		public override void POST()
 		{
 			// Begin transaction to prevent changes
-			using var transaction = Database.Connection.BeginTransaction();
+			using System.Data.SQLite.SQLiteTransaction transaction = Database.Connection.BeginTransaction();
 
 			string message = Data.Message;
 			Guid guid = Data.Guid;

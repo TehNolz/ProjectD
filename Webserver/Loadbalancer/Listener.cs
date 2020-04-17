@@ -5,10 +5,13 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 
+using Webserver.Config;
+
 namespace Webserver.LoadBalancer
 {
 	class Listener
 	{
+
 		/// <summary>
 		/// Listener thread. Waits for incoming HTTP requests and relays them to slaves.
 		/// </summary>
@@ -59,7 +62,7 @@ namespace Webserver.LoadBalancer
 		/// Find the best slave to relay incoming requests to.
 		/// </summary>
 		/// <returns>The URL of the chosen slave</returns>
-		private static string GetBestSlave()
+		public static string GetBestSlave()
 		{
 			ICollection<ServerProfile> servers = ServerProfile.KnownServers.Values;
 
@@ -93,12 +96,12 @@ namespace Webserver.LoadBalancer
 				workerResponse = e.Response as HttpWebResponse;
 			}
 
-			var response = data.Context.Response;
+			HttpListenerResponse response = data.Context.Response;
 			response.Headers = workerResponse.Headers;
 			response.StatusCode = (int)workerResponse.StatusCode;
 			response.StatusDescription = workerResponse.StatusDescription;
 
-			using var outStream = workerResponse.GetResponseStream();
+			using Stream outStream = workerResponse.GetResponseStream();
 			outStream.CopyTo(response.OutputStream);
 
 			try

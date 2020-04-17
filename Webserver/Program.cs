@@ -1,5 +1,7 @@
 using Config;
+
 using Database.SQLite;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -7,15 +9,16 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
+
 using Webserver.API;
-using Webserver.API.Endpoints;
+using Webserver.Config;
 using Webserver.LoadBalancer;
 using Webserver.Models;
 using Webserver.Webserver;
 
 namespace Webserver
 {
-	class Program
+	public class Program
 	{
 		public const string DatabaseName = "Database.db";
 		public static SQLiteAdapter Database;
@@ -60,10 +63,8 @@ namespace Webserver
 			}
 
 			// Initialize database
-			Database = new SQLiteAdapter(DatabaseName);
-			Database.TryCreateTable<ExampleModel>();
-			Database.TryCreateTable<User>();
-			
+			InitDatabase(DatabaseName);
+
 			//Crawl through the wwwroot folder to find all resources.
 			Resource.Crawl(WebserverConfig.WWWRoot);
 
@@ -92,24 +93,50 @@ namespace Webserver
 			}
 
 			//Start distributor and worker threads
-			var queue = new BlockingCollection<ContextProvider>();
+			RequestWorker.Queue = new BlockingCollection<ContextProvider>();
 			var workers = new List<RequestWorker>();
 			for (int i = 0; i < WebserverConfig.WorkerThreadCount; i++)
 			{
-				var worker = new RequestWorker(queue);
+				var worker = new RequestWorker(new SQLiteAdapter(DatabaseName));
 				workers.Add(worker);
 				worker.Start();
 			}
 
-			var distributor = new Thread(() => Distributor.Run(localAddress, BalancerConfig.HttpRelayPort, queue));
+			var distributor = new Thread(() => Distributor.Run(localAddress, BalancerConfig.HttpRelayPort));
 			distributor.Start();
 
-			foreach (var worker in workers)
+			foreach (RequestWorker worker in workers)
 				worker.Join();
 
 			//TODO: Implement proper shutdown
 			Distributor.Dispose();
 			distributor.Join();
+		}
+
+		/// <summary>
+		/// Initializes the database.
+		/// </summary>
+		/// Note: Split into its own function to allow for unit testing to use it as well.
+		public static SQLiteAdapter InitDatabase(string datasource)
+		{
+			Database = new SQLiteAdapter(datasource);
+
+			//Create tables if they don't already exist.
+			Database.TryCreateTable<ExampleModel>();
+			Database.TryCreateTable<User>();
+			Database.TryCreateTable<Session>();
+
+			//Create Admin account if it doesn't exist already;
+			if (Database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)
+			{
+				var admin = new User(Database, "Administrator", AuthenticationConfig.AdministratorPassword)
+				{
+					PermissionLevel = PermissionLevel.Admin
+				};
+				Database.Update(admin);
+			}
+
+			return Database;
 		}
 	}
 }

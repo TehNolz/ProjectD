@@ -1,4 +1,5 @@
 using Database.SQLite;
+
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -9,6 +10,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 
+using Webserver.Models;
 using Webserver.Webserver;
 
 namespace Webserver.API
@@ -50,12 +52,48 @@ namespace Webserver.API
 			 */
 
 			//Get the required endpoint method
-			var method = endpointType.GetMethod(request.HttpMethod.ToString());
+			MethodInfo method = endpointType.GetMethod(request.HttpMethod.ToString());
 
-			//TODO: Permission check
+			//If this endpoint method requires a specific permission, check if the user is allowed to use this method.
+			PermissionAttribute attribute = method.GetCustomAttribute<PermissionAttribute>();
+			if (attribute != null)
+			{
+				//If the SessionID cookie is missing, the user isn't logged in and therefore can't use this endpoint.
+				Cookie cookie = request.Cookies["SessionID"];
+				if (cookie == null)
+				{
+					response.Send("No session", HttpStatusCode.Unauthorized);
+					return;
+				}
+
+				//Check if a valid session still exists
+				var session = Session.GetSession(database, cookie.Value);
+				if (session == null)
+				{
+					response.Send("No session", HttpStatusCode.Unauthorized);
+					return;
+				}
+
+				//The session is valid. Renew the session and retrieve user info.
+				session.Renew(database);
+				User user = database.Select<User>("Email = @email", new { email = session.UserEmail }).FirstOrDefault();
+
+				//Save user info in the endpoint
+				endpoint.User = user;
+				endpoint.UserSession = session;
+
+				//Check permission level.
+				if (user.PermissionLevel < attribute.PermissionLevel)
+				{
+					Console.WriteLine($"User {endpoint.User.Email} attempted to access endpoint {endpointType.Name}/{method.Name} without sufficient permissions");
+					Console.WriteLine($"User is '{user.PermissionLevel}' but must be at least '{attribute.PermissionLevel}'");
+					response.Send(HttpStatusCode.Forbidden);
+					return;
+				}
+			}
 
 			//Check content type if necessary
-			var contentTypeAttribute = method.GetCustomAttribute<ContentTypeAttribute>();
+			ContentTypeAttribute contentTypeAttribute = method.GetCustomAttribute<ContentTypeAttribute>();
 			if (contentTypeAttribute != null)
 			{
 				//If the content type doesn't match, send an Unsupported Media Type status code and cancel.
