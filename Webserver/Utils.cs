@@ -58,7 +58,8 @@ namespace Webserver
 		{
 			value = default;
 			bool found = obj.TryGetValue(propertyName, out JToken jtoken);
-			if (!found) return false;
+			if (!found)
+				return false;
 
 			// Attempt to parse the jtoken
 			try

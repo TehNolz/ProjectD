@@ -12,6 +12,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text;
+
 using Webserver;
 using Webserver.Models;
 using Webserver.Webserver;
@@ -35,11 +36,9 @@ namespace WebserverTests.API_Endpoints.Tests
 		public SQLiteTransaction Transaction;
 
 		[ClassInitialize]
-		public static void ClassInit(TestContext _)
-		{
+		public static void ClassInit(TestContext _) =>
 			//Run inits
 			Database = Program.InitDatabase(":memory:");
-		}
 
 		[ClassCleanup]
 		public static void ClassCleanup() => Database.Dispose();
@@ -67,7 +66,7 @@ namespace WebserverTests.API_Endpoints.Tests
 			}
 
 			//Set content type if necessary
-			if(contentType != null)
+			if (contentType != null)
 			{
 				Request.ContentType = contentType;
 			}

@@ -79,15 +79,12 @@ namespace Webserver.LoadBalancer
 		/// Get a byte representation of this message.
 		/// </summary>
 		/// <returns></returns>
-		public byte[] GetBytes()
-		{
-			return Encoding.UTF8.GetBytes(new JObject() {
+		public byte[] GetBytes() => Encoding.UTF8.GetBytes(new JObject() {
 				{ "MessageID", ID },
 				{ "Flags", (int)Flags },
 				{ "Type", Type.ToString() },
 				{ "Data", Data == null? null : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings) }
 			}.ToString(Formatting.None));
-		}
 
 		/// <summary>
 		/// Send this message to the specified server.
@@ -137,7 +134,7 @@ namespace Webserver.LoadBalancer
 	public enum MessageFlags
 	{
 		None = default,
-		Reply = 1<<0,
+		Reply = 1 << 0,
 	}
 
 	/// <summary>

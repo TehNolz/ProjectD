@@ -65,7 +65,7 @@ namespace Webserver.LoadBalancer
 			// Parse the type string into a Type object from this assembly
 			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
 
-			var transaction = Program.Database.Connection.BeginTransaction();
+			System.Data.SQLite.SQLiteTransaction transaction = Program.Database.Connection.BeginTransaction();
 
 			Console.WriteLine("Inserting items");
 			// Convert the message item array to an object array and insert it into the database

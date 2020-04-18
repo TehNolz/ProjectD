@@ -1,10 +1,8 @@
-using Database.SQLite;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -36,7 +34,7 @@ namespace Webserver.LoadBalancer
 		/// Gets whether this server is the master server.
 		/// </summary>
 		public static bool IsMaster => MasterServer == null;
-		
+
 		/// <summary>
 		/// Starts the load balancer system.
 		/// </summary>
@@ -158,4 +156,4 @@ namespace Webserver.LoadBalancer
 		}
 	}
 }
- 
+

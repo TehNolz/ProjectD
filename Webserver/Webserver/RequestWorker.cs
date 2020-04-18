@@ -1,6 +1,7 @@
 using Database.SQLite;
 
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -8,7 +9,7 @@ using System.Net;
 using System.Threading;
 
 using Webserver.API;
-using Webserver.Chat;
+//using Webserver.Chat;
 using Webserver.LoadBalancer;
 
 namespace Webserver.Webserver
@@ -62,7 +63,7 @@ namespace Webserver.Webserver
 				};
 
 				// Fill the items JArray
-				foreach (var item in args.Collection)
+				foreach (object item in args.Collection)
 					items.Add(JObject.FromObject(item));
 
 				Console.WriteLine("Sending batch to master");

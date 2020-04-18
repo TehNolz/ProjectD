@@ -1,5 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Webserver;
+
 using Webserver.API;
 
 namespace WebserverTests
@@ -8,9 +8,6 @@ namespace WebserverTests
 	class AssemblyInit
 	{
 		[AssemblyInitialize]
-		public static void Init(TestContext _)
-		{
-			APIEndpoint.DiscoverEndpoints();
-		}
+		public static void Init(TestContext _) => APIEndpoint.DiscoverEndpoints();
 	}
 }
