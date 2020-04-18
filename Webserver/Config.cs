@@ -1,13 +1,13 @@
 using Config;
 
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
-namespace Webserver
+namespace Webserver.Config
 {
 	/// <summary>
 	/// Configuration classes for use with the Config module. These classes are used to create the Config.json,
 	/// and to find missing values within it.
-	/// <para/>
 	/// This class' values will be replaced by the values from Config.json on startup.
 	/// </summary>
 	[ConfigSection]
@@ -26,8 +26,23 @@ namespace Webserver
 	}
 
 	/// <summary>
+	/// Configuration settings for user authentication
+	/// </summary>
+	[ConfigSection]
+	internal static class AuthenticationConfig
+	{
+		[Comment("The time in seconds until a session becomes invalid if left alone for too long while the \"Keep me signed in\" checkbox was enabled during login. Default is 604800, equal to 7 days.")]
+		public static int SessionTimeoutLong = 604800;
+		[Comment("The time in seconds until a session becomes invalid if left alone for too long. Default is 7200, equal to 2 hours.")]
+		public static int SessionTimeoutShort = 7200;
+		[Comment("The regex that all user passwords must match. Default is at least 10 characters, containing at least one letter, one number, and one special character.")]
+		public static string PasswordRegex = new Regex(@"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{10,}$").ToString();
+		[Comment("The password for the Administrator account. MUST be kept confidential.")]
+		public static string AdministratorPassword = "W@chtw00rd";
+	}
+
+	/// <summary>
 	/// JSON configuration section regarding miscellaneous settings such as integrity verification.
-	/// <para/>
 	/// This class' values will be replaced by the values from Config.json on startup.
 	/// </summary>
 	[ConfigSection]
@@ -39,7 +54,6 @@ namespace Webserver
 
 	/// <summary>
 	/// JSON configuration section for the webserver functionality such as thread count.
-	/// <para/>
 	/// This class' values will be replaced by the values from Config.json on startup.
 	/// </summary>
 	[ConfigSection]

@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+
+using Webserver.Config;
 using System.Reflection;
 using System.Text;
 
@@ -59,7 +61,7 @@ namespace Webserver.LoadBalancer
 			Console.WriteLine("Inserting object batch");
 			// Convert the message item array to an object array and insert it into the database
 			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
-			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Balancer.Database.Insert,
+			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
 				modelType,
 				new[] { items }
 			);

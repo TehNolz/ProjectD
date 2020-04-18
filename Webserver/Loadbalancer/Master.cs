@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,6 +10,8 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+
+using Webserver.Config;
 
 namespace Webserver.LoadBalancer
 {
@@ -62,12 +65,12 @@ namespace Webserver.LoadBalancer
 			// Parse the type string into a Type object from this assembly
 			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
 
-			var transaction = Balancer.Database.Connection.BeginTransaction();
+			var transaction = Program.Database.Connection.BeginTransaction();
 
 			Console.WriteLine("Inserting items");
 			// Convert the message item array to an object array and insert it into the database
 			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
-			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Balancer.Database.Insert,
+			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
 				modelType,
 				new[] { items }
 			);

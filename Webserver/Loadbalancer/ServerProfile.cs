@@ -99,7 +99,7 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// Invoked when a <see cref="ServerProfile"/> has received a response to it's message.
 		/// </summary>
-		protected static event ReceiveEventHandler ReplyReceived; 
+		protected static event ReceiveEventHandler ReplyReceived;
 		#endregion
 
 		/// <summary>

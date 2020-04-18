@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -9,7 +10,7 @@ namespace Webserver
 	/// <summary>
 	/// Static package-private class containing miscellaneos utility methods.
 	/// </summary>
-	internal static class Utils
+	public static class Utils
 	{
 		public static Dictionary<string, List<string>> NameValueToDict(NameValueCollection data)
 		{
@@ -30,7 +31,7 @@ namespace Webserver
 		public static T InvokeGenericMethod<T>(dynamic func, Type type, object[] args)
 		{
 			// Cast the generic type to a specific type
-			var concreteMethod = func.Method.GetGenericMethodDefinition().MakeGenericMethod(new[] { type });
+			dynamic concreteMethod = func.Method.GetGenericMethodDefinition().MakeGenericMethod(new[] { type });
 			// Invoke and return the new concretely typed method
 			return (T)concreteMethod.Invoke(func.Target, args);
 		}

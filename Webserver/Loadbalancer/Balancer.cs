@@ -3,23 +3,18 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
+using Webserver.Config;
+
 namespace Webserver.LoadBalancer
 {
 	public static class Balancer
 	{
-		/// <summary>
-		/// Gets the default database connection for this server instance.
-		/// </summary>
-		/// <remarks>
-		/// NO event handlers should be attached to this <see cref="SQLiteAdapter"/>
-		/// </remarks>
-		public static SQLiteAdapter Database { get; private set; }
-
 		/// <summary>
 		/// The ServerConnection representing our connection to the master server.
 		/// </summary>
@@ -135,20 +130,15 @@ namespace Webserver.LoadBalancer
 
 					//If the message JObject doesn't contain a Type key, ignore it.
 					if (!response.TryGetValue("Type", out MessageType value))
-					{
 						continue;
-					}
 
 					//If the Type key isn't set to DiscoverResponse, ignore this message.
 					if (value != MessageType.DiscoverResponse)
-					{
 						continue;
-					}
 
 					//If we got this far, we found our master.
 					foundMaster = true;
 					break;
-
 				}
 				catch (SocketException e) when (e.SocketErrorCode == SocketError.TimedOut)
 				{
@@ -164,14 +154,8 @@ namespace Webserver.LoadBalancer
 
 			Console.Title = $"Local address {LocalAddress} | Master address {serverEndpoint.Address}";
 
-			// Create database for this server
-			string databaseName = LocalAddress.ToString() + '_' + Program.DatabaseName;
-			if (File.Exists(databaseName))
-				File.Delete(databaseName);
-			File.Copy(Program.DatabaseName, databaseName);
-			Database = new SQLiteAdapter(databaseName);
-
 			return LocalAddress;
 		}
 	}
 }
+ 

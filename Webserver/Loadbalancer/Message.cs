@@ -122,7 +122,7 @@ namespace Webserver.LoadBalancer
 		/// <param name="data">The data to be transmitted. Can be any serializable object</param>
 		public void Reply(dynamic data)
 		{
-			if(ID == null)
+			if (ID == null)
 				throw new InvalidOperationException("Message was either constructed locally or doesn't require a reply.");
 			Data = data;
 			Flags |= MessageFlags.Reply;
