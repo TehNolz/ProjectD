@@ -251,9 +251,9 @@ namespace Webserver.LoadBalancer
 					message = new Message(rawMessage, this);
 
 					if (message.ID != null)
-						ReplyReceived(message);
+						ReplyReceived?.Invoke(message);
 					else
-						MessageReceived(message);
+						MessageReceived?.Invoke(message);
 				}
 				catch (SocketException e)
 				{
