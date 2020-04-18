@@ -60,14 +60,14 @@ namespace Webserver.LoadBalancer
 			Console.WriteLine(((JObject)message.Data).ToString());
 
 			// Parse the type string into a Type object from this assembly
-			Type modelType = Assembly.GetExecutingAssembly().GetType(message.Data.Type);
+			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
 
-			var transaction = Program.Database.Connection.BeginTransaction();
+			var transaction = Balancer.Database.Connection.BeginTransaction();
 
 			Console.WriteLine("Inserting items");
 			// Convert the message item array to an object array and insert it into the database
 			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
-			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
+			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Balancer.Database.Insert,
 				modelType,
 				new[] { items }
 			);
@@ -77,9 +77,6 @@ namespace Webserver.LoadBalancer
 
 			// Create the reply message body
 			var outItems = new JArray();
-			var json = new JObject() {
-				{ "Items", outItems }
-			};
 
 			// Fill the items JArray
 			foreach (dynamic item in items)
@@ -87,10 +84,13 @@ namespace Webserver.LoadBalancer
 
 			// Send the new items as a reply
 			Console.WriteLine("Sending updated batch back to slave");
-			message.Reply(json);
+			message.Reply(outItems);
 
 			// Broadcast the message to all remaining servers
-			json.Add("Type", message.Data.Type);
+			var json = new JObject() {
+				{ "Type", modelType.FullName },
+				{ "Items", outItems }
+			};
 			Console.WriteLine("Sending updated batch to the remaining slaves");
 			ServerConnection.Send(ServerProfile.KnownServers.Values
 					.Where(x => x is ServerConnection && x != message.Connection)
@@ -179,13 +179,13 @@ namespace Webserver.LoadBalancer
 					}
 
 					//If the message JObject doesn't contain a Type key, ignore it.
-					if (!json.TryGetValue<string>("Type", out JToken value))
+					if (!json.TryGetValue("Type", out MessageType value))
 					{
 						continue;
 					}
 
 					//If the Type key isn't set to Discover, ignore this message.
-					if ((string)value != MessageType.Discover.ToString())
+					if (value != MessageType.Discover)
 					{
 						continue;
 					}

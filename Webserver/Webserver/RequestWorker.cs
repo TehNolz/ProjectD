@@ -18,7 +18,8 @@ namespace Webserver.Webserver
 		/// <summary>
 		/// This worker thread's database connection.
 		/// </summary>
-		private readonly SQLiteAdapter Database = new SQLiteAdapter(Program.DatabaseName);
+		//private readonly SQLiteAdapter Database = new SQLiteAdapter(Program.DatabaseName);
+		private readonly SQLiteAdapter Database = new SQLiteAdapter(Balancer.Database.Connection.DataSource + ".db");
 
 		/// <summary>
 		/// Create a new RequestWorker, which processes incoming HTTP requests.
@@ -58,10 +59,10 @@ namespace Webserver.Webserver
 				Message response = Balancer.MasterServer.SendAndWait(new Message(MessageType.QueryInsert, json));
 				Console.WriteLine("Got updated batch from master");
 
-				Console.WriteLine(((JObject)response.Data).ToString());
+				Console.WriteLine(((JToken)response.Data).ToString());
 
 				// Swap the elements in the collections
-				object[] newItems = ((JArray)response.Data.Items).Select(x => x.ToObject(args.ModelType)).ToArray();
+				object[] newItems = ((JArray)response.Data).Select(x => x.ToObject(args.ModelType)).ToArray();
 				for (int i = 0; i < args.Collection.Count; ++i)
 					args.Collection[i] = newItems[i];
 			}

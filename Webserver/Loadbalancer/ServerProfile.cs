@@ -182,6 +182,7 @@ namespace Webserver.LoadBalancer
 			// Block until the reply event handler unlocks the semaphore. Otherwise throw an exception
 			if (!responseLock.Wait(timeout))
 				throw new SocketException((int)SocketError.TimedOut);
+			ReplyReceived -= unlocker;
 
 			return reply;
 		}
@@ -250,7 +251,7 @@ namespace Webserver.LoadBalancer
 					//Read the incoming message and convert it into a Message object.
 					message = new Message(rawMessage, this);
 
-					if (message.ID != null)
+					if (message.ID != null && message.Flags.HasFlag(MessageFlags.Reply))
 						ReplyReceived?.Invoke(message);
 					else
 						MessageReceived?.Invoke(message);

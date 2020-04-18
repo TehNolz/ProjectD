@@ -51,28 +51,27 @@ namespace Webserver
 		/// <typeparam name="T"></typeparam>
 		/// <param name="obj"></param>
 		/// <param name="propertyName"></param>
-		/// <param name="Value"></param>
+		/// <param name="value"></param>
 		/// <returns>Returns false if the JToken can't be cast to the specified type.</returns>
-		public static bool TryGetValue<T>(this JObject obj, string propertyName, out JToken Value)
+		public static bool TryGetValue<T>(this JObject obj, string propertyName, out T value)
 		{
-			bool Found = obj.TryGetValue(propertyName, out Value);
-			if (!Found)
-			{
-				return false;
-			}
+			value = default;
+			bool found = obj.TryGetValue(propertyName, out JToken jtoken);
+			if (!found) return false;
+
+			// Attempt to parse the jtoken
 			try
 			{
-				Value.ToObject<T>();
+				// Parse the jtoken to an enum if T is an enum type
+				if (typeof(T).IsEnum)
+					value = (T)Enum.Parse(typeof(T), jtoken.ToString());
+				else
+					value = jtoken.ToObject<T>();
 #pragma warning disable CA1031 // Silence "Do not catch general exception types" message.
 			}
-			catch (ArgumentException)
-			{
-				return false;
-			}
-			catch (InvalidCastException)
-			{
-				return false;
-			}
+			catch (ArgumentException) { return false; }
+			catch (OverflowException) { return false; }
+			catch (InvalidCastException) { return false; }
 			return true;
 		}
 	}

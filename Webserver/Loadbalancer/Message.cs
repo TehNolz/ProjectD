@@ -15,20 +15,25 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// The unique ID associated with this message. Used for replying to messages that require an answer. Null if no answer is required.
 		/// </summary>
-		public string ID { get; private set; } = null;
+		public string ID { get; private set; }
 		/// <summary>
-		/// The ServerConnection that received this message. Null if this message was constructed locally.
+		/// Gets or sets the flags for this message. These must be set with bitwise operations.
 		/// </summary>
-		public readonly ServerConnection Connection;
+		public MessageFlags Flags { get; private set; }
 		/// <summary>
-		/// The message type. Used to determine how this message should be processed.
+		/// Gets the message type. Used to determine how this message should be processed.
 		/// </summary>
-		public readonly MessageType Type;
+		public MessageType Type { get; }
 		/// <summary>
 		/// The data that this message contains.
 		/// </summary>
 		public dynamic Data { get; private set; }
-		
+
+		/// <summary>
+		/// The <see cref="ServerConnection"/> that received this message. Null if this message was constructed locally.
+		/// </summary>
+		public readonly ServerConnection Connection;
+
 		/// <summary>
 		/// Initializes a new instance of <see cref="Message"/> with the specified type and data.
 		/// </summary>
@@ -52,22 +57,22 @@ namespace Webserver.LoadBalancer
 			var json = JObject.Parse(Encoding.UTF8.GetString(buffer));
 
 			//Check if all necessary keys are present.
-			if (!json.TryGetValue<string>("Type", out JToken typeValue) ||
-				!json.TryGetValue<string>("MessageID", out JToken IDValue) ||
-				!json.TryGetValue<JToken>("Data", out JToken dataValue))
+			if (!json.TryGetValue("MessageID", out string id) ||
+				!json.TryGetValue("Flags", out MessageFlags flags) ||
+				!json.TryGetValue("Type", out MessageType type) ||
+				!json.TryGetValue("Data", out JToken dataValue))
 			{
 				throw new JsonReaderException("Invalid server JSON: missing/invalid keys");
 			}
 
 			//Assign values
-			Type = Enum.Parse<MessageType>((string)typeValue);
-			ID = (string)IDValue;
+			ID = id;
+			Flags = flags;
+			Type = type;
 
 			//Deserialize data if necessary
 			if (dataValue.Type != JTokenType.Null)
-			{
 				Data = JsonConvert.DeserializeObject(dataValue.ToString(), NetworkUtils.JsonSettings);
-			}
 		}
 
 		/// <summary>
@@ -77,9 +82,10 @@ namespace Webserver.LoadBalancer
 		public byte[] GetBytes()
 		{
 			return Encoding.UTF8.GetBytes(new JObject() {
+				{ "MessageID", ID },
+				{ "Flags", (int)Flags },
 				{ "Type", Type.ToString() },
-				{ "Data", Data == null? null : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings) },
-				{ "MessageID", ID }
+				{ "Data", Data == null? null : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings) }
 			}.ToString(Formatting.None));
 		}
 
@@ -119,8 +125,19 @@ namespace Webserver.LoadBalancer
 			if(ID == null)
 				throw new InvalidOperationException("Message was either constructed locally or doesn't require a reply.");
 			Data = data;
+			Flags |= MessageFlags.Reply;
 			Connection.Send(this);
 		}
+	}
+
+	/// <summary>
+	/// Enum defining various bitwise flags for <see cref="Message"/> instances.
+	/// </summary>
+	[Flags]
+	public enum MessageFlags
+	{
+		None = default,
+		Reply = 1<<0,
 	}
 
 	/// <summary>

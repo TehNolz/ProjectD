@@ -51,14 +51,15 @@ namespace Webserver.LoadBalancer
 				return;
 
 			Console.WriteLine("Got QueryInsert from master");
+			Console.WriteLine(message.Data.Type);
 
 			// Parse the type string into a Type object from this assembly
-			Type modelType = Assembly.GetExecutingAssembly().GetType(message.Data.Type);
+			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
 
 			Console.WriteLine("Inserting object batch");
 			// Convert the message item array to an object array and insert it into the database
 			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
-			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
+			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Balancer.Database.Insert,
 				modelType,
 				new[] { items }
 			);
