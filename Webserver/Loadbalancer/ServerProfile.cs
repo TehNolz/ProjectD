@@ -156,6 +156,10 @@ namespace Webserver.LoadBalancer
 		/// <param name="timeout">The amount of milliseconds to wait for the reply to arrive. If no message is received within this time, a SocketException is thrown with the TimedOut status code.</param>
 		public Message SendAndWait(Message message, int timeout = 500)
 		{
+			// Use the Message.SendAndWait to set the ID if it is null
+			if (message.ID is null)
+				return message.SendAndWait(this, timeout);
+
 			// Create a semaphore to block this function untill a reply is received
 			var responseLock = new SemaphoreSlim(0, 1);
 
