@@ -1,4 +1,4 @@
-﻿using Database.SQLite;
+using Database.SQLite;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Net;
@@ -9,8 +9,6 @@ namespace Webserver.API.Endpoints
 	[Route("add")]
 	class AddThing : APIEndpoint
 	{
-		private static SQLiteAdapter Database => Program.Database;
-
 		[ContentType("application/json")]
 		public override void POST()
 		{
