@@ -1,9 +1,5 @@
-﻿using Database.SQLite;
+﻿using System.Net;
 using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Text;
 using Webserver.Models;
 
 namespace Webserver.API.Endpoints.Feed
@@ -14,7 +10,7 @@ namespace Webserver.API.Endpoints.Feed
         [ContentType("application/json")]
         public override void POST()
         {
-            // Check if title and description are in the parameters
+            // Check if title and description are in the body
             if (!((JObject)Data).TryGetValue<string>("title", out JToken title) ||
                 !((JObject)Data).TryGetValue<string>("description", out JToken description))
             {
