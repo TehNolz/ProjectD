@@ -76,6 +76,9 @@ namespace Webserver
 			// Initialize database
 			InitDatabase(DatabaseName);
 
+			// Add feed item table
+			Database.TryCreateTable<FeedItem>();
+
 			//Register all API endpoints
 			APIEndpoint.DiscoverEndpoints();
 

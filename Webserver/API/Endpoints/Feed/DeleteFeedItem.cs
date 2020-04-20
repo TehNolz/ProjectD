@@ -1,24 +1,23 @@
-﻿using System.Net;
+using System.Linq;
+using System.Net;
 using Newtonsoft.Json.Linq;
 using Webserver.Models;
 
 namespace Webserver.API.Endpoints.Feed
 {
-    [Route("feedItem")]
-    public class DeleteFeedItem : APIEndpoint
+    public partial class FeedItemEndpoint : APIEndpoint
     {
-        [ContentType("application/json")]
         public override void DELETE()
         {
-            // Check if ID is in the body
-            if (!((JObject)Data).TryGetValue<string>("id", out JToken ID))
-            {
+			// Check if ID is in the parameters
+			if (!Params.ContainsKey("id"))
+			{
                 Response.Send("Missing ID", HttpStatusCode.BadRequest);
                 return;
             }
 
-            // TODO: Get the feed item from the database
-            FeedItem feedItem = null;
+			// Get the feed item from the database
+			var feedItem = Database.Select<FeedItem>("ID = @id", new { id = Params["id"][0] }).FirstOrDefault();
 
             // Check if the feed item exists
             if (feedItem == null)
@@ -27,7 +26,8 @@ namespace Webserver.API.Endpoints.Feed
                 return;
             }
 
-            // TODO: Delete feed item from databse
+			// Delete feed item from the databse
+			Database.Delete(feedItem);
 
             Response.Send("Feed item successfully deleted", HttpStatusCode.OK);
         }
