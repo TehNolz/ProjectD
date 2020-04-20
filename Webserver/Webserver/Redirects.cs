@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Reflection;
-using System.Text;
 using System.Text.RegularExpressions;
+
+using Webserver.Config;
 
 namespace Webserver.Webserver
 {
@@ -30,7 +31,7 @@ namespace Webserver.Webserver
 				return;
 			}
 
-			using var reader = File.OpenText(redirectsFile);
+			using StreamReader reader = File.OpenText(redirectsFile);
 			string line;
 			int lineCount = 0;
 			while ((line = reader.ReadLine()) != null)

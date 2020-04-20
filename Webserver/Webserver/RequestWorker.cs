@@ -1,25 +1,46 @@
-﻿using System;
+using Database.SQLite;
+
+using Newtonsoft.Json.Linq;
+
+using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Net;
 using System.Threading;
+
 using Webserver.API;
+//using Webserver.Chat;
+using Webserver.LoadBalancer;
 
 namespace Webserver.Webserver
 {
-	class RequestWorker
+	public class RequestWorker : IDisposable
 	{
-		public BlockingCollection<ContextProvider> Queue;
+		/// <summary>
+		/// The global request queue. The distributor inserts requests, and the workers process them.
+		/// </summary>
+		public static BlockingCollection<ContextProvider> Queue;
+		/// <summary>
+		/// Debug mode. If true, the RequestWorker will automatically shutdown once all requests have been processed. Used for unit testing.
+		/// </summary>
 		private readonly bool Debug = false;
+		/// <summary>
+		/// The worker theead object.
+		/// </summary>
 		private readonly Thread Thread;
+		/// <summary>
+		/// This worker thread's database connection.
+		/// </summary>
+		private readonly SQLiteAdapter Database;
 
 		/// <summary>
 		/// Create a new RequestWorker, which processes incoming HTTP requests.
 		/// </summary>
 		/// <param name="queue">A BlockingCollection where new requests will be placed.</param>
 		/// <param name="debug">Debug mode. If true, the RequestWorker will automatically shutdown once all requests have been processed. Used for unit testing.</param>
-		public RequestWorker(BlockingCollection<ContextProvider> queue, bool debug = false)
+		public RequestWorker(SQLiteAdapter database, bool debug = false)
 		{
-			Queue = queue;
+			Database = database;
 			Debug = debug;
 			Thread = new Thread(Run) { Name = GetType().Name };
 		}
@@ -60,7 +81,8 @@ namespace Webserver.Webserver
 				}
 
 				//Remove trailing /
-				if (url.EndsWith('/') && url.Length > 1) url = url.Remove(url.Length - 1);
+				if (url.EndsWith('/') && url.Length > 1)
+					url = url.Remove(url.Length - 1);
 
 				//Redirect if necessary
 				if (url != request.Url.LocalPath.ToLower())
@@ -74,7 +96,7 @@ namespace Webserver.Webserver
 				// If the url starts with /api, pass the request to the API Endpoints
 				if (url.StartsWith("/api/")) // TODO: Remove hardcoded string
 				{
-					APIEndpoint.ProcessEndpoint(context);
+					APIEndpoint.ProcessEndpoint(context, Database);
 				}
 				else
 				{
@@ -83,6 +105,11 @@ namespace Webserver.Webserver
 
 				//If Debug mode is enabled and the queue is empty, stop the worker.
 			} while (!Debug || Queue.Count != 0);
+		}
+
+		public void Dispose()
+		{
+			Database.Dispose();
 		}
 	}
 }

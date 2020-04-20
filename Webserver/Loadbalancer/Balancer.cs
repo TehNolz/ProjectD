@@ -1,173 +1,162 @@
-﻿using System;
-using System.Collections.Concurrent;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using System;
 using System.Collections.Generic;
-using System.Data.Common;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
-using Database.SQLite;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+
+using Webserver.Config;
 
 namespace Webserver.LoadBalancer
 {
 	public static class Balancer
 	{
-		public static int Port { get; set; }
-		public static IPEndPoint MasterEndpoint { get; set; }
-
-		public static ConcurrentDictionary<IPEndPoint, ServerProfile> Servers { get; } = new ConcurrentDictionary<IPEndPoint, ServerProfile>();
-
-		public static SQLiteAdapter Database { get; private set; }
-
-		private static bool isMaster;
 		/// <summary>
-		/// Gets or sets master mode. If true, this instance of the server will act as the server group's master.
+		/// The ServerConnection representing our connection to the master server.
 		/// </summary>
-		/// <remarks>
-		/// Only one master exists at any given time.
-		/// </remarks>
-		public static bool IsMaster
+		public static ServerConnection MasterServer { get; set; }
+		/// <summary>
+		/// A list of all valid IP addresses found in the config file.
+		/// </summary>
+		public static List<IPAddress> Addresses { get; set; } = new List<IPAddress>();
+		/// <summary>
+		/// The local IP address that this server is bound to.
+		/// </summary>
+		public static IPAddress LocalAddress { get; set; }
+		/// <summary>
+		/// The UdpClient used for server discovery. Needs to be kept alive for IP binding to work.
+		/// Also used by masters to answer discovery requests.
+		/// </summary>
+		public static UdpClient Client { get; set; }
+		/// <summary>
+		/// Gets whether this server is the master server.
+		/// </summary>
+		public static bool IsMaster => MasterServer == null;
+
+		/// <summary>
+		/// Starts the load balancer system.
+		/// </summary>
+		/// <returns>This address this instance is bound to.</returns>
+		public static IPAddress Init()
 		{
-			get { return isMaster; }
-			set
+			//Get IP address(es).
+			if (BalancerConfig.IPAddresses.Count == 0)
 			{
-				isMaster = value;
-				if (value)
+				//If no addresses are specified in the configuration file, find the internet-facing interface's IPv4 address by attempting to connect to Google's public DNS.
+				var Socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0);
+				Socket.Connect("8.8.8.8", 65530);
+				Addresses.Add((Socket.LocalEndPoint as IPEndPoint).Address);
+				Socket.Dispose();
+			}
+			else
+			{
+				//Check if the addresses set in the configuration file are valid IPv4 addresses.
+				foreach (string rawAddress in BalancerConfig.IPAddresses)
 				{
-					Slave.Stop();
-					Master.Init();
-				}
-				else
-				{
-					Slave.Init();
+					if (!IPAddress.TryParse(rawAddress, out IPAddress Address))
+						Console.WriteLine("Skipping invalid address {0}", Address);
+					else
+						Addresses.Add(Address);
 				}
 			}
-		}
 
-		/// <summary>
-		/// Starts the load balancer.
-		/// </summary>
-		/// <param name="addresses">A list of IP addresses the listener will bind to. Only the first available address is used, which is also returned.</param>
-		/// <param name="multicastAddress">The Multicast address that the balancer will use. Must match all other servers. Multicast addresses are in the range 224.0.0.0 - 239.255.255.255</param>
-		/// <param name="balancerPort">The port the balancer will be using for internal communication</param>
-		/// <param name="port">The port the balancer will be using for relaying HTTP requests to the slaves</param>
-		public static IPAddress Init(List<IPAddress> addresses, IPAddress multicastAddress = null, int balancerPort = 12000, int port = 12001)
-		{
-			if (multicastAddress == null) multicastAddress = IPAddress.Parse("224.0.0.1"); //Default multicast address;
-			Port = port;
+			//Show a warning if no addresses are configured even after the above checks. We can't start the server without an IP address to bind to.
+			if (Addresses.Count == 0)
+				throw new ArgumentException("No valid addresses were found.");
 
-			Database = new SQLiteAdapter("Database.db");
-
-			//Create a client and send a discover message.
-			var client = Networking.GetClient(addresses, multicastAddress, balancerPort);
-			client.Client.ReceiveTimeout = 1000;
-
-			byte[] messageBytes = Encoding.UTF8.GetBytes(ConnectionMessage.Discover.ToString());
-			var address = new IPEndPoint(multicastAddress, balancerPort);
-			client.Send(messageBytes, address);
-
-			//Wait for an answer to the discover message. If the socket times out, the server will assume
-			//that no master exists, and will promote itself.
-			try
+			//Bind to the first available IP address. Also create an UdpClient while we're at it.
+			foreach (IPAddress address in Addresses)
 			{
-				for (int i = 0; i < 100; i++)
+				try
 				{
-					byte[] RawResponse = client.Receive(ref address);
-					JObject response = null;
+					Client = new UdpClient(new IPEndPoint(address, BalancerConfig.DiscoveryPort));
+					Client.Client.ReceiveTimeout = 100;
+					Client.Client.SendTimeout = 100;
+					break;
+				}
+				catch (SocketException e)
+				{
+					Console.WriteLine($"Failed to bind to address {address}: {e.Message}");
+					continue;
+				}
+			}
+			if (Client == null)
+			{
+				throw new ArgumentException("No addresses were availble.");
+			}
+
+			//Get our local address
+			LocalAddress = ((IPEndPoint)Client.Client.LocalEndPoint).Address;
+			Console.WriteLine($"Local address is {LocalAddress}");
+
+			//Use 10 UDP broadcasts to try and find the master server (if one exists).
+			byte[] discoveryMessage = new Message(MessageType.Discover, null).GetBytes();
+			var serverEndpoint = new IPEndPoint(IPAddress.Any, 0);
+			bool foundMaster = false;
+			bool preventEcho = false;
+			for (int i = 0; i < 10; i++)
+			{
+				try
+				{
+					if (!preventEcho)
+					{
+						//Send a broadcast and wait for a response
+						Client.Send(discoveryMessage, discoveryMessage.Length, new IPEndPoint(IPAddress.Broadcast, BalancerConfig.DiscoveryPort));
+					}
+					preventEcho = false;
+
+					string rawResponse = Encoding.UTF8.GetString(Client.Receive(ref serverEndpoint));
+					if (serverEndpoint.Equals(Client.Client.LocalEndPoint))
+					{
+						i--;
+						preventEcho = true;
+						continue;
+					}
+
+					//Parse the response. If its not valid JSON, ignore it.
+					JObject response;
 					try
 					{
-						response = JObject.Parse(Encoding.UTF8.GetString(RawResponse));
-						if (response == null || !response.ContainsKey("$type"))
-							continue;
+						response = JObject.Parse(rawResponse);
 					}
 					catch (JsonReaderException)
 					{
 						continue;
 					}
-					if ((string)response["$type"] == "MASTER")
-					{
-						IsMaster = false;
-						break;
-					}
+
+					//If the message JObject doesn't contain a Type key, ignore it.
+					if (!response.TryGetValue("Type", out MessageType value))
+						continue;
+
+					//If the Type key isn't set to DiscoverResponse, ignore this message.
+					if (value != MessageType.DiscoverResponse)
+						continue;
+
+					//If we got this far, we found our master.
+					foundMaster = true;
+					break;
+				}
+				catch (SocketException e) when (e.SocketErrorCode == SocketError.TimedOut)
+				{
+					continue;
 				}
 			}
-			catch (SocketException e)
+
+			//Initialise the networking system and return our local address.
+			if (foundMaster)
 			{
-				if (e.SocketErrorCode == SocketError.TimedOut)
-				{
-					MasterEndpoint = address;
-					IsMaster = true;
-				}
-				else
-				{
-					throw e;
-				}
-			}
-			client.Close();
-
-			// Set up database query events
-			Program.Database.Inserting += OnDatabaseInsert;
-
-			//Initialise the networking system
-			MasterEndpoint = address;
-			Networking.Init(addresses, multicastAddress, balancerPort);
-			Console.WriteLine("Local endpoint is {0}, Master endpoint is {1}", Networking.LocalEndPoint, address);
-			Console.Title = $"Local - {Networking.LocalEndPoint} | Master - {address}";
-			return Networking.LocalEndPoint.Address;
-		}
-
-		/// <summary>
-		/// Gets the lock that prevents a slave server from modifying items in the database before
-		/// receiving acknowledgement from the master server.
-		/// </summary>
-		public static Semaphore DatabaseUpdateLock { get; } = new Semaphore(1, 1);
-
-		private static void OnDatabaseInsert(SQLiteAdapter sender, InsertEventArgs args)
-		{
-			if (IsMaster)
-			{
-				// TODO implement this but only at the end of the query
+				Slave.Init(serverEndpoint.Address);
+				Program.Database.Synchronize();
 			}
 			else
-			{
-				var items = new JArray();
-				var json = new JObject()
-				{
-					{ "$destination", MasterEndpoint.ToString() },
-					{ "$type", "QUERY_INSERT" },
-					{ "type", args.ModelType.FullName },
-					{ "items", items }
-				};
+				Master.Init();
 
-				foreach (var item in args.Collection)
-					items.Add(JObject.FromObject(item));
+			Console.Title = $"Local address {LocalAddress} | Master address {serverEndpoint.Address}";
 
-				// Register event for the master's ACK response
-				void swapCollection(object sender, Slave.QUERY_INSERT_ACK_EventArgs e)
-				{
-					// Swaps the elements from these event args with the insert event args
-					for (int i = 0; i < args.Collection.Count; i++)
-						args.Collection[i] = e.Collection[i];
-
-					// Continue the execution of the other event
-					DatabaseUpdateLock.Release();
-				}
-				Slave.QUERY_INSERT_ACK += swapCollection;
-
-				DatabaseUpdateLock.WaitOne();
-				// Send the items to the master in order to have it insert the items and broadcast the results
-				Networking.SendData(json);
-				
-				// Initiate "deadlock" (unlocked later by the QUERY_INSERT ACK from the master server)
-				DatabaseUpdateLock.WaitOne(5000);
-				
-				// Immediately unschedule the local function after reacquiring the lock
-				Slave.QUERY_INSERT_ACK -= swapCollection;
-				DatabaseUpdateLock.Release();
-			}
+			return LocalAddress;
 		}
 	}
 }
+

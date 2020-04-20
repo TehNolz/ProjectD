@@ -1,9 +1,11 @@
-﻿using System;
+using Newtonsoft.Json.Linq;
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
-using Newtonsoft.Json.Linq;
+using System.Web;
 
 namespace Webserver.Webserver
 {
@@ -12,18 +14,30 @@ namespace Webserver.Webserver
 	/// </summary>
 	public class ContextProvider
 	{
+		/// <inheritdoc cref="HttpListenerContext.Request"/>
 		public RequestProvider Request;
+		/// <inheritdoc cref="HttpListenerContext.Response"/>
 		public ResponseProvider Response;
-		public ContextProvider(RequestProvider Request, ResponseProvider Response)
+		/// <summary>
+		/// Manually create a new ContextProvider by combining a Request- and ResponseProvider.
+		/// Used to create mock requests for unit testing.
+		/// </summary>
+		/// <param name="request">The RequestProvider that will represent the incoming request.</param>
+		/// <param name="response">The ResponseProvider that will represent the outgoing response.</param>
+		public ContextProvider(RequestProvider request)
 		{
-			this.Request = Request;
-			this.Response = Response;
+			Request = request;
+			Response = new ResponseProvider();
 		}
 
-		public ContextProvider(HttpListenerContext Context)
+		/// <summary>
+		/// Convert a HttpListenerContext into a ContextProvider.
+		/// </summary>
+		/// <param name="context"></param>
+		public ContextProvider(HttpListenerContext context)
 		{
-			this.Request = new RequestProvider(Context.Request);
-			this.Response = new ResponseProvider(Context.Response);
+			Request = new RequestProvider(context.Request);
+			Response = new ResponseProvider(context.Response);
 		}
 	}
 
@@ -32,23 +46,18 @@ namespace Webserver.Webserver
 	/// </summary>
 	public class RequestProvider
 	{
+		/// <summary>
+		/// The HttpListenerRequest that represents the incoming request. Null when the RequestProvider was created as part of a unit test.
+		/// </summary>
 		private readonly HttpListenerRequest Request;
-
-		public int Yeet;
 
 		#region Uri
 		private Uri _url;
 		/// <inheritdoc cref="HttpListenerRequest.Url"/>
 		public Uri Url
 		{
-			get
-			{
-				return Request == null ? _url : Request.Url;
-			}
-			private set
-			{
-				_url = value;
-			}
+			get => Request == null ? _url : Request.Url;
+			set => _url = value;
 		}
 		#endregion
 
@@ -57,14 +66,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.RemoteEndPoint"/>
 		public IPEndPoint RemoteEndPoint
 		{
-			get
-			{
-				return Request == null ? _remoteEndPoint : Request.RemoteEndPoint;
-			}
-			private set
-			{
-				_remoteEndPoint = value;
-			}
+			get => Request == null ? _remoteEndPoint : Request.RemoteEndPoint;
+			set => _remoteEndPoint = value;
 		}
 		#endregion
 
@@ -73,19 +76,15 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.LocalEndPoint"/>
 		public IPEndPoint LocalEndPoint
 		{
-			get
-			{
-				return Request == null ? _localEndPoint : Request.LocalEndPoint;
-			}
-			private set
-			{
-				_localEndPoint = value;
-			}
+			get => Request == null ? _localEndPoint : Request.LocalEndPoint;
+			set => _localEndPoint = value;
 		}
 		#endregion
 
 		#region Params
-		/// <inheritdoc cref="HttpListenerRequest.QueryString"/>
+		/// <summary>
+		/// The QueryString of the request, converted into a dictionary for ease of access.
+		/// </summary>
 		public Dictionary<string, List<string>> Params;
 		#endregion
 
@@ -94,14 +93,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.HttpMethod"/>
 		public HttpMethod HttpMethod
 		{
-			get
-			{
-				return Request == null ? _httpMethod : Enum.Parse<HttpMethod>(Request.HttpMethod);
-			}
-			private set
-			{
-				_httpMethod = value;
-			}
+			get => Request == null ? _httpMethod : Enum.Parse<HttpMethod>(Request.HttpMethod);
+			set => _httpMethod = value;
 		}
 		#endregion
 
@@ -110,14 +103,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.ContentType"/>
 		public string ContentType
 		{
-			get
-			{
-				return Request == null ? _contentType : Request.ContentType;
-			}
-			private set
-			{
-				_contentType = value;
-			}
+			get => Request == null ? _contentType : Request.ContentType;
+			set => _contentType = value;
 		}
 		#endregion
 
@@ -126,14 +113,8 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.InputStream"/>
 		public Stream InputStream
 		{
-			get
-			{
-				return Request == null ? _inputStream : Request.InputStream;
-			}
-			private set
-			{
-				_inputStream = value;
-			}
+			get => Request == null ? _inputStream : Request.InputStream;
+			set => _inputStream = value;
 		}
 		#endregion
 
@@ -142,25 +123,42 @@ namespace Webserver.Webserver
 		/// <inheritdoc cref="HttpListenerRequest.ContentEncoding"/>
 		public Encoding ContentEncoding
 		{
-			get
-			{
-				return Request == null ? _contentEncoding : Request.ContentEncoding;
-			}
-			private set
-			{
-				_contentEncoding = value;
-			}
+			get => Request == null ? _contentEncoding : Request.ContentEncoding;
+			set => _contentEncoding = value;
 		}
 		#endregion
+
+		#region Cookies
+		private CookieCollection _cookies;
+		public CookieCollection Cookies
+		{
+			get => Request == null ? _cookies : Request.Cookies;
+			set => _cookies = value;
+		}
+		#endregion Cookies
 
 		/// <summary>
 		/// Convert a HttpListenerRequest into a RequestProvider
 		/// </summary>
-		/// <param name="Request"></param>
-		public RequestProvider(HttpListenerRequest Request)
+		/// <param name="request"></param>
+		public RequestProvider(HttpListenerRequest request)
 		{
-			this.Request = Request;
-			this.Params = Utils.NameValueToDict(Request.QueryString);
+			Request = request;
+			Params = Utils.NameValueToDict(request.QueryString);
+		}
+
+		/// <summary>
+		/// Create 
+		/// </summary>
+		/// <param name="Url"></param>
+		/// <param name="HttpMethod"></param>
+		public RequestProvider(Uri Url, HttpMethod HttpMethod)
+		{
+			this.Url = Url;
+			Params = Utils.NameValueToDict(HttpUtility.ParseQueryString(Url.Query));
+			this.HttpMethod = HttpMethod;
+			ContentEncoding = Encoding.UTF8;
+			Cookies = new CookieCollection();
 		}
 	}
 
@@ -173,28 +171,23 @@ namespace Webserver.Webserver
 		/// <summary>
 		/// Convert a HttpListenerResponse into a ResponseProvider
 		/// </summary>
-		/// <param name="Response"></param>
-		public ResponseProvider(HttpListenerResponse Response) => this.Response = Response;
+		/// <param name="response"></param>
+		public ResponseProvider(HttpListenerResponse response)
+		{
+			Response = response;
+		}
 
+		/// <summary>
+		/// Create a new blank ResponseProvider for unit testing purposes.
+		/// </summary>
+		public ResponseProvider() { }
 
 		#region StatusCode
 		public HttpStatusCode _statusCode;
-		/// <summary>
-		/// Gets or sets the HTTP status code to be returned to the client.
-		/// </summary>
+		/// <inheritdoc cref="HttpListenerResponse.StatusCode"/>
 		public HttpStatusCode StatusCode
 		{
-			get
-			{
-				if (Response == null)
-				{
-					return _statusCode;
-				}
-				else
-				{
-					return (HttpStatusCode)Response.StatusCode;
-				}
-			}
+			get => Response == null ? _statusCode : (HttpStatusCode)Response.StatusCode;
 			set
 			{
 				if (Response != null)
@@ -208,15 +201,10 @@ namespace Webserver.Webserver
 
 		#region ContentType
 		private string _contentType;
-		/// <summary>
-		/// Gets or sets the MIME type of the content returned.
-		/// </summary>
+		/// <inheritdoc cref="HttpListenerResponse.ContentType"/>
 		public string ContentType
 		{
-			get
-			{
-				return Response == null ? _contentType : Response.ContentType;
-			}
+			get => Response == null ? _contentType : Response.ContentType;
 			set
 			{
 				if (Response != null)
@@ -235,10 +223,7 @@ namespace Webserver.Webserver
 		/// </summary>
 		public string Redirect
 		{
-			get
-			{
-				return _redirect;
-			}
+			get => _redirect;
 			set
 			{
 				Response?.Redirect(value);
@@ -248,9 +233,25 @@ namespace Webserver.Webserver
 		#endregion
 
 		/// <summary>
-		/// The data sent to the client.
+		/// The headers sent to the client.
 		/// </summary>
-		public byte[] Data { get; private set; }
+		public readonly WebHeaderCollection Headers = new WebHeaderCollection();
+
+		/// <summary>
+		/// Append a new header.
+		/// </summary>
+		/// <param name="name">The name of the header</param>
+		/// <param name="value">The value of the header</param>
+		public void AppendHeader(string name, string value)
+		{
+			Response?.AppendHeader(name, value);
+			Headers.Add(name, value);
+		}
+
+		/// <summary>
+		/// The data that was sent to the client.
+		/// </summary>
+		public string Data { get; private set; }
 
 		#region Send
 		/// <summary>
@@ -263,7 +264,11 @@ namespace Webserver.Webserver
 		/// </summary>
 		/// <param name="json">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
-		public void Send(JObject json, HttpStatusCode statusCode = HttpStatusCode.OK) => Send(json.ToString(), statusCode, "application/json");
+		public void Send(JToken json, HttpStatusCode statusCode = HttpStatusCode.OK)
+		{
+			Data = json.ToString();
+			Send(json.ToString(), statusCode, "application/json");
+		}
 
 		/// <summary>
 		/// Sends a string to the client.
@@ -271,20 +276,25 @@ namespace Webserver.Webserver
 		/// <param name="text">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
 		/// <param name="contentType">The ContentType of the response. Defaults to "text/html"</param>
-		public void Send(string text, HttpStatusCode statusCode, string contentType = "text/html") => Send(Encoding.UTF8.GetBytes(text), statusCode, contentType);
+		public void Send(string text, HttpStatusCode statusCode, string contentType = "text/html")
+		{
+			Data = text;
+			Send(Encoding.UTF8.GetBytes(text), statusCode, contentType);
+		}
 
 		/// <summary>
 		/// Sends a byte array to the client.
 		/// </summary>
 		/// <param name="data">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
-		/// <param name="ContentType">The ContentType of the response. Defaults to "text/html"</param>
-		public void Send(byte[] data, HttpStatusCode statusCode = HttpStatusCode.OK, string ContentType = "text/html")
+		/// <param name="contentType">The ContentType of the response. Defaults to "text/html"</param>
+		public void Send(byte[] data, HttpStatusCode statusCode = HttpStatusCode.OK, string contentType = "text/html")
 		{
-			if (data == null) data = Array.Empty<byte>();
-			this.Data = data;
-			this.StatusCode = statusCode;
-			this.ContentType = ContentType;
+			if (data == null)
+				data = Array.Empty<byte>();
+
+			StatusCode = statusCode;
+			ContentType = contentType;
 
 			if (Response != null)
 			{
@@ -300,8 +310,38 @@ namespace Webserver.Webserver
 			}
 		}
 		#endregion
+
+		/// <summary>
+		/// Send a cookie to the client.
+		/// </summary>
+		/// <param name="cookie">The Cookie object to send. Only the Name and Value fields will be used.</param>
+		public void AddCookie(Cookie cookie) => AddCookie(cookie.Name, cookie.Value, (int)cookie.Expires.Subtract(new DateTime(1970, 1, 1, 0, 0, 0)).TotalSeconds);
+
+		/// <summary>
+		/// Send a cookie to the client. Always use this function to add cookies, as the built-in functions don't work properly.
+		/// </summary>
+		/// <param name="name">The cookie's name</param>
+		/// <param name="value">The cookie's value</param>
+		public void AddCookie(string name, string value, long expire)
+		{
+			string cookieVal = name + "=" + value;
+
+			if (expire < 0)
+			{
+				throw new ArgumentOutOfRangeException("Negative cookie expiration");
+			}
+			cookieVal += "; Max-Age=" + expire;
+
+			//We manually set the cookie header instead of setting Response.Cookies because some twat decided that HTTPListener should use folded cookies, which every
+			//major browser has no support for. Using folded cookies, we would be limited to only 1 cookie per response, because browsers would otherwise incorrectly
+			//interpret the 2nd cookie's key and value to be part of the 1st cookie's value.
+			AppendHeader("Set-Cookie", cookieVal);
+		}
 	}
 
+	/// <summary>
+	/// Enum of HTTP Methods
+	/// </summary>
 	public enum HttpMethod
 	{
 		GET,

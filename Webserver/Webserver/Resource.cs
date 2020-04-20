@@ -1,19 +1,24 @@
-﻿using System;
+using MimeKit;
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text;
-using MimeKit;
+
+using Webserver.Config;
 
 namespace Webserver.Webserver
 {
 	public static class Resource
 	{
+		/// <summary>
+		/// A list of filepaths to all resources in the wwwroot folder
+		/// </summary>
 		public static List<string> WebPages = Crawl(WebserverConfig.WWWRoot);
 
 		/// <summary>
-		/// TODO Add documententation
+		/// Processes an incoming request
 		/// </summary>
 		/// <param name="context">A provider that provides a context. (AKA TODO add documentation)</param>
 		public static void ProcessResource(ContextProvider context)

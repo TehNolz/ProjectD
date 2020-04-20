@@ -1,5 +1,6 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -19,7 +20,7 @@ namespace Webserver
 		/// <returns>The amount of files that didn't pass the integrity check</returns>
 		public static int VerifyIntegrity(string dir, bool recalculate = false)
 		{
-			var checksums = GetChecksums(dir);
+			Dictionary<string, string> checksums = GetChecksums(dir);
 
 			if (!recalculate && File.Exists("Checksums.json"))
 			{
@@ -29,7 +30,7 @@ namespace Webserver
 				{
 					//Search for differences
 					//TODO: File deletions aren't detected.
-					var saved = savedChecksums[dir].ToObject<Dictionary<string, string>>();
+					Dictionary<string, string> saved = savedChecksums[dir].ToObject<Dictionary<string, string>>();
 
 					// Return the amount of differences between the checksum sets
 					return checksums.Count(x => !saved.ContainsKey(x.Key) || x.Value != saved[x.Key]);
@@ -46,8 +47,8 @@ namespace Webserver
 			else
 			{
 				//File doesn't exist. Create it.
-				File.WriteAllText("Checksums.json", ((JObject)new JObject(){
-					{ dir, JObject.FromObject((object)checksums)}
+				File.WriteAllText("Checksums.json", (new JObject(){
+					{ dir, JObject.FromObject(checksums)}
 				}).ToString(Formatting.Indented));
 				return 0;
 			}
@@ -70,7 +71,7 @@ namespace Webserver
 			}
 
 			//Check files
-			using MD5 md5 = MD5.Create();
+			using var md5 = MD5.Create();
 			foreach (string file in Directory.GetFiles(path))
 				result.Add(file, BitConverter.ToString(md5.ComputeHash(File.ReadAllBytes(file))).Replace("-", "").ToLower());
 
