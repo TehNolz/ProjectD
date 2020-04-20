@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading;
 
 using Webserver.Config;
+using Webserver.Replication;
 
 namespace Webserver.LoadBalancer
 {
@@ -37,7 +38,8 @@ namespace Webserver.LoadBalancer
 
 			//Bind events
 			ServerConnection.ServerTimeout += OnServerTimeout;
-			ServerConnection.MessageReceived += OnQueryInsert;
+			ServerConnection.MessageReceived += OnDbChange;
+			ServerConnection.MessageReceived += OnDbSynchronize;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
@@ -53,53 +55,28 @@ namespace Webserver.LoadBalancer
 			Console.WriteLine("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
 		}
 
-		private static void OnQueryInsert(Message message)
+		private static void OnDbSynchronize(Message message)
 		{
 			// Check if the type is QueryInsert
-			if (message.Type != MessageType.QueryInsert)
+			if (message.Type != MessageType.DbSync)
 				return;
 
-			Console.WriteLine("Got QueryInsert from slave");
-			Console.WriteLine(((JObject)message.Data).ToString());
+			var changeList = Program.Database.GetChanges((long)message.Data.Id).ToList();
+			changeList.Reverse();
+			var changes = JArray.FromObject(changeList);
+			message.Reply(changes);
+		}
 
-			// Parse the type string into a Type object from this assembly
-			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
+		private static void OnDbChange(Message message)
+		{
+			// Check if the type is DbChange
+			if (message.Type != MessageType.DbChange)
+				return;
 
-			System.Data.SQLite.SQLiteTransaction transaction = Program.Database.Connection.BeginTransaction();
+			var changes = new Changes(message);
+			Program.Database.Apply(changes);
 
-			Console.WriteLine("Inserting items");
-			// Convert the message item array to an object array and insert it into the database
-			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
-			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
-				modelType,
-				new[] { items }
-			);
-
-			transaction.Rollback();
-			transaction.Dispose();
-
-			// Create the reply message body
-			var outItems = new JArray();
-
-			// Fill the items JArray
-			foreach (dynamic item in items)
-				outItems.Add(JObject.FromObject(item));
-
-			// Send the new items as a reply
-			Console.WriteLine("Sending updated batch back to slave");
-			message.Reply(outItems);
-
-			// Broadcast the message to all remaining servers
-			var json = new JObject() {
-				{ "Type", modelType.FullName },
-				{ "Items", outItems }
-			};
-			Console.WriteLine("Sending updated batch to the remaining slaves");
-			ServerConnection.Send(ServerProfile.KnownServers.Values
-					.Where(x => x is ServerConnection && x != message.Connection)
-					.Cast<ServerConnection>(),
-				new Message(MessageType.QueryInsert, json)
-			);
+			changes.Broadcast();
 		}
 
 		/// <summary>

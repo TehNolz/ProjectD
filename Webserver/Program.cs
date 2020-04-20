@@ -14,17 +14,20 @@ using Webserver.API;
 using Webserver.Config;
 using Webserver.LoadBalancer;
 using Webserver.Models;
+using Webserver.Replication;
 using Webserver.Webserver;
 
 namespace Webserver
 {
 	public class Program
 	{
-		public static string DatabaseName { get; private set; } = "Database.db";
-		public static SQLiteAdapter Database;
+		public const string DatabaseName = "Database.db";
+		public static ServerDatabase Database;
 
 		public static void Main()
 		{
+			Console.SetOut(new CustomWriter(Console.OutputEncoding, Console.Out));
+
 			//Load config file
 			if (!File.Exists("Config.json"))
 				ConfigFile.Write("Config.json");
@@ -70,6 +73,8 @@ namespace Webserver
 			Redirects.LoadRedirects("Redirects.config");
 			Console.WriteLine("Registered {0} redirections", Redirects.RedirectDict.Count);
 
+			// Initialize database
+			InitDatabase(DatabaseName);
 
 			//Register all API endpoints
 			APIEndpoint.DiscoverEndpoints();
@@ -79,7 +84,6 @@ namespace Webserver
 			try
 			{
 				localAddress = Balancer.Init();
-				DatabaseName = localAddress.ToString() + '_' + DatabaseName;
 				Console.WriteLine("Started load balancer.");
 			}
 			catch (ArgumentException e)
@@ -90,15 +94,12 @@ namespace Webserver
 				return;
 			}
 
-			// Initialize database
-			InitDatabase(DatabaseName);
-
 			//Start distributor and worker threads
 			RequestWorker.Queue = new BlockingCollection<ContextProvider>();
 			var workers = new List<RequestWorker>();
 			for (int i = 0; i < WebserverConfig.WorkerThreadCount; i++)
 			{
-				var worker = new RequestWorker(new SQLiteAdapter(DatabaseName));
+				var worker = new RequestWorker(Database.NewConnection());
 				workers.Add(worker);
 				worker.Start();
 			}
@@ -112,15 +113,17 @@ namespace Webserver
 			//TODO: Implement proper shutdown
 			Distributor.Dispose();
 			distributor.Join();
+
 		}
 
 		/// <summary>
 		/// Initializes the database.
 		/// </summary>
 		/// Note: Split into its own function to allow for unit testing to use it as well.
-		public static SQLiteAdapter InitDatabase(string datasource)
+		public static void InitDatabase(string datasource)
 		{
-			Database = new SQLiteAdapter(datasource);
+			Database = ServerDatabase.CreateConnection(datasource);
+			Database.BroadcastChanges = false;
 
 			//Create tables if they don't already exist.
 			Database.TryCreateTable<ExampleModel>();
@@ -136,8 +139,6 @@ namespace Webserver
 				};
 				Database.Update(admin);
 			}
-
-			return Database;
 		}
 	}
 }

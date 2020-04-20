@@ -14,18 +14,13 @@ namespace Webserver.API.Endpoints
 		[ContentType("application/json")]
 		public override void POST()
 		{
-			// Begin transaction to prevent changes
-			using System.Data.SQLite.SQLiteTransaction transaction = Database.Connection.BeginTransaction();
-
 			string message = Data.Message;
 			Guid guid = Data.Guid;
 
-			var items = new ExampleModel[] { new ExampleModel() { Message = message, Guid = guid } };
+			var items = new ExampleModel[] { new ExampleModel() { Message = message, GuidStr = guid.ToString() } };
 			Database.Insert<ExampleModel>(items);
 
 			Response.Send(JObject.FromObject(items[0]), HttpStatusCode.Created);
-
-			transaction.Rollback();
 		}
 	}
 }

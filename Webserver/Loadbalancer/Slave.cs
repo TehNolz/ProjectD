@@ -49,7 +49,7 @@ namespace Webserver.LoadBalancer
 		private static void OnQueryInsert(Message message)
 		{
 			// Check if the type is QueryInsert
-			if (message.Type != MessageType.QueryInsert)
+			if (message.Type != MessageType.DbChange)
 				return;
 
 			Console.WriteLine("Got QueryInsert from master");

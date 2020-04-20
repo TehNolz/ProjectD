@@ -14,7 +14,7 @@ using Webserver.LoadBalancer;
 
 namespace Webserver.Webserver
 {
-	public class RequestWorker
+	public class RequestWorker : IDisposable
 	{
 		/// <summary>
 		/// The global request queue. The distributor inserts requests, and the workers process them.
@@ -43,41 +43,6 @@ namespace Webserver.Webserver
 			Database = database;
 			Debug = debug;
 			Thread = new Thread(Run) { Name = GetType().Name };
-
-			Database.Inserting += OnDatabaseInserting;
-		}
-
-		private void OnDatabaseInserting(SQLiteAdapter sender, InsertEventArgs args)
-		{
-			if (Balancer.IsMaster)
-			{
-				// TODO Implement an Inserted event in SQLiteAdapter
-			}
-			else
-			{
-				// Create the message body
-				var items = new JArray();
-				var json = new JObject() {
-					{ "Type", args.ModelType.FullName },
-					{ "Items", items }
-				};
-
-				// Fill the items JArray
-				foreach (object item in args.Collection)
-					items.Add(JObject.FromObject(item));
-
-				Console.WriteLine("Sending batch to master");
-				// Get a message containing an updated collection
-				Message response = Balancer.MasterServer.SendAndWait(new Message(MessageType.QueryInsert, json));
-				Console.WriteLine("Got updated batch from master");
-
-				Console.WriteLine(((JToken)response.Data).ToString());
-
-				// Swap the elements in the collections
-				object[] newItems = ((JArray)response.Data).Select(x => x.ToObject(args.ModelType)).ToArray();
-				for (int i = 0; i < args.Collection.Count; ++i)
-					args.Collection[i] = newItems[i];
-			}
 		}
 
 		/// <summary>
@@ -140,6 +105,11 @@ namespace Webserver.Webserver
 
 				//If Debug mode is enabled and the queue is empty, stop the worker.
 			} while (!Debug || Queue.Count != 0);
+		}
+
+		public void Dispose()
+		{
+			Database.Dispose();
 		}
 	}
 }

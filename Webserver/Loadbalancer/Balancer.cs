@@ -146,7 +146,10 @@ namespace Webserver.LoadBalancer
 
 			//Initialise the networking system and return our local address.
 			if (foundMaster)
+			{
 				Slave.Init(serverEndpoint.Address);
+				Program.Database.Synchronize();
+			}
 			else
 				Master.Init();
 

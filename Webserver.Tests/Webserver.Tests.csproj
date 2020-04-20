@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-	<ProjectReference Include ="..\Webserver\Webserver.csproj" />
+	<ProjectReference Include="..\Webserver\Webserver.csproj" />
     <ProjectReference Include="..\Config\Config.csproj" />
     <ProjectReference Include="..\Database-Adapter\Core\Core.csproj" />
     <ProjectReference Include="..\Database-Adapter\SQLite Adapter\SQLite Adapter.csproj" />

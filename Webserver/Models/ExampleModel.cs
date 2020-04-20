@@ -1,4 +1,4 @@
-﻿using Database.SQLite.Modeling;
+using Database.SQLite.Modeling;
 
 using System;
 
@@ -10,6 +10,6 @@ namespace Webserver.Models
 		[Primary]
 		public int? Id { get; set; }
 		public string Message { get; set; }
-		public Guid Guid { get; set; } = Guid.NewGuid();
+		public string GuidStr { get; set; } = Guid.NewGuid().ToString();
 	}
 }

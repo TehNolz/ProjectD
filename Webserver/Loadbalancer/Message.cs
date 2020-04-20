@@ -151,8 +151,7 @@ namespace Webserver.LoadBalancer
 		NewServer,
 
 		// Database replication message types
-		QueryInsert,
-		QueryUpdate,
-		QueryDelete
+		DbChange,
+		DbSync,
 	}
 }
