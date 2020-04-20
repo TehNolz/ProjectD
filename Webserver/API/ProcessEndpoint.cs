@@ -13,6 +13,8 @@ using System.Reflection;
 using Webserver.Models;
 using Webserver.Webserver;
 
+using static Webserver.Program;
+
 namespace Webserver.API
 {
 	public abstract partial class APIEndpoint
@@ -85,8 +87,8 @@ namespace Webserver.API
 				//Check permission level.
 				if (user.PermissionLevel < attribute.PermissionLevel)
 				{
-					Console.WriteLine($"User {endpoint.User.Email} attempted to access endpoint {endpointType.Name}/{method.Name} without sufficient permissions");
-					Console.WriteLine($"User is '{user.PermissionLevel}' but must be at least '{attribute.PermissionLevel}'");
+					Log.Fine($"User {endpoint.User.Email} attempted to access endpoint {endpointType.Name}/{method.Name} without sufficient permissions");
+					Log.Fine($"User is '{user.PermissionLevel}' but must be at least '{attribute.PermissionLevel}'");
 					response.Send(HttpStatusCode.Forbidden);
 					return;
 				}
@@ -116,7 +118,7 @@ namespace Webserver.API
 						}
 						catch (JsonReaderException)
 						{
-							Console.WriteLine($"Received invalid request for endpoint {0}.{1}. Could not parse JSON", endpointType.Name, method.Name);
+							Log.Error($"Received invalid request for endpoint {endpointType.Name}.{method.Name}. Could not parse JSON");
 							response.Send(HttpStatusCode.BadRequest);
 							return;
 						}
@@ -131,7 +133,7 @@ namespace Webserver.API
 			}
 			catch (Exception e)
 			{
-				Console.WriteLine(e);
+				Log.Error($"{e.GetType().Name}: {e.Message}", e);
 				response.Send(HttpStatusCode.InternalServerError);
 			}
 		}

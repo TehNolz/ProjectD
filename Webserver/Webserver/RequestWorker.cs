@@ -12,6 +12,8 @@ using Webserver.API;
 //using Webserver.Chat;
 using Webserver.LoadBalancer;
 
+using static Webserver.Program;
+
 namespace Webserver.Webserver
 {
 	public class RequestWorker : IDisposable
@@ -76,7 +78,7 @@ namespace Webserver.Webserver
 				string url = Redirects.Resolve(request.Url.LocalPath.ToLower());
 				if (url == null)
 				{
-					Console.WriteLine("Couldn't resolve URL; infinite redirection loop. URL: " + request.Url.LocalPath.ToLower());
+					Log.Error("Couldn't resolve URL; infinite redirection loop. URL: " + request.Url.LocalPath.ToLower());
 					continue;
 				}
 
@@ -87,7 +89,7 @@ namespace Webserver.Webserver
 				//Redirect if necessary
 				if (url != request.Url.LocalPath.ToLower())
 				{
-					Console.WriteLine("Request redirected to " + url);
+					Log.Trace("Request redirected to " + url);
 					response.Redirect = url;
 					response.Send(HttpStatusCode.PermanentRedirect);
 					continue;

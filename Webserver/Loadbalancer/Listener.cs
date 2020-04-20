@@ -7,6 +7,8 @@ using System.Threading;
 
 using Webserver.Config;
 
+using static Webserver.Program;
+
 namespace Webserver.LoadBalancer
 {
 	class Listener
@@ -24,7 +26,7 @@ namespace Webserver.LoadBalancer
 			listener.Prefixes.Add($"http://{address}:{port}/");
 			listener.Prefixes.Add($"http://localhost:{port}/");
 			listener.Start();
-			Console.WriteLine("Load Balancer Listener now listening on {0}:{1}", address, port);
+			Log.Config($"Load Balancer Listener now listening on {address}:{port}");
 
 			//Main loop
 			while (true)
@@ -33,7 +35,7 @@ namespace Webserver.LoadBalancer
 				HttpListenerContext context = listener.GetContext();
 				string slaveAddress = GetBestSlave();
 				string URL = slaveAddress + context.Request.Url.LocalPath;
-				Console.WriteLine($"Relaying request for {URL} to {slaveAddress}");
+				Log.Trace($"Relaying request for {URL} to {slaveAddress}");
 
 				//Start relaying the request.
 				var requestRelay = (HttpWebRequest)WebRequest.Create(URL);

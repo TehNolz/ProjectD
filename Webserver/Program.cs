@@ -1,7 +1,7 @@
 using Config;
 
 using Database.SQLite;
-
+using Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -24,9 +24,16 @@ namespace Webserver
 		public const string DatabaseName = "Database.db";
 		public static ServerDatabase Database;
 
+		public static Logger Log { get; private set; }
+
 		public static void Main()
 		{
 			Console.SetOut(new CustomWriter(Console.OutputEncoding, Console.Out));
+
+			Log = new Logger(Level.ALL, Console.Out)
+			{
+				Format = "{asctime:HH:mm:ss} {classname,-15} {levelname,6}: {message}"
+			};
 
 			//Load config file
 			if (!File.Exists("Config.json"))
@@ -35,15 +42,16 @@ namespace Webserver
 			if (ConfigFile.Load("Config.json") is int missing && missing > 0)
 			{
 				ConfigFile.Write("Config.json");
-				Console.WriteLine("{0} configuration setting(s) are missing. The missing settings have been inserted.", missing);
+				Log.Error($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
 			}
+
 
 			//Check for duplicate network ports. Each port setting needs to be unique as we can't bind to one port multiple times.
 			var ports = new List<int>() { BalancerConfig.BalancerPort, BalancerConfig.DiscoveryPort, BalancerConfig.HttpRelayPort, BalancerConfig.HttpPort };
 			if (ports.Distinct().Count() != ports.Count)
 			{
-				Console.WriteLine("One or more duplicate network port settings have been detected. The server cannot start.");
-				Console.WriteLine("Press any key to exit.");
+				Log.Error("One or more duplicate network port settings have been detected. The server cannot start.");
+				Log.Error("Press any key to exit.");
 				Console.ReadKey();
 				return;
 			}
@@ -52,26 +60,25 @@ namespace Webserver
 			//If at least one checksum mismatch is found, pause startup and show a warning.
 			if (MiscConfig.VerifyIntegrity)
 			{
-				Console.WriteLine("Checking file integrity...");
+				Log.Config("Checking file integrity...");
 				int Diff = Integrity.VerifyIntegrity(WebserverConfig.WWWRoot);
 				if (Diff > 0)
 				{
-					Console.WriteLine("Integrity check failed. Validation failed for {0} file(s).", Diff);
-					Console.WriteLine("Some files may be corrupted. If you continue, all checksums will be recalculated.");
-					Console.WriteLine("Press enter to continue.");
+					Log.Error($"Integrity check failed. Validation failed for {Diff} file(s).");
+					Log.Error("Some files may be corrupted. If you continue, all checksums will be recalculated.");
+					Log.Error("Press enter to continue.");
 					Console.ReadLine();
 					Integrity.VerifyIntegrity(WebserverConfig.WWWRoot, true);
 				}
-				Console.WriteLine("No integrity issues found.");
+				Log.Config("No integrity issues found.");
 			}
 
 			//Crawl through the wwwroot folder to find all resources.
 			Resource.Crawl(WebserverConfig.WWWRoot);
 
-
 			//Parse Redirects.config to register all HTTP redirections.
 			Redirects.LoadRedirects("Redirects.config");
-			Console.WriteLine("Registered {0} redirections", Redirects.RedirectDict.Count);
+			Log.Config($"Registered {Redirects.RedirectDict.Count} redirections");
 
 			// Initialize database
 			InitDatabase(DatabaseName);
@@ -84,12 +91,11 @@ namespace Webserver
 			try
 			{
 				localAddress = Balancer.Init();
-				Console.WriteLine("Started load balancer.");
+				Log.Config("Started load balancer.");
 			}
-			catch (ArgumentException e)
+			catch (Exception e)
 			{
-				Console.WriteLine(e.Message);
-				Console.WriteLine("The server could not start.");
+				Log.Error("The server could not start: " + e.Message, e);
 				Console.ReadLine();
 				return;
 			}

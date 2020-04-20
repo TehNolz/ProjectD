@@ -1,6 +1,8 @@
 using System;
 using System.Net;
 
+using static Webserver.Program;
+
 namespace Webserver.Webserver
 {
 	internal static class Distributor
@@ -20,18 +22,18 @@ namespace Webserver.Webserver
 			Listener.Prefixes.Add($"http://{address}:{port}/");
 			Listener.Start();
 
-			Console.WriteLine("Distributor listening on {0}:{1}", address, port);
+			Log.Config($"Distributor listening on {address}:{port}");
 			while (true)
 			{
 				try
 				{
 					HttpListenerContext context = Listener.GetContext();
-					Console.WriteLine("Received request from {0}", context.Request.RemoteEndPoint);
+					Log.Trace($"Received request from {context.Request.RemoteEndPoint}");
 					RequestWorker.Queue.Add(new ContextProvider(context));
 				}
 				catch (HttpListenerException e)
 				{
-					Console.WriteLine(e);
+					Log.Warning($"{e.GetType().Name}: {e.Message}");
 				}
 			}
 		}

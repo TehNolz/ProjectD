@@ -12,6 +12,8 @@ using System.Text;
 using System.Threading;
 using Webserver.LoadBalancer;
 
+using static Webserver.Program;
+
 namespace Webserver.Replication
 {
 	/// <summary>
@@ -79,12 +81,12 @@ namespace Webserver.Replication
 				// Broadcast the changes if this server is not a master
 				if (BroadcastChanges && !Balancer.IsMaster)
 				{
-					Console.WriteLine("Sending batch to master");
+					Log.Debug("Sending batch to master");
 					// Get a message containing an updated collection
 					changes.Synchronize();
-					Console.WriteLine("Got updated batch from master");
+					Log.Debug("Got updated batch from master");
 
-					Console.WriteLine(((JObject)changes).ToString());
+					Log.Debug(((JObject)changes).ToString());
 
 					// Swap the elements in the collections
 					T[] newItems = changes.Collection.Select(x => x.ToObject<T>()).ToArray();
@@ -113,10 +115,10 @@ namespace Webserver.Replication
 				if (BroadcastChanges && changes != null && Balancer.IsMaster)
 				{
 					// changes?.Broadcast();
-					Console.WriteLine("Sending updated batch to slaves");
+					Log.Debug("Sending updated batch to slaves");
 
 					// Send the message to all other servers
-					Console.WriteLine("Sending updated batch to the remaining slaves");
+					Log.Debug("Sending updated batch to the remaining slaves");
 					changes.Broadcast();
 				}
 			}
@@ -129,7 +131,7 @@ namespace Webserver.Replication
 
 			JArray newChanges = new Message(MessageType.DbSync, new { Id = changeStack.Peek()?.Id ?? 0 }).SendAndWait(Balancer.MasterServer, 5000 ).Data;
 
-			Console.WriteLine($"Applying {newChanges.Count} changes");
+			Log.Debug($"Applying {newChanges.Count} changes");
 
 			lock (this)
 			{

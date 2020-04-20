@@ -9,6 +9,8 @@ using System.Text;
 
 using Webserver.Config;
 
+using static Webserver.Program;
+
 namespace Webserver.LoadBalancer
 {
 	public static class Balancer
@@ -56,7 +58,7 @@ namespace Webserver.LoadBalancer
 				foreach (string rawAddress in BalancerConfig.IPAddresses)
 				{
 					if (!IPAddress.TryParse(rawAddress, out IPAddress Address))
-						Console.WriteLine("Skipping invalid address {0}", Address);
+						Log.Warning($"Skipping invalid address {Address}");
 					else
 						Addresses.Add(Address);
 				}
@@ -78,7 +80,7 @@ namespace Webserver.LoadBalancer
 				}
 				catch (SocketException e)
 				{
-					Console.WriteLine($"Failed to bind to address {address}: {e.Message}");
+					Log.Warning($"Failed to bind to address {address}: {e.Message}");
 					continue;
 				}
 			}
@@ -89,7 +91,7 @@ namespace Webserver.LoadBalancer
 
 			//Get our local address
 			LocalAddress = ((IPEndPoint)Client.Client.LocalEndPoint).Address;
-			Console.WriteLine($"Local address is {LocalAddress}");
+			Log.Config($"Local address is {LocalAddress}");
 
 			//Use 10 UDP broadcasts to try and find the master server (if one exists).
 			byte[] discoveryMessage = new Message(MessageType.Discover, null).GetBytes();

@@ -10,6 +10,8 @@ using System.Reflection;
 
 using Webserver.Config;
 
+using static Webserver.Program;
+
 namespace Webserver.LoadBalancer
 {
 	public static class Slave
@@ -21,7 +23,7 @@ namespace Webserver.LoadBalancer
 		/// <returns>The local IP address.</returns>
 		public static void Init(IPAddress masterAddress)
 		{
-			Console.WriteLine("Server is running as slave. Connecting to the Master server at {0}", masterAddress);
+			Log.Config($"Server is running as slave. Connecting to the Master server at {masterAddress}");
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
 			new ServerProfile(Balancer.LocalAddress);
 
@@ -43,7 +45,7 @@ namespace Webserver.LoadBalancer
 			//Send registration request.
 			connection.Send(new Message(MessageType.Register, null));
 
-			Console.WriteLine("Connected to master at {0}. Local address is {1}", masterAddress, (IPEndPoint)client.Client.LocalEndPoint);
+			Log.Config($"Connected to master at {masterAddress}. Local address is {(IPEndPoint)client.Client.LocalEndPoint}");
 		}
 
 		private static void OnQueryInsert(Message message)
@@ -52,20 +54,20 @@ namespace Webserver.LoadBalancer
 			if (message.Type != MessageType.DbChange)
 				return;
 
-			Console.WriteLine("Got QueryInsert from master");
-			Console.WriteLine(message.Data.Type);
+			Log.Debug("Got QueryInsert from master");
+			Log.Debug(message.Data.Type);
 
 			// Parse the type string into a Type object from this assembly
 			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
 
-			Console.WriteLine("Inserting object batch");
+			Log.Debug("Inserting object batch");
 			// Convert the message item array to an object array and insert it into the database
 			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
 			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
 				modelType,
 				new[] { items }
 			);
-			Console.WriteLine("Done inserting batch");
+			Log.Debug("Done inserting batch");
 		}
 
 		/// <summary>
@@ -106,7 +108,7 @@ namespace Webserver.LoadBalancer
 			if (endpoint.ToString() == Balancer.LocalAddress.ToString())
 				return;
 
-			Console.WriteLine($"Master announced new server at {endpoint}");
+			Log.Info($"Master announced new server at {endpoint}");
 			new ServerProfile(endpoint);
 		}
 
@@ -120,7 +122,7 @@ namespace Webserver.LoadBalancer
 			if (message.Type != MessageType.Timeout)
 				return;
 
-			Console.WriteLine($"Master lost connection with slave at {message.Data}");
+			Log.Warning($"Master lost connection with slave at {message.Data}");
 			ServerProfile.KnownServers.TryRemove(IPAddress.Parse(message.Data), out ServerProfile _);
 		}
 		/// <summary>
@@ -129,10 +131,10 @@ namespace Webserver.LoadBalancer
 		/// <param name="server"></param>
 		public static void OnServerTimeout(ServerProfile server, string message)
 		{
-			Console.WriteLine($"Connection lost to master: {message}");
+			Log.Warning($"Connection lost to master: {message}");
 			ServerProfile.KnownServers.Remove(server.Address, out _);
 
-			Console.WriteLine("Electing a new master.");
+			Log.Info("Electing a new master.");
 
 			//Elect a new master by finding the slave with the lowest IPv4 address. This is guaranteed to give the same result on every slave.
 			//TODO: Maybe find a better algorithm to elect a master?
@@ -158,13 +160,13 @@ namespace Webserver.LoadBalancer
 			//If this slave was selected, promote to Master. Otherwise, restart the slave using the new master's address.
 			if (newMaster.Address.ToString() == Balancer.LocalAddress.ToString())
 			{
-				Console.WriteLine("Elected this slave as new master. Promoting.");
+				Log.Info("Elected this slave as new master. Promoting.");
 				Master.Init();
 			}
 			else
 			{
-				Console.WriteLine("Elected {0} as new master. Connecting.", newMaster.Address);
-				Slave.Init(newMaster.Address);
+				Log.Info($"Elected {newMaster.Address} as new master. Connecting.");
+				Init(newMaster.Address);
 			}
 		}
 	}

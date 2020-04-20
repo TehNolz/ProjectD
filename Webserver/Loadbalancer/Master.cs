@@ -1,3 +1,4 @@
+using Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -13,6 +14,8 @@ using System.Threading;
 
 using Webserver.Config;
 using Webserver.Replication;
+
+using static Webserver.Program;
 
 namespace Webserver.LoadBalancer
 {
@@ -32,7 +35,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		public static void Init()
 		{
-			Console.WriteLine("Server is running as master");
+			Log.Config("Server is running as master");
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
 			ServerProfile.KnownServers.TryAdd(Balancer.LocalAddress, new ServerProfile(Balancer.LocalAddress));
 
@@ -52,7 +55,7 @@ namespace Webserver.LoadBalancer
 			Listener.ListenerThread = new Thread(() => Listener.Listen(((IPEndPoint)listener.LocalEndpoint).Address, BalancerConfig.HttpPort));
 			Listener.ListenerThread.Start();
 
-			Console.WriteLine("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
+			Log.Config("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
 		}
 
 		private static void OnDbSynchronize(Message message)
@@ -86,7 +89,7 @@ namespace Webserver.LoadBalancer
 		public static void OnServerTimeout(ServerProfile server, string message)
 		{
 			ServerProfile.KnownServers.TryRemove(server.Address, out _);
-			Console.WriteLine($"Lost connection to slave at {server.Address}: {message}");
+			Log.Warning($"Lost connection to slave at {server.Address}: {message}");
 			ServerConnection.Broadcast(new Message(MessageType.Timeout, server.Address));
 		}
 
@@ -108,7 +111,7 @@ namespace Webserver.LoadBalancer
 					//Check if the client sent a registration request. Drop the connection if it didn't.
 					if (message.Type != MessageType.Register)
 					{
-						Console.WriteLine("Dropped connection to server {0} during registration: invalid registration request", client.Client.RemoteEndPoint);
+						Log.Warning($"Dropped connection to server {client.Client.RemoteEndPoint} during registration: invalid registration request");
 						client.Close();
 						continue;
 					}
@@ -118,11 +121,11 @@ namespace Webserver.LoadBalancer
 					connection.Send(new Message(MessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
 
 					ServerConnection.Broadcast(new Message(MessageType.NewServer, connection.Address));
-					Console.WriteLine("Successfully registered the server at {0}. Informed other slaves.", connection.Address);
+					Log.Info($"Successfully registered the server at {connection.Address}. Informed other slaves.");
 				}
 				catch (SocketException e)
 				{
-					Console.WriteLine($"Lost connection to server {client.Client.RemoteEndPoint} during registration: {e.Message}");
+					Log.Warning($"Lost connection to server {client.Client.RemoteEndPoint} during registration: {e.Message}");
 					continue;
 				}
 			}
@@ -172,12 +175,12 @@ namespace Webserver.LoadBalancer
 
 					//Answer it.
 					Balancer.Client.Send(response, response.Length, clientEndPoint);
-					Console.WriteLine($"Recived discovery message from {clientEndPoint.Address}.");
+					Log.Info($"Recived discovery message from {clientEndPoint.Address}.");
 				}
 				catch (SocketException e)
 				{
 					//If an error occured during receiving/sending, then there's not much we can do about it. Slave's just gotta retry.
-					Console.WriteLine($"Failed to receive or answer discovery message: {e.Message}");
+					Log.Warning($"Failed to receive or answer discovery message: {e.Message}");
 				}
 			}
 		}
