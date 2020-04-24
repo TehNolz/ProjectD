@@ -215,10 +215,11 @@ namespace Webserver.LoadBalancer
 					Stream.Write(messageLength, 0, messageLength.Length);
 					Stream.Write(message, 0, message.Length);
 				}
-				catch (IOException e)
+				catch (Exception e) when (e is SocketException || e is IOException)
 				{
 					ServerTimeout(this, e.Message);
 					Dispose();
+					return;
 				}
 			}
 		}
@@ -256,12 +257,12 @@ namespace Webserver.LoadBalancer
 					else
 						MessageReceived?.Invoke(message);
 				}
-				catch (SocketException e)
+				catch (Exception e) when (e is SocketException || e is IOException)
 				{
 					// A connection issue occured. Trigger the OnServerTimeout event and drop this connection.
 					ServerTimeout(this, e.Message);
 					Dispose();
-					continue;
+					return;
 				}
 			}
 		}
