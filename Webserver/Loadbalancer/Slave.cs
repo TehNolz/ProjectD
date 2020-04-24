@@ -1,14 +1,12 @@
-using Newtonsoft.Json.Linq;
-
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
+using System.Threading;
 
 using Webserver.Config;
+using Webserver.Replication;
 
 using static Webserver.Program;
 
@@ -32,7 +30,7 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += TimeoutMessage;
 			ServerConnection.MessageReceived += RegistrationResponse;
 			ServerConnection.MessageReceived += NewServer;
-			ServerConnection.MessageReceived += OnQueryInsert;
+			ServerConnection.MessageReceived += OnDbChange;
 
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
@@ -48,26 +46,21 @@ namespace Webserver.LoadBalancer
 			Log.Config($"Connected to master at {masterAddress}. Local address is {(IPEndPoint)client.Client.LocalEndPoint}");
 		}
 
-		private static void OnQueryInsert(Message message)
+		private static void OnDbChange(Message message)
 		{
 			// Check if the type is QueryInsert
 			if (message.Type != MessageType.DbChange)
 				return;
 
-			Log.Debug("Got QueryInsert from master");
-			Log.Debug(message.Data.Type);
+			var changes = new Changes(message);
 
-			// Parse the type string into a Type object from this assembly
-			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
-
-			Log.Debug("Inserting object batch");
-			// Convert the message item array to an object array and insert it into the database
-			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
-			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
-				modelType,
-				new[] { items }
-			);
-			Log.Debug("Done inserting batch");
+			Log.Debug($"Got \"database update\" {changes.ID} from master");
+			new Thread(() =>
+			{
+				Program.Database.Apply(changes);
+				Log.Debug($"Done inserting changes {changes.ID}");
+			})
+			{ Name = $"OnDbChange<{changes.ID}>" }.Start();
 		}
 
 		/// <summary>
