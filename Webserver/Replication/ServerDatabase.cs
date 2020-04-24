@@ -93,10 +93,8 @@ namespace Webserver.Replication
 				// Broadcast the changes if this server is not a master
 				if (BroadcastChanges && !Balancer.IsMaster)
 				{
-					Log.Debug("Sending changes to master");
 					// Get a message containing an updated collection
 					changes.Synchronize();
-					Log.Debug($"Got updated changes {changes.ID} from master");
 
 					// Swap the elements in the collections
 					T[] newItems = changes.Collection.Select(x => x.ToObject<T>()).ToArray();
@@ -142,7 +140,6 @@ namespace Webserver.Replication
 				if (BroadcastChanges && changes != null && Balancer.IsMaster)
 				{
 					// Send the message to all other servers
-					Log.Debug($"Sending updated changes {changes.ID} to slaves");
 					changes.Broadcast();
 				}
 			}

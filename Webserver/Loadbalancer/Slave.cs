@@ -54,13 +54,7 @@ namespace Webserver.LoadBalancer
 
 			var changes = new Changes(message);
 
-			Log.Debug($"Got \"database update\" {changes.ID} from master");
-			new Thread(() =>
-			{
-				Program.Database.Apply(changes);
-				Log.Debug($"Done inserting changes {changes.ID}");
-			})
-			{ Name = $"OnDbChange<{changes.ID}>" }.Start();
+			new Thread(() => Program.Database.Apply(changes)) { Name = $"OnDbChange<{changes.ID}>" }.Start();
 		}
 
 		/// <summary>

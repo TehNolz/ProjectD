@@ -197,7 +197,6 @@ namespace Webserver.Replication
 					if (id <= CurrentValue)
 						return;
 
-					Program.Log.Debug($"Blocking {id} until {id - CurrentValue} more are applied");
 					// If the first attempt failed, put the semaphore in the waiting dictionary
 					waiting[id] = sem;
 				}
