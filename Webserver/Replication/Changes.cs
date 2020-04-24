@@ -12,11 +12,17 @@ using Newtonsoft.Json;
 
 namespace Webserver.Replication
 {
+	/// <summary>
+	/// Represents all changes made to a <see cref="ServerDatabase"/>. Instances of this class can
+	/// be stored in a <see cref="ChangeLog"/>.
+	/// <para/>
+	/// This class uses JSON serialization to store the data related to the query.
+	/// </summary>
 	public class Changes
 	{
 		[Primary]
-		public long? Id { get; set; }
-		public ChangeType Type { get; set; }
+		public long? ID { get; set; }
+		public ChangeType? Type { get; set; }
 		public string CollectionTypeName
 		{
 			get => _collectionTypeName;
@@ -26,11 +32,21 @@ namespace Webserver.Replication
 				_collectionTypeName = value;
 			}
 		}
-		public string CollectionJSON { get; set; }
+		public string CollectionJSON
+		{
+			get => _collectionJSON;
+			set
+			{
+				_collection = null;
+				_collectionJSON = value;
+			}
+		}
 		public string Condition { get; set; }
 
 		private string _collectionTypeName;
 		private Type _collectionType;
+		private string _collectionJSON;
+		private JArray _collection;
 
 		public virtual Type CollectionType
 		{
@@ -48,22 +64,51 @@ namespace Webserver.Replication
 		}
 		public virtual JArray Collection
 		{
-			get => JArray.Parse(CollectionJSON);
-			set => CollectionJSON = value.ToString(Formatting.None);
+			get
+			{
+				if (_collection is null)
+					_collection = JArray.Parse(CollectionJSON);
+				return _collection;
+			}
+			set
+			{
+				_collection = value;
+				CollectionJSON = value?.ToString(Formatting.None);
+			}
 		}
 		public virtual Message Source { get; }
 
+		/// <summary>
+		/// Initializes a new instance of <see cref="Changes"/>.
+		/// </summary>
 		public Changes() { }
-
-		public Changes(Message message)
+		/// <summary>
+		/// Initializes a new instance of <see cref="Changes"/> by deserializing the given
+		/// <paramref name="message"/> object.
+		/// </summary>
+		/// <param name="message">The message to deserialize.</param>
+		public Changes(Message message) : this((JObject)message.Data)
 		{
 			Source = message;
-			Id = message.Data.Id;
-			Type = Enum.Parse<ChangeType>(message.Data.Type);
-			CollectionTypeName = message.Data.ItemType;
-			CollectionJSON = message.Data.Items;
+		}
+		/// <summary>
+		/// Deserializes the given <paramref name="data"/> into a new instance of <see cref="Changes"/>.
+		/// </summary>
+		/// <param name="data">The data to deserialize.</param>
+		protected Changes(dynamic data)
+		{
+			ID = (long?)data.ID;
+			Type = Enum.Parse<ChangeType>((string)data.Type);
+			CollectionTypeName = (string)data.ItemType;
+			Collection = (JArray)data.Items;
 		}
 
+		/// <summary>
+		/// Sends the data of this <see cref="Changes"/> instance to all other servers.
+		/// <para/>
+		/// If this <see cref="Changes"/> instance was serialized from a <see cref="Message"/>
+		/// object, a reply will be sent to <see cref="Source"/>.
+		/// </summary>
 		public void Broadcast()
 		{
 			if (Source is null)
@@ -82,8 +127,7 @@ namespace Webserver.Replication
 				);
 			}
 		}
-		private void Broadcast(IEnumerable<ServerConnection> servers)
-			=> ServerConnection.Send(servers, new Message(MessageType.DbChange, (JObject)this));
+		private void Broadcast(IEnumerable<ServerConnection> servers) => ServerConnection.Send(servers, new Message(MessageType.DbChange, (JObject)this));
 
 		/// <summary>
 		/// Synchronizes these changes with the master server.
@@ -97,21 +141,23 @@ namespace Webserver.Replication
 			{
 				var newChanges = new Changes(new Message(MessageType.DbChange, (JObject)this).SendAndWait(Balancer.MasterServer));
 				CollectionJSON = newChanges.CollectionJSON;
-				Id = newChanges.Id;
+				ID = newChanges.ID;
 			}
 		}
 
+		public override string ToString() => $"{GetType().Name}<{ID}>";
+
 		public static explicit operator JObject(Changes changes) => new JObject() {
-				{ "Id", changes.Id },
+				{ "ID", changes.ID },
 				{ "Type", changes.Type.ToString() },
 				{ "ItemType", changes.CollectionTypeName },
-				{ "Items", changes.CollectionJSON },
+				{ "Items", changes.Collection },
 			};
+		public static explicit operator Changes(JObject jObject) => new Changes(jObject);
 	}
-
+	
 	public enum ChangeType
 	{
-		None = default,
 		INSERT,
 		UPDATE,
 		DELETE
