@@ -24,6 +24,19 @@ namespace Webserver.Replication
 	/// </summary>
 	public sealed class ServerDatabase : SQLiteAdapter, IDisposable
 	{
+		/// <inheritdoc cref="ChangeLog.Version"/>
+		public long Version => changelog.Version;
+
+		/// <summary>
+		/// Gets or sets the maximum amount of changes that are requested each time
+		/// during the synchronization process.
+		/// </summary>
+		/// <seealso cref="Synchronize"/>
+		/// <remarks>
+		/// Higher chunk sizes may keep the master server too busy with sending one message,
+		/// whereas lower chunk sizes may lead to excessive IO time.
+		/// </remarks>
+		public int SynchronizeChunkSize { get; set; } = 800;
 		/// <summary>
 		/// Gets or sets whether this <see cref="ServerDatabase"/> broadcasts it's changes
 		/// to other servers.
@@ -34,8 +47,7 @@ namespace Webserver.Replication
 		/// FileLock object used to keep ownership over a specific database.
 		/// </summary>
 		private FileLock fileLock;
-
-		private ChangeStack changeStack;
+		private ChangeLog changelog;
 
 		/// <summary>
 		/// Initializes a new instance of <see cref="ServerDatabase"/> with the specified
@@ -49,7 +61,7 @@ namespace Webserver.Replication
 
 			this.fileLock = fileLock;
 			fileLock.Acquire(this);
-			changeStack = new ChangeStack(this);
+			changelog = new ChangeLog(this);
 		}
 		/// <summary>
 		/// Initializes a new instance of <see cref="ServerDatabase"/> by inheriting
@@ -62,7 +74,7 @@ namespace Webserver.Replication
 
 			fileLock = parent.fileLock;
 			fileLock.Acquire(this);
-			changeStack = parent.changeStack;
+			changelog = parent.changelog;
 		}
 
 		public override long Insert<T>(IList<T> items)
@@ -81,12 +93,8 @@ namespace Webserver.Replication
 				// Broadcast the changes if this server is not a master
 				if (BroadcastChanges && !Balancer.IsMaster)
 				{
-					Log.Debug("Sending batch to master");
 					// Get a message containing an updated collection
 					changes.Synchronize();
-					Log.Debug("Got updated batch from master");
-
-					Log.Debug(((JObject)changes).ToString());
 
 					// Swap the elements in the collections
 					T[] newItems = changes.Collection.Select(x => x.ToObject<T>()).ToArray();
@@ -94,19 +102,36 @@ namespace Webserver.Replication
 						items[i] = newItems[i];
 				}
 
-				// Insert the collection
+				// Lock this in order to syncronize the insert with the change push
 				long @out;
 				lock (this)
-					@out = base.Insert(items);
+				{
+					// Slaves that broadcast their changes must first push their changes
+					// in order to synchronize the database modifications.
+					if (BroadcastChanges && !Balancer.IsMaster)
+					{
+						// Store the new changes
+						changelog.Push(changes, false);
 
-				// Update changes collection if it wasn't synchronized with the master
-				changes.Collection = JArray.FromObject(items);
+						@out = base.Insert(items);
+					}
+					// Masters insert first to update the id's and then push their changes.
+					else
+					{
+						@out = base.Insert(items);
 
-				changeStack.Push(changes, false);
+						// Update the collection in the changes
+						changes.Collection = JArray.FromObject(items);
+
+						// Store the new changes
+						changelog.Push(changes, false);
+					}
+				}
 				return @out;
 			}
 			catch (Exception)
 			{
+				// Set changes to null to skip broadcasting to the other servers
 				changes = null;
 				throw;
 			}
@@ -114,50 +139,104 @@ namespace Webserver.Replication
 			{
 				if (BroadcastChanges && changes != null && Balancer.IsMaster)
 				{
-					// changes?.Broadcast();
-					Log.Debug("Sending updated batch to slaves");
-
 					// Send the message to all other servers
-					Log.Debug("Sending updated batch to the remaining slaves");
 					changes.Broadcast();
 				}
 			}
 		}
 
+		/// <summary>
+		/// Retrieves all new changes from the master server and applies them.
+		/// </summary>
 		public void Synchronize()
 		{
 			if (Balancer.IsMaster)
 				throw new InvalidOperationException();
 
-			JArray newChanges = new Message(MessageType.DbSync, new { Id = changeStack.Peek()?.Id ?? 0 }).SendAndWait(Balancer.MasterServer, 5000 ).Data;
+			//var totalTimer = new Stopwatch();
+			//totalTimer.Start();
 
-			Log.Debug($"Applying {newChanges.Count} changes");
+			// Get the amount of new changes to request
+			long updateCount = new Message(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data.Version - changelog.Version;
+
+			//totalTimer.Stop();
+			//var ping = totalTimer.ElapsedMilliseconds;
+			//Log.Debug($"Applying {updateCount} changes. Chunksize: {SynchronizeChunkSize}, Ping: {totalTimer.Format()}");
 
 			lock (this)
 			{
-				SQLiteTransaction databaseTransaction = changeStack.database.Connection.BeginTransaction();
-				SQLiteTransaction changelogTransaction = changeStack.changeLog.Connection.BeginTransaction();
+				SQLiteTransaction databaseTransaction = changelog.database.Connection.BeginTransaction();
+				SQLiteTransaction changelogTransaction = changelog.changeLog.Connection.BeginTransaction();
 
-				int i = 0;
-				foreach (Changes changes in newChanges.Select(x => x.ToObject<Changes>()))
+				int chunkSize = SynchronizeChunkSize; // Copy the value to keep things thread-safe
+				long interval = Math.Max(1, (long)(updateCount / (Console.WindowWidth * 0.8))); // Interval for refreshing the progress bar
+
+				//var chunkTimer = new Stopwatch();
+				//var IOTimer = new Stopwatch();
+				//totalTimer.Restart();
+
+				//var chunkTimes = new List<long>();
+				//var IOTimes = new List<long>();
+
+				for (long l = 0; l < updateCount;)
 				{
-					i++;
-					changeStack.Push(changes);
-					Utils.ProgressBar(i, newChanges.Count);
-				}
+					//IOTimer.Restart();
 
+					// Request another chunk of updates
+					JArray updates = new Message(
+						MessageType.DbSync,
+						new { changelog.Version, Amount = Math.Min(updateCount - l, chunkSize) }
+					).SendAndWait(Balancer.MasterServer).Data;
+					
+					//IOTimes.Add(IOTimer.ElapsedMilliseconds);
+
+					//chunkTimer.Restart();
+
+					// Apply each update, increment l and occasionally update the progressbar
+					foreach (Changes update in updates.Select(x => (Changes)x))
+					{
+						changelog.Push(update);
+						if (l++ % interval == 0) Utils.ProgressBar(l, updateCount);
+					}
+
+					//chunkTimes.Add(chunkTimer.ElapsedMilliseconds);
+					Utils.ProgressBar(l, updateCount);
+				}
+				//totalTimer.Stop();
+
+				//StreamWriter writer = File.AppendText("stats.csv");
+				//writer.WriteLine(string.Join(',',
+				//	chunkSize,
+				//	totalTimer.ElapsedMilliseconds,
+				//	chunkTimes.Max(),
+				//	chunkTimes.Average(),
+				//	chunkTimes.Min(),
+				//	IOTimes.Max(),
+				//	IOTimes.Average(),
+				//	IOTimes.Min(),
+				//	ping
+				//));
+				//writer.Dispose();
+				
 				databaseTransaction.Commit();
 				changelogTransaction.Commit();
+
+				changelog.Dispose();
+				changelog = new ChangeLog(this);
+
 				Utils.ClearProgressBar();
 			}
 		}
 
-		public void Apply(Changes changes)
-		{
-			changeStack.Push(changes);
-		}
+		/// <summary>
+		/// Pushes the given changes onto this database's changelog and applies the 
+		/// changes specified in the <paramref name="changes"/> object.
+		/// </summary>
+		/// <param name="changes">The changes to apply to this database.</param>
+		public void Apply(Changes changes) => changelog.Push(changes);
 
-		public IEnumerable<Changes> GetChanges(long id) => changeStack.Crawl(id);
+		/// <inheritdoc cref="ChangeLog.GetNewChanges(long)"/>
+		public IEnumerable<Changes> GetNewChanges(long id, long limit = -1) => changelog.GetNewChanges(id, limit);
 
 		/// <summary>
 		/// Returns a new instance of <see cref="ServerDatabase"/> with the same datasource as
@@ -166,7 +245,7 @@ namespace Webserver.Replication
 		/// The created <see cref="ServerDatabase"/> has <see cref="BroadcastChanges"/> set to
 		/// <see langword="true"/> by default.
 		/// </summary>
-		public ServerDatabase NewConnection() => new ServerDatabase(this);
+		public ServerDatabase NewConnection() => new ServerDatabase(this) { BroadcastChanges = true };
 
 		/// <summary>
 		/// Returns a new <see cref="ServerDatabase"/> connection for the given datasource.
@@ -207,7 +286,7 @@ namespace Webserver.Replication
 		{
 			fileLock?.Release(this);
 			fileLock = null;
-			changeStack.Dispose();
+			changelog.Dispose();
 			base.Dispose();
 		}
 	}

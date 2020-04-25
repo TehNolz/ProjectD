@@ -133,6 +133,7 @@ namespace Webserver.API
 			}
 			catch (Exception e)
 			{
+				e = e.InnerException ?? e;
 				Log.Error($"{e.GetType().Name}: {e.Message}", e);
 				response.Send(HttpStatusCode.InternalServerError);
 			}

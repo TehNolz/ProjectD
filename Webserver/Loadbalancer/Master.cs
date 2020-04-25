@@ -1,4 +1,3 @@
-using Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -8,7 +7,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 
@@ -64,10 +62,16 @@ namespace Webserver.LoadBalancer
 			if (message.Type != MessageType.DbSync)
 				return;
 
-			var changeList = Program.Database.GetChanges((long)message.Data.Id).ToList();
-			changeList.Reverse();
-			var changes = JArray.FromObject(changeList);
-			message.Reply(changes);
+			if (message.Data is null)
+			{
+				// Send the current database version to begin the chunked synchronization
+				message.Reply(new { Program.Database.Version });
+				return;
+			}
+
+			// Get `amount` of changes and send them in the reply
+			IEnumerable<JObject> changes = Program.Database.GetNewChanges((long)message.Data.Version, (int)message.Data.Amount).Select(x => (JObject)x);
+			message.Reply(JArray.FromObject(changes));
 		}
 
 		private static void OnDbChange(Message message)

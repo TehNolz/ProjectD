@@ -1,6 +1,5 @@
 using Config;
 
-using Database.SQLite;
 using Logging;
 using System;
 using System.Collections.Concurrent;
@@ -95,6 +94,7 @@ namespace Webserver
 			}
 			catch (Exception e)
 			{
+				e = e.InnerException ?? e;
 				Log.Error("The server could not start: " + e.Message, e);
 				Console.ReadLine();
 				return;

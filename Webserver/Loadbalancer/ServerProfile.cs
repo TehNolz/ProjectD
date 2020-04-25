@@ -154,11 +154,11 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="message">The message to send.</param>
 		/// <param name="timeout">The amount of milliseconds to wait for the reply to arrive. If no message is received within this time, a SocketException is thrown with the TimedOut status code.</param>
-		public Message SendAndWait(Message message, int timeout = 500)
+		public Message SendAndWait(Message message)
 		{
 			// Use the Message.SendAndWait to set the ID if it is null
 			if (message.ID is null)
-				return message.SendAndWait(this, timeout);
+				return message.SendAndWait(this);
 
 			// Create a semaphore to block this function untill a reply is received
 			var responseLock = new SemaphoreSlim(0, 1);
@@ -168,7 +168,7 @@ namespace Webserver.LoadBalancer
 			void unlocker(Message _reply)
 			{
 				// Check if the _reply is in response to the sent message
-				if (message.ID != _reply.ID)
+				if (_reply != null && message.ID != _reply.ID)
 					return;
 
 				reply = _reply;
@@ -179,12 +179,12 @@ namespace Webserver.LoadBalancer
 			ReplyReceived += unlocker;
 			Send(message);
 
-			// Block until the reply event handler unlocks the semaphore. Otherwise throw an exception
-			if (!responseLock.Wait(timeout))
-				throw new SocketException((int)SocketError.TimedOut);
+			// Block until the reply event handler unlocks this semaphore
+			responseLock.Wait();
 			ReplyReceived -= unlocker;
 
-			return reply;
+			// If reply is null, the events have been reset.
+			return reply ?? throw new SocketException((int)SocketError.ConnectionReset);
 		}
 
 		/// <summary>
@@ -274,6 +274,7 @@ namespace Webserver.LoadBalancer
 		{
 			ServerTimeout = null;
 			MessageReceived = null;
+			ReplyReceived?.Invoke(null);
 			ReplyReceived = null;
 		}
 

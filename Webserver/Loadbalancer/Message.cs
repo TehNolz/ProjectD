@@ -107,10 +107,10 @@ namespace Webserver.LoadBalancer
 		/// <param name="connection">The server to send the message to.</param>
 		/// <param name="timeout">The amount of time in milliseconds to wait for a reply. If no reply is received in time, a SocketException with the TimedOut error code is thrown.</param>
 		/// <returns></returns>
-		public Message SendAndWait(ServerConnection connection, int timeout = 500)
+		public Message SendAndWait(ServerConnection connection)
 		{
 			ID = Guid.NewGuid().ToString();
-			return connection.SendAndWait(this, timeout);
+			return connection.SendAndWait(this);
 		}
 
 		/// <summary>
