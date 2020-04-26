@@ -19,6 +19,7 @@ namespace Webserver.LoadBalancer
 		/// The ServerConnection representing our connection to the master server.
 		/// </summary>
 		public static ServerConnection MasterServer { get; set; }
+
 		/// <summary>
 		/// A list of all valid IP addresses found in the config file.
 		/// </summary>
@@ -94,7 +95,7 @@ namespace Webserver.LoadBalancer
 			Log.Config($"Local address is {LocalAddress}");
 
 			//Use 10 UDP broadcasts to try and find the master server (if one exists).
-			byte[] discoveryMessage = new Message(MessageType.Discover, null).GetBytes();
+			byte[] discoveryMessage = new ServerMessage(MessageType.Discover, null).GetBytes();
 			var serverEndpoint = new IPEndPoint(IPAddress.Any, 0);
 			bool foundMaster = false;
 			bool preventEcho = false;
@@ -173,7 +174,7 @@ namespace Webserver.LoadBalancer
 			}
 			else
 				Master.Init();
-			
+
 			Console.Title = $"Local address {LocalAddress} | Master address {serverEndpoint.Address}";
 
 			return LocalAddress;

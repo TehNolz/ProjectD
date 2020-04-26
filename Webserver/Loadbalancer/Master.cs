@@ -10,6 +10,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
+using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
 
@@ -42,6 +43,9 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += OnDbChange;
 			ServerConnection.MessageReceived += OnDbSynchronize;
 
+			//Chat system events
+			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
+
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
 
@@ -56,7 +60,22 @@ namespace Webserver.LoadBalancer
 			Log.Config("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
 		}
 
-		private static void OnDbSynchronize(Message message)
+		/// <summary>
+		/// Handles message broadcasts from slaves.
+		/// </summary>
+		/// <param name="message"></param>
+		private static void BroadcastHandler(ServerMessage message)
+		{
+			// If this message is a broadcast, send it to all servers except the one it came from.
+			if (message.isBroadcast && message.ID == null)
+			{
+				var destinations = new List<ServerConnection>(ServerProfile.ConnectedServers);
+				destinations.Remove(message.Connection);
+				message.Send(destinations);
+			}
+		}
+
+		private static void OnDbSynchronize(ServerMessage message)
 		{
 			// Check if the type is QueryInsert
 			if (message.Type != MessageType.DbSync)
@@ -74,7 +93,7 @@ namespace Webserver.LoadBalancer
 			message.Reply(JArray.FromObject(changes));
 		}
 
-		private static void OnDbChange(Message message)
+		private static void OnDbChange(ServerMessage message)
 		{
 			// Check if the type is DbChange
 			if (message.Type != MessageType.DbChange)
@@ -94,7 +113,7 @@ namespace Webserver.LoadBalancer
 		{
 			ServerProfile.KnownServers.TryRemove(server.Address, out _);
 			Log.Warning($"Lost connection to slave at {server.Address}: {message}");
-			ServerConnection.Broadcast(new Message(MessageType.Timeout, server.Address));
+			ServerConnection.Broadcast(new ServerMessage(MessageType.Timeout, server.Address));
 		}
 
 		///<inheritdoc cref="RegistryThread"/>
@@ -110,7 +129,7 @@ namespace Webserver.LoadBalancer
 					//Get the length of the incoming message
 					int messageLength = BitConverter.ToInt32(client.GetStream().Read(sizeof(int)));
 					//Read the incoming message and convert it into a Message object.
-					var message = new Message(client.GetStream().Read(messageLength));
+					ServerMessage message = Message.FromBytes<ServerMessage>(client.GetStream().Read(messageLength));
 
 					//Check if the client sent a registration request. Drop the connection if it didn't.
 					if (message.Type != MessageType.Register)
@@ -122,9 +141,9 @@ namespace Webserver.LoadBalancer
 
 					//Register the server and answer its request.
 					var connection = new ServerConnection(client);
-					connection.Send(new Message(MessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
+					connection.Send(new ServerMessage(MessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
 
-					ServerConnection.Broadcast(new Message(MessageType.NewServer, connection.Address));
+					ServerConnection.Broadcast(new ServerMessage(MessageType.NewServer, connection.Address));
 					Log.Info($"Successfully registered the server at {connection.Address}. Informed other slaves.");
 				}
 				catch (SocketException e)
@@ -143,7 +162,7 @@ namespace Webserver.LoadBalancer
 			Balancer.Client = new UdpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.DiscoveryPort));
 
 			//Create the standard response message, so that we don't have to constantly recreate it. It's always the same message anyway.
-			byte[] response = new Message(MessageType.DiscoverResponse, Balancer.LocalAddress).GetBytes();
+			byte[] response = new ServerMessage(MessageType.DiscoverResponse, Balancer.LocalAddress).GetBytes();
 
 			//Main loop
 			while (true)

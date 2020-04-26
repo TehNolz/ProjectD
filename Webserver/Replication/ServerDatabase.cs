@@ -1,18 +1,14 @@
 using Database.SQLite;
+
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading;
-using Webserver.LoadBalancer;
 
-using static Webserver.Program;
+using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
 {
@@ -157,7 +153,7 @@ namespace Webserver.Replication
 			//totalTimer.Start();
 
 			// Get the amount of new changes to request
-			long updateCount = new Message(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data.Version - changelog.Version;
+			long updateCount = new ServerMessage(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data.Version - changelog.Version;
 
 			//totalTimer.Stop();
 			//var ping = totalTimer.ElapsedMilliseconds;
@@ -183,11 +179,11 @@ namespace Webserver.Replication
 					//IOTimer.Restart();
 
 					// Request another chunk of updates
-					JArray updates = new Message(
+					JArray updates = new ServerMessage(
 						MessageType.DbSync,
 						new { changelog.Version, Amount = Math.Min(updateCount - l, chunkSize) }
 					).SendAndWait(Balancer.MasterServer).Data;
-					
+
 					//IOTimes.Add(IOTimer.ElapsedMilliseconds);
 
 					//chunkTimer.Restart();
@@ -196,7 +192,8 @@ namespace Webserver.Replication
 					foreach (Changes update in updates.Select(x => (Changes)x))
 					{
 						changelog.Push(update);
-						if (l++ % interval == 0) Utils.ProgressBar(l, updateCount);
+						if (l++ % interval == 0)
+							Utils.ProgressBar(l, updateCount);
 					}
 
 					//chunkTimes.Add(chunkTimer.ElapsedMilliseconds);
@@ -217,7 +214,7 @@ namespace Webserver.Replication
 				//	ping
 				//));
 				//writer.Dispose();
-				
+
 				databaseTransaction.Commit();
 				changelogTransaction.Commit();
 

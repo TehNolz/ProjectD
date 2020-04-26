@@ -1,14 +1,14 @@
+using Database.SQLite.Modeling;
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using Webserver.LoadBalancer;
-using System.Security.Cryptography;
-using Database.SQLite;
-using System.IO;
-using Database.SQLite.Modeling;
-using Newtonsoft.Json.Linq;
-using System;
 using System.Reflection;
-using Newtonsoft.Json;
+
+using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
 {
@@ -76,7 +76,7 @@ namespace Webserver.Replication
 				CollectionJSON = value?.ToString(Formatting.None);
 			}
 		}
-		public virtual Message Source { get; }
+		public virtual ServerMessage Source { get; }
 
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/>.
@@ -87,7 +87,7 @@ namespace Webserver.Replication
 		/// <paramref name="message"/> object.
 		/// </summary>
 		/// <param name="message">The message to deserialize.</param>
-		public Changes(Message message) : this((JObject)message.Data)
+		public Changes(ServerMessage message) : this((JObject)message.Data)
 		{
 			Source = message;
 		}
@@ -127,7 +127,7 @@ namespace Webserver.Replication
 				);
 			}
 		}
-		private void Broadcast(IEnumerable<ServerConnection> servers) => ServerConnection.Send(servers, new Message(MessageType.DbChange, (JObject)this));
+		private void Broadcast(IEnumerable<ServerConnection> servers) => ServerConnection.Send(servers, new ServerMessage(MessageType.DbChange, (JObject)this));
 
 		/// <summary>
 		/// Synchronizes these changes with the master server.
@@ -139,7 +139,7 @@ namespace Webserver.Replication
 		{
 			if (!Balancer.IsMaster)
 			{
-				var newChanges = new Changes(new Message(MessageType.DbChange, (JObject)this).SendAndWait(Balancer.MasterServer));
+				var newChanges = new Changes(new ServerMessage(MessageType.DbChange, (JObject)this).SendAndWait(Balancer.MasterServer));
 				CollectionJSON = newChanges.CollectionJSON;
 				ID = newChanges.ID;
 			}
@@ -155,7 +155,7 @@ namespace Webserver.Replication
 			};
 		public static explicit operator Changes(JObject jObject) => new Changes(jObject);
 	}
-	
+
 	public enum ChangeType
 	{
 		INSERT,

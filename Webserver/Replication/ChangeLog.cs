@@ -1,12 +1,12 @@
 using Database.SQLite;
+
 using Newtonsoft.Json.Linq;
-using Org.BouncyCastle.Math.EC.Rfc7748;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 
 namespace Webserver.Replication
@@ -246,11 +246,9 @@ namespace Webserver.Replication
 		}
 
 		// This code added to correctly implement the disposable pattern.
-		public void Dispose()
-		{
+		public void Dispose() =>
 			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
 			Dispose(true);
-		}
 		#endregion
 	}
 }

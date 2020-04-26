@@ -15,6 +15,11 @@ namespace Webserver
 	/// </summary>
 	public static class Utils
 	{
+		/// <summary>
+		/// Convert a NameValueCollection to a dictionary for ease of access.
+		/// </summary>
+		/// <param name="data">The NameValueCollection to convert</param>
+		/// <returns></returns>
 		public static Dictionary<string, List<string>> NameValueToDict(NameValueCollection data)
 		{
 			var result = new Dictionary<string, List<string>>();
@@ -56,8 +61,10 @@ namespace Webserver
 			stopwatch.Stop();
 			try
 			{
-				if (stopwatch.ElapsedTicks < 10) return (stopwatch.ElapsedTicks * 100) + " ns";
-				if (stopwatch.ElapsedTicks < 10000) return (stopwatch.ElapsedTicks / 10) + " µs";
+				if (stopwatch.ElapsedTicks < 10)
+					return (stopwatch.ElapsedTicks * 100) + " ns";
+				if (stopwatch.ElapsedTicks < 10000)
+					return (stopwatch.ElapsedTicks / 10) + " µs";
 				return stopwatch.ElapsedMilliseconds + " ms";
 			}
 			finally
@@ -106,7 +113,7 @@ namespace Webserver
 			Console.CursorVisible = false;
 
 			// Move the cursor value back to the end of the stream
-			Console.Write((string)null); 
+			Console.Write((string)null);
 
 			int wtop = Console.WindowTop;
 			if (Console.CursorTop > Console.WindowHeight - 1)
@@ -188,7 +195,7 @@ namespace Webserver
 			(int left, int top, bool showCursor, int wtop) = (Console.CursorLeft, Console.CursorTop, Console.CursorVisible, Console.WindowTop);
 			Console.CursorVisible = false;
 			Console.SetCursorPosition(0, CustomWriter.ProgressBarPos);
-			
+
 			// Clear the progress bar
 			Console.Write(new string(' ', Console.BufferWidth));
 

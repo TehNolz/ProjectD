@@ -13,10 +13,9 @@ namespace Webserver.Models
 	/// </summary>
 	public class Session
 	{
-		[Primary]
-		public int ID { get; set; }
 		public string UserEmail { get; set; }
 		public long Token { get; set; }
+		[Primary]
 		public string SessionID { get; set; }
 		public bool RememberMe { get; set; }
 

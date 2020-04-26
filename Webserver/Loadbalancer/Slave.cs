@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
+using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
 
@@ -32,6 +33,9 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += NewServer;
 			ServerConnection.MessageReceived += OnDbChange;
 
+			//Chat system events
+			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
+
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
 			client.Connect(new IPEndPoint(masterAddress, BalancerConfig.BalancerPort));
@@ -41,12 +45,12 @@ namespace Webserver.LoadBalancer
 			Balancer.MasterServer = connection;
 
 			//Send registration request.
-			connection.Send(new Message(MessageType.Register, null));
+			connection.Send(new ServerMessage(MessageType.Register, null));
 
 			Log.Config($"Connected to master at {masterAddress}. Local address is {(IPEndPoint)client.Client.LocalEndPoint}");
 		}
 
-		private static void OnDbChange(Message message)
+		private static void OnDbChange(ServerMessage message)
 		{
 			// Check if the type is QueryInsert
 			if (message.Type != MessageType.DbChange)
@@ -62,7 +66,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server who sent the response</param>
 		/// <param name="message">The response</param>
-		public static void RegistrationResponse(Message message)
+		public static void RegistrationResponse(ServerMessage message)
 		{
 			//If this message isn't a registration response, ignore it.
 			if (message.Type != MessageType.RegisterResponse)
@@ -83,7 +87,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server that sent the announcement</param>
 		/// <param name="message">The announcement</param>
-		public static void NewServer(Message message)
+		public static void NewServer(ServerMessage message)
 		{
 			//If this message isn't an announcement, ignore it.
 			if (message.Type != MessageType.NewServer)
@@ -104,7 +108,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server"></param>
 		/// <param name="message"></param>
-		public static void TimeoutMessage(Message message)
+		public static void TimeoutMessage(ServerMessage message)
 		{
 			if (message.Type != MessageType.Timeout)
 				return;

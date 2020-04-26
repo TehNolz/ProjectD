@@ -1,5 +1,6 @@
-using System;
 using System.Net;
+
+using Webserver.Chat;
 
 using static Webserver.Program;
 
@@ -27,9 +28,21 @@ namespace Webserver.Webserver
 			{
 				try
 				{
-					HttpListenerContext context = Listener.GetContext();
+					//Wait for incoming requests.
+					var context = new ContextProvider(Listener.GetContext());
+
+					//If the received request is a request to open a websocket, accept it only if the URL ends with /chat
+					if (context.Request.IsWebSocketRequest)
+					{
+						if (context.Request.Url.LocalPath.EndsWith("/chat"))
+							new ChatConnection(context);
+						else
+							context.Response.Send(HttpStatusCode.BadRequest);
+						continue;
+					}
+
 					Log.Trace($"Received request from {context.Request.RemoteEndPoint}");
-					RequestWorker.Queue.Add(new ContextProvider(context));
+					RequestWorker.Queue.Add(context);
 				}
 				catch (HttpListenerException e)
 				{

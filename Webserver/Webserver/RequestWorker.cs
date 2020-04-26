@@ -1,16 +1,11 @@
 using Database.SQLite;
 
-using Newtonsoft.Json.Linq;
-
 using System;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Net;
 using System.Threading;
 
 using Webserver.API;
-//using Webserver.Chat;
-using Webserver.LoadBalancer;
 
 using static Webserver.Program;
 
@@ -96,7 +91,12 @@ namespace Webserver.Webserver
 				}
 
 				// If the url starts with /api, pass the request to the API Endpoints
-				if (url.StartsWith("/api/")) // TODO: Remove hardcoded string
+				// If the url starts with /chat, create a new chat connection
+				if (url.StartsWith("/chat"))
+				{
+					//ChatConnection.ProcessChatConnection(context, Database);
+				}
+				else if (url.StartsWith("/api/"))
 				{
 					APIEndpoint.ProcessEndpoint(context, Database);
 				}
@@ -109,9 +109,6 @@ namespace Webserver.Webserver
 			} while (!Debug || Queue.Count != 0);
 		}
 
-		public void Dispose()
-		{
-			Database.Dispose();
-		}
+		public void Dispose() => Database.Dispose();
 	}
 }
