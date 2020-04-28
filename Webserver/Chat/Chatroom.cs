@@ -3,6 +3,7 @@ using Database.SQLite.Modeling;
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 
 using Webserver.Models;
@@ -54,6 +55,20 @@ namespace Webserver.Chat
 		/// <param name="user">The user</param>
 		/// <returns></returns>
 		public bool CanUserAccess(SQLiteAdapter database, User user) => !Private || database.Select<ChatroomMembership>("Chatroom = @chatroomid AND User = @userid", new { chatroomid = ID, userid = user.ID }).Any();
+
+		/// <summary>
+		/// Get the last chat message written in this chatroom.
+		/// </summary>
+		/// <returns></returns>
+		public Chatlog GetLastMessage() => Chatlog.GetLastID(this);
+
+		/// <summary>
+		/// Get a chunk of this chatroom's chat history.
+		/// </summary>
+		/// <param name="start"></param>
+		/// <param name="amount"></param>
+		/// <returns></returns>
+		public List<Chatlog> GetChatHistory(int start, int amount) => Chatlog.GetChatlog(this, start, amount).ToList();
 	}
 
 	public class ChatroomMembership

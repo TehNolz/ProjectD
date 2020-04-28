@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.WebSockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -188,8 +189,12 @@ namespace Webserver.Chat
 				return;
 
 			Disposed = true;
-			await Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
-			await SlaveConnection.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
+			try
+			{
+				await Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
+				await SlaveConnection.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
+			} catch (WebSocketException) { }
+			
 			TokenSource.Cancel();
 
 			activeRelays.Remove(this);

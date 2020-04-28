@@ -24,7 +24,7 @@ namespace Webserver.Chat
 			Type commandType = (
 				from Type c in Commands
 				from CommandNameAttribute attr in c.GetCustomAttributes<CommandNameAttribute>()
-				where attr.Name == message.Type.ToString()
+				where attr.Name == message.Command
 				select c
 			).FirstOrDefault();
 			if (commandType == null)

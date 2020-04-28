@@ -44,7 +44,7 @@ namespace Webserver
 		}
 
 		/// <summary>
-		/// Converts a received server communication message into a Message object.
+		/// Converts a message into a Message object.
 		/// </summary>
 		/// <param name="buffer">The byte array containing the message.</param>
 		public static T FromBytes<T>(byte[] buffer) where T : Message => FromJson<T>(JObject.Parse(Encoding.UTF8.GetString(buffer)));
@@ -57,13 +57,14 @@ namespace Webserver
 		protected static T FromJson<T>(JObject json) where T : Message
 		{
 			//Check if all necessary keys are present.
-			if (!json.TryGetValue("MessageID", out string rawID) ||
-				!json.TryGetValue("Flags", out MessageFlags flags) ||
-				!json.TryGetValue("Type", out MessageType type) ||
-				!json.TryGetValue("Data", out JToken dataValue))
-			{
-				throw new JsonReaderException("Invalid JSON: missing/invalid keys");
-			}
+			if (!json.TryGetValue("MessageID", out string rawID))
+				throw new JsonReaderException("Invalid JSON: missing MessageID");
+			if (!json.TryGetValue("Flags", out MessageFlags flags))
+				throw new JsonReaderException("Invalid JSON: missing Flags");
+			if (!json.TryGetValue("Type", out MessageType type))
+				throw new JsonReaderException("Invalid JSON: missing Type");
+			if (!json.TryGetValue("Data", out JToken dataValue))
+				throw new JsonReaderException("Invalid JSON: missing Data");
 
 			var result = (T)Activator.CreateInstance(typeof(T), new object[] { type, null });
 
@@ -112,6 +113,9 @@ namespace Webserver
 	/// </summary>
 	public enum MessageType
 	{
+		//General
+		InvalidMessage,
+
 		// Load balancer message types
 		Timeout,
 		Discover,
@@ -125,7 +129,6 @@ namespace Webserver
 		DbSync,
 
 		//Chat
-		ChatroomInfo,
-		ChatMessage,
+		Chat,
 	}
 }

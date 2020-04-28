@@ -1,4 +1,3 @@
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using System;
@@ -19,7 +18,7 @@ namespace Webserver.Chat.Commands
 			var json = (JObject)Data;
 
 			//Check if the received message data is valid.
-			if (!json.TryGetValue("RoomID", out string rawChatroomID) ||
+			if (!json.TryGetValue("ChatroomID", out string rawChatroomID) ||
 				!Guid.TryParse(rawChatroomID, out Guid chatroomID) ||
 				!json.TryGetValue("MessageText", out string messageText)
 			)
@@ -36,7 +35,7 @@ namespace Webserver.Chat.Commands
 				return;
 			}
 
-			//Check if the user is allowed to send messages to this chatroom.
+			//Check if the user is allowed to access this chatroom.
 			if (!chatroom.CanUserAccess(ChatManagement.Database, Message.User))
 			{
 				Message.Reply(ChatStatusCode.ChatroomAccessDenied);
@@ -48,7 +47,7 @@ namespace Webserver.Chat.Commands
 			var logMessage = new Chatlog(Message.User, chatroom, messageText);
 			ChatManagement.Database.Insert(logMessage);
 
-			var serverMessage = new ServerMessage(MessageType.ChatMessage, logMessage.GetJson());
+			var serverMessage = new ServerMessage(MessageType.Chat, logMessage.GetJson());
 			ServerConnection.Broadcast(serverMessage);
 			UserMessageHandler(serverMessage);
 		}
@@ -60,13 +59,13 @@ namespace Webserver.Chat.Commands
 		public static void UserMessageHandler(ServerMessage message)
 		{
 			//Ignore everything other than messages with type ChatMessage
-			if (message.Type != MessageType.ChatMessage)
+			if (message.Type != MessageType.Chat)
 				return;
 
 			//Broadcast the data to all connected clients.
 			foreach (ChatConnection connection in ChatConnection.ActiveConnections)
 			{
-				var chatMessage = new ChatMessage(MessageType.ChatMessage, message.Data)
+				var chatMessage = new ChatMessage(MessageType.Chat, message.Data)
 				{
 					StatusCode = ChatStatusCode.OK
 				};

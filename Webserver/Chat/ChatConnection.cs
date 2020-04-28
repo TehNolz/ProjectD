@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using System;
@@ -7,6 +8,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -138,10 +140,11 @@ namespace Webserver.Chat
 				{
 					{"Name", chatroom.Name},
 					{"Private", chatroom.Private },
-					{"ID", chatroom.ID }
+					{"ID", chatroom.ID },
+					{"LastMessage", chatroom.GetLastMessage().ID }
 				});
 			}
-			Send(new ChatMessage(MessageType.ChatroomInfo, chatroomInfo));
+			Send(new ChatMessage(MessageType.Chat, chatroomInfo));
 		}
 
 		/// <summary>
@@ -181,7 +184,17 @@ namespace Webserver.Chat
 					await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
 					if (Client.WebSocket.State != WebSocketState.Open)
 						return;
-					ChatMessage message = Message.FromBytes<ChatMessage>(receiveBuffer);
+
+					ChatMessage message;
+					try
+					{
+						message = ChatMessage.FromBytes(receiveBuffer);
+					} catch (JsonReaderException e)
+					{
+						Send(new ChatMessage(MessageType.InvalidMessage, e.Message));
+						continue;
+					}
+					
 					message.Connection = this;
 					message.User = User;
 
@@ -193,7 +206,6 @@ namespace Webserver.Chat
 			}
 			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
 			{
-				Console.WriteLine("disposed");
 				Dispose();
 			}
 		}
@@ -280,7 +292,7 @@ namespace Webserver.Chat
 		/// Send chat messages to all chat clients connected to the system. This includes those connected to remote servers.
 		/// </summary>
 		/// <param name="message">The message that will be sent.</param>
-		public static void Broadcast(ChatMessage message) => ServerConnection.Broadcast(new ServerMessage(MessageType.ChatMessage, message));
+		public static void Broadcast(ChatMessage message) => ServerConnection.Broadcast(new ServerMessage(MessageType.Chat, message));
 
 		/// <summary>
 		/// Whether this connection was disposed.

@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 
 using System;
 using System.Collections.Generic;
-
+using System.Text;
 using Webserver.Models;
 
 namespace Webserver.Chat
@@ -14,17 +14,23 @@ namespace Webserver.Chat
 	public class ChatMessage : Message
 	{
 		/// <summary>
-		/// Create a new chat message
+		/// Internal constructor. Do not use.
 		/// </summary>
-		/// <param name="type">The type of this message</param>
-		/// <param name="data">The data attached to this message</param>
-		public ChatMessage(MessageType type, object data) : base(type, data){}
+		public ChatMessage(MessageType type, object data) : base(type, data) { }
 
 		/// <summary>
 		/// Create a new chat message
 		/// </summary>
-		/// <param name="type">The type of this message</param>
+		/// <param name="command">The command this message will call</param>
 		/// <param name="data">The data attached to this message</param>
+		public ChatMessage(string command, object data) : base(MessageType.Chat, data) {
+			Command = command;
+		}
+
+		/// <summary>
+		/// The command this message will call.
+		/// </summary>
+		public string Command { get; protected set; }
 
 		/// <summary>
 		/// The websocket connection that received this message.
@@ -77,8 +83,15 @@ namespace Webserver.Chat
 		{
 			JObject result = base.GetJson();
 			result.Add("StatusCode", (int)StatusCode);
+			result.Add("Command", Command);
 			return result;
 		}
+
+		/// <summary>
+		/// Converts a message into a ChatMessage object.
+		/// </summary>
+		/// <param name="buffer">The byte array containing the message.</param>
+		public static ChatMessage FromBytes(byte[] buffer) => FromJson(JObject.Parse(Encoding.UTF8.GetString(buffer)));
 
 		/// <summary>
 		/// Convert a JOBject into a ChatMessage, if possible.
@@ -87,10 +100,11 @@ namespace Webserver.Chat
 		/// <returns></returns>
 		public static ChatMessage FromJson(JObject json)
 		{
-			if (!json.TryGetValue("StatusCode", out ChatStatusCode statusCode))
-				throw new JsonReaderException("Invalid JSON: missing StatusCode");
+			json["Type"] = MessageType.Chat.ToString();
+			if (!json.TryGetValue("Command", out string command))
+				throw new JsonReaderException("Invalid JSON: missing Command");
 			ChatMessage result = FromJson<ChatMessage>(json);
-			result.StatusCode = statusCode;
+			result.Command = command;
 			return result;
 		}
 
@@ -100,7 +114,6 @@ namespace Webserver.Chat
 		/// <param name="data">The data to be transmitted. Can be any serializable object</param>
 		public void Reply(ChatStatusCode statusCode = ChatStatusCode.OK, dynamic data = null)
 		{
-			Program.Log.Debug($"{statusCode} --- {data?.ToString()}");
 			StatusCode = statusCode;
 			Data = data;
 			Flags |= MessageFlags.Reply;
