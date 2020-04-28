@@ -88,7 +88,7 @@ namespace Webserver
 				{ "MessageID", ID },
 				{ "Flags", (int)Flags },
 				{ "Type", Type.ToString() },
-				{ "Data", Data == null? null : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings) }
+				{ "Data", Data == null? null : (Data is JObject? Data : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings)) }
 			};
 
 		/// <summary>
