@@ -11,14 +11,15 @@ namespace Webserver.API.Endpoints.Feed
 		{
 			// Check if title and description are in the body
 			if (!((JObject)Data).TryGetValue("title", out string title) ||
-				!((JObject)Data).TryGetValue("description", out string description))
+				!((JObject)Data).TryGetValue("description", out string description) ||
+				!((JObject)Data).TryGetValue("category", out string category))
 			{
 				Response.Send("Missing fields", HttpStatusCode.BadRequest);
 				return;
 			}
 
 			// Create a new feed item
-			var feedItem = new FeedItem(Database, title, description);
+			var feedItem = new FeedItem(Database, title, description, category);
 
 			// Store feed item in the database
 			Database.Insert(feedItem);

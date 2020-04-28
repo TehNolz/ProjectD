@@ -17,7 +17,7 @@ namespace Webserver.API.Endpoints.Feed
             }
 
 			// Get the feed item from the database
-			var feedItem = Database.Select<FeedItem>("ID = @id", new { id = Params["id"][0] }).FirstOrDefault();
+			var feedItem = FeedItem.GetFeedItemByID(Database, int.Parse(Params["id"][0]));
 
             // Check if the feed item exists
             if (feedItem == null)
