@@ -168,7 +168,7 @@ namespace Webserver.Chat
 					await Client.WebSocket.SendAsync(receiveBuffer, WebSocketMessageType.Text, true, TokenSource.Token);
 				}
 			}
-			catch (Exception e) when (e is WebException || e is TaskCanceledException)
+			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
 			{
 				Dispose();
 			}
