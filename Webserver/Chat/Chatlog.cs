@@ -66,7 +66,7 @@ namespace Webserver.Chat
 				{ "User", User },
 				{"Chatroom", Chatroom },
 				{"Date", Date },
-				{"Text", "Text" }
+				{"Text", Text }
 		};
 	}
 }
