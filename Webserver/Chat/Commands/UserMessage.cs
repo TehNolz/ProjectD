@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using System;
@@ -20,7 +21,7 @@ namespace Webserver.Chat.Commands
 			//Check if the received message data is valid.
 			if (!json.TryGetValue("RoomID", out string rawChatroomID) ||
 				!Guid.TryParse(rawChatroomID, out Guid chatroomID) ||
-				!json.TryGetValue("MessageText", out string _)
+				!json.TryGetValue("MessageText", out string messageText)
 			)
 			{
 				Message.Reply(ChatStatusCode.BadMessageData);
@@ -43,9 +44,11 @@ namespace Webserver.Chat.Commands
 			}
 
 			//At this point we're 100% certain the user is allowed to send a message to this channel. So let's get on with it;
-			Message.ID = Guid.Empty;
-			Message.Connection = null;
-			var serverMessage = new ServerMessage(MessageType.ChatMessage, Message);
+			//Convert the message into a Chatlog object and store it in the database
+			var logMessage = new Chatlog(Message.User, chatroom, messageText);
+			ChatManagement.Database.Insert(logMessage);
+
+			var serverMessage = new ServerMessage(MessageType.ChatMessage, logMessage.GetJson());
 			ServerConnection.Broadcast(serverMessage);
 			UserMessageHandler(serverMessage);
 		}
@@ -62,7 +65,7 @@ namespace Webserver.Chat.Commands
 
 			//Broadcast the data to all connected clients.
 			foreach (ChatConnection connection in ChatConnection.ActiveConnections)
-				connection.Send((ChatMessage)message.Data);
+				connection.Send(new ChatMessage(MessageType.ChatMessage, message.Data));
 		}
 	}
 }
