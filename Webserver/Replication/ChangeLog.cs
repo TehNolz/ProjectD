@@ -1,12 +1,12 @@
 using Database.SQLite;
+
 using Newtonsoft.Json.Linq;
-using Org.BouncyCastle.Math.EC.Rfc7748;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 
 namespace Webserver.Replication
@@ -62,15 +62,16 @@ namespace Webserver.Replication
 			if (changes.ID <= Version)
 				throw new ArgumentException($"The given {nameof(Changes)} object is already present in the changelog.");
 
+			// Block until it is this id's turn to be applied
 			if (changes.ID.HasValue)
-			{
 				synchronizer.WaitUntilReady(changes.ID.Value);
-			}
 
 			if (applyChanges)
 			{
+				Program.Log.Debug($"Applying {changes} with type {changes.Type.Value}");
+
 				// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
-				dynamic[] items = changes.Collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+				dynamic[] items = changes.Collection?.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
 
 				// Apply changes
 				switch (changes.Type)
@@ -93,10 +94,17 @@ namespace Webserver.Replication
 							new[] { items }
 						);
 						break;
+					case ChangeType.DELETE | ChangeType.WithCondition:
+						Utils.InvokeGenericMethod<int>((Func<string, int>)database.Delete<object>,
+							changes.CollectionType,
+							new[] { changes.Data }
+						);
+						break;
 					default:
 						throw new ArgumentOutOfRangeException(nameof(changes.Type));
 				}
-				changes.Collection = JArray.FromObject(items);
+				changes.Collection = items is null ? null : JArray.FromObject(items);
+
 			}
 
 			// Push the changes onto the stack

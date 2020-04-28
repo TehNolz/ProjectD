@@ -1,14 +1,15 @@
-using System.Collections.Generic;
-using System.Linq;
-using Webserver.LoadBalancer;
-using System.Security.Cryptography;
-using Database.SQLite;
-using System.IO;
 using Database.SQLite.Modeling;
-using Newtonsoft.Json.Linq;
-using System;
-using System.Reflection;
+
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
+
+using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
 {
@@ -32,20 +33,19 @@ namespace Webserver.Replication
 				_collectionTypeName = value;
 			}
 		}
-		public string CollectionJSON
+		public string Data
 		{
-			get => _collectionJSON;
+			get => _data;
 			set
 			{
 				_collection = null;
-				_collectionJSON = value;
+				_data = value;
 			}
 		}
-		public string Condition { get; set; }
 
 		private string _collectionTypeName;
 		private Type _collectionType;
-		private string _collectionJSON;
+		private string _data;
 		private JArray _collection;
 
 		public virtual Type CollectionType
@@ -66,14 +66,14 @@ namespace Webserver.Replication
 		{
 			get
 			{
-				if (_collection is null)
-					_collection = JArray.Parse(CollectionJSON);
+				if (_collection is null && !(Type?.HasFlag(ChangeType.WithCondition) ?? true))
+					_collection = JArray.Parse(Data);
 				return _collection;
 			}
 			set
 			{
+				_data = value?.ToString(Formatting.None);
 				_collection = value;
-				CollectionJSON = value?.ToString(Formatting.None);
 			}
 		}
 		public virtual Message Source { get; }
@@ -97,10 +97,11 @@ namespace Webserver.Replication
 		/// <param name="data">The data to deserialize.</param>
 		protected Changes(dynamic data)
 		{
+			// TODO Use JArray to decrease message size
 			ID = (long?)data.ID;
 			Type = Enum.Parse<ChangeType>((string)data.Type);
 			CollectionTypeName = (string)data.ItemType;
-			Collection = (JArray)data.Items;
+			Data = (string)data.Data;
 		}
 
 		/// <summary>
@@ -140,7 +141,7 @@ namespace Webserver.Replication
 			if (!Balancer.IsMaster)
 			{
 				var newChanges = new Changes(new Message(MessageType.DbChange, (JObject)this).SendAndWait(Balancer.MasterServer));
-				CollectionJSON = newChanges.CollectionJSON;
+				Data = newChanges.Data;
 				ID = newChanges.ID;
 			}
 		}
@@ -151,15 +152,24 @@ namespace Webserver.Replication
 				{ "ID", changes.ID },
 				{ "Type", changes.Type.ToString() },
 				{ "ItemType", changes.CollectionTypeName },
-				{ "Items", changes.Collection },
+				{ "Data", changes.Data },
 			};
 		public static explicit operator Changes(JObject jObject) => new Changes(jObject);
 	}
 	
+	/// <summary>
+	/// Represents the different variants of <see cref="Changes"/> instances.
+	/// </summary>
+	/// <remarks>
+	/// Flags <see cref="INSERT"/>, <see cref="UPDATE"/> and <see cref="DELETE"/> are
+	/// mutually exclusive.
+	/// </remarks>
+	[Flags]
 	public enum ChangeType
 	{
-		INSERT,
-		UPDATE,
-		DELETE
+		INSERT = 0b00000001,
+		UPDATE = 0b00000011,
+		DELETE = 0b00000111,
+		WithCondition = 1<<3
 	}
 }

@@ -82,7 +82,6 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				// Create the Changes object
 				changes = new Changes()
 				{
 					Type = ChangeType.INSERT,
@@ -90,10 +89,10 @@ namespace Webserver.Replication
 					Collection = JArray.FromObject(items)
 				};
 
-				// Broadcast the changes if this server is not a master
+				// Synchronize the changes if this server is not a master
 				if (BroadcastChanges && !Balancer.IsMaster)
 				{
-					// Get a message containing an updated collection
+					// Sync to also update the changes object
 					changes.Synchronize();
 
 					// Swap the elements in the collections
@@ -145,6 +144,161 @@ namespace Webserver.Replication
 			}
 		}
 
+		public override int Delete<T>(string condition, [AllowNull] object param)
+		{
+			Changes changes = null;
+			try
+			{
+				changes = new Changes()
+				{
+					Type = ChangeType.DELETE | ChangeType.WithCondition,
+					CollectionType = typeof(T),
+					Data = condition
+				};
+
+				// Synchronize the changes if this server is not a master
+				if (BroadcastChanges && !Balancer.IsMaster)
+					changes.Synchronize();
+
+				// Lock this in order to syncronize the insert with the change push
+				int @out;
+				lock (this)
+				{
+					// Slaves that broadcast their changes must first push their changes
+					// in order to synchronize the database modifications.
+					if (BroadcastChanges && !Balancer.IsMaster)
+					{
+						changelog.Push(changes, false);
+						@out = base.Delete<T>(condition, param);
+					}
+					// Masters insert first to confirm that the query works
+					else
+					{
+						@out = base.Delete<T>(condition, param);
+						changelog.Push(changes, false);
+					}
+				}
+				return @out;
+			}
+			catch (Exception)
+			{
+				// Set changes to null to skip broadcasting to the other servers
+				changes = null;
+				throw;
+			}
+			finally
+			{
+				if (BroadcastChanges && changes != null && Balancer.IsMaster)
+				{
+					// Send the message to all other servers
+					changes.Broadcast();
+				}
+			}
+		}
+		public override int Delete<T>(IList<T> items)
+		{
+			Changes changes = null;
+			try
+			{
+				changes = new Changes()
+				{
+					Type = ChangeType.DELETE,
+					CollectionType = typeof(T),
+					Collection = JArray.FromObject(items)
+				};
+
+				// Synchronize the changes if this server is not a master
+				if (BroadcastChanges && !Balancer.IsMaster)
+					changes.Synchronize();
+
+				// Lock this in order to syncronize the insert with the change push
+				int @out;
+				lock (this)
+				{
+					// Slaves that broadcast their changes must first push their changes
+					// in order to synchronize the database modifications.
+					if (BroadcastChanges && !Balancer.IsMaster)
+					{
+						changelog.Push(changes, false);
+						@out = base.Delete(items);
+					}
+					// Masters insert first to confirm that the query works
+					else
+					{
+						@out = base.Delete(items);
+						changelog.Push(changes, false);
+					}
+				}
+				return @out;
+			}
+			catch (Exception)
+			{
+				// Set changes to null to skip broadcasting to the other servers
+				changes = null;
+				throw;
+			}
+			finally
+			{
+				if (BroadcastChanges && changes != null && Balancer.IsMaster)
+				{
+					// Send the message to all other servers
+					changes.Broadcast();
+				}
+			}
+		}
+
+		public override int Update<T>(IList<T> items)
+		{
+			Changes changes = null;
+			try
+			{
+				changes = new Changes()
+				{
+					Type = ChangeType.UPDATE,
+					CollectionType = typeof(T),
+					Collection = JArray.FromObject(items)
+				};
+
+				// Synchronize the changes if this server is not a master
+				if (BroadcastChanges && !Balancer.IsMaster)
+					changes.Synchronize();
+
+				// Lock this in order to syncronize the insert with the change push
+				int @out;
+				lock (this)
+				{
+					// Slaves that broadcast their changes must first push their changes
+					// in order to synchronize the database modifications.
+					if (BroadcastChanges && !Balancer.IsMaster)
+					{
+						changelog.Push(changes, false);
+						@out = base.Update(items);
+					}
+					// Masters insert first to confirm that the query works
+					else
+					{
+						@out = base.Update(items);
+						changelog.Push(changes, false);
+					}
+				}
+				return @out;
+			}
+			catch (Exception)
+			{
+				// Set changes to null to skip broadcasting to the other servers
+				changes = null;
+				throw;
+			}
+			finally
+			{
+				if (BroadcastChanges && changes != null && Balancer.IsMaster)
+				{
+					// Send the message to all other servers
+					changes.Broadcast();
+				}
+			}
+		}
+
 		/// <summary>
 		/// Retrieves all new changes from the master server and applies them.
 		/// </summary>
@@ -153,16 +307,9 @@ namespace Webserver.Replication
 			if (Balancer.IsMaster)
 				throw new InvalidOperationException();
 
-			//var totalTimer = new Stopwatch();
-			//totalTimer.Start();
-
 			// Get the amount of new changes to request
 			long updateCount = new Message(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data.Version - changelog.Version;
-
-			//totalTimer.Stop();
-			//var ping = totalTimer.ElapsedMilliseconds;
-			//Log.Debug($"Applying {updateCount} changes. Chunksize: {SynchronizeChunkSize}, Ping: {totalTimer.Format()}");
-
+			
 			lock (this)
 			{
 				SQLiteTransaction databaseTransaction = changelog.database.Connection.BeginTransaction();
@@ -171,27 +318,14 @@ namespace Webserver.Replication
 				int chunkSize = SynchronizeChunkSize; // Copy the value to keep things thread-safe
 				long interval = Math.Max(1, (long)(updateCount / (Console.WindowWidth * 0.8))); // Interval for refreshing the progress bar
 
-				//var chunkTimer = new Stopwatch();
-				//var IOTimer = new Stopwatch();
-				//totalTimer.Restart();
-
-				//var chunkTimes = new List<long>();
-				//var IOTimes = new List<long>();
-
 				for (long l = 0; l < updateCount;)
 				{
-					//IOTimer.Restart();
-
 					// Request another chunk of updates
 					JArray updates = new Message(
 						MessageType.DbSync,
 						new { changelog.Version, Amount = Math.Min(updateCount - l, chunkSize) }
 					).SendAndWait(Balancer.MasterServer).Data;
 					
-					//IOTimes.Add(IOTimer.ElapsedMilliseconds);
-
-					//chunkTimer.Restart();
-
 					// Apply each update, increment l and occasionally update the progressbar
 					foreach (Changes update in updates.Select(x => (Changes)x))
 					{
@@ -199,30 +333,11 @@ namespace Webserver.Replication
 						if (l++ % interval == 0) Utils.ProgressBar(l, updateCount);
 					}
 
-					//chunkTimes.Add(chunkTimer.ElapsedMilliseconds);
 					Utils.ProgressBar(l, updateCount);
 				}
-				//totalTimer.Stop();
-
-				//StreamWriter writer = File.AppendText("stats.csv");
-				//writer.WriteLine(string.Join(',',
-				//	chunkSize,
-				//	totalTimer.ElapsedMilliseconds,
-				//	chunkTimes.Max(),
-				//	chunkTimes.Average(),
-				//	chunkTimes.Min(),
-				//	IOTimes.Max(),
-				//	IOTimes.Average(),
-				//	IOTimes.Min(),
-				//	ping
-				//));
-				//writer.Dispose();
 				
 				databaseTransaction.Commit();
 				changelogTransaction.Commit();
-
-				changelog.Dispose();
-				changelog = new ChangeLog(this);
 
 				Utils.ClearProgressBar();
 			}
