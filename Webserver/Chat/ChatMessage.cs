@@ -18,10 +18,13 @@ namespace Webserver.Chat
 		/// </summary>
 		/// <param name="type">The type of this message</param>
 		/// <param name="data">The data attached to this message</param>
-		public ChatMessage(MessageType type, object data) : base(type, data)
-		{
-			ID = Guid.NewGuid();
-		}
+		public ChatMessage(MessageType type, object data) : base(type, data){}
+
+		/// <summary>
+		/// Create a new chat message
+		/// </summary>
+		/// <param name="type">The type of this message</param>
+		/// <param name="data">The data attached to this message</param>
 
 		/// <summary>
 		/// The websocket connection that received this message.
@@ -73,7 +76,7 @@ namespace Webserver.Chat
 		public override JObject GetJson()
 		{
 			JObject result = base.GetJson();
-			result.Add("StatusCode", StatusCode.ToString());
+			result.Add("StatusCode", (int)StatusCode);
 			return result;
 		}
 

@@ -65,7 +65,13 @@ namespace Webserver.Chat.Commands
 
 			//Broadcast the data to all connected clients.
 			foreach (ChatConnection connection in ChatConnection.ActiveConnections)
-				connection.Send(new ChatMessage(MessageType.ChatMessage, message.Data));
+			{
+				var chatMessage = new ChatMessage(MessageType.ChatMessage, message.Data)
+				{
+					StatusCode = ChatStatusCode.OK
+				};
+				connection.Send(chatMessage);
+			}
 		}
 	}
 }
