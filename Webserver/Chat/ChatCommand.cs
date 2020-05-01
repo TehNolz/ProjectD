@@ -27,7 +27,7 @@ namespace Webserver.Chat
 		/// Specifies the minimum permission level the user needs to use this command.
 		/// </summary>
 		/// TODO Merge with API's PermissionAttribute?
-		[AttributeUsage(AttributeTargets.Method)]
+		[AttributeUsage(AttributeTargets.Class)]
 		public class PermissionAttribute : Attribute
 		{
 			public PermissionLevel PermissionLevel { get; }

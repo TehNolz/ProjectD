@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.WebSockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,7 +15,7 @@ namespace Webserver.Chat
 	/// <summary>
 	/// Relay thread for websocket connections. Used by the load balancer to relay incoming websocket connections to slaves.
 	/// </summary>
-	class WebSocketRelay : IDisposable
+	internal class WebSocketRelay : IDisposable
 	{
 		/// <summary>
 		/// All active websocket relays.
@@ -193,8 +192,9 @@ namespace Webserver.Chat
 			{
 				await Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
 				await SlaveConnection.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
-			} catch (WebSocketException) { }
-			
+			}
+			catch (WebSocketException) { }
+
 			TokenSource.Cancel();
 
 			activeRelays.Remove(this);

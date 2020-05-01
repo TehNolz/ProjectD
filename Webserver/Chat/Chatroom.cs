@@ -1,6 +1,8 @@
 using Database.SQLite;
 using Database.SQLite.Modeling;
 
+using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -69,6 +71,18 @@ namespace Webserver.Chat
 		/// <param name="amount"></param>
 		/// <returns></returns>
 		public List<Chatlog> GetChatHistory(int start, int amount) => Chatlog.GetChatlog(this, start, amount).ToList();
+
+		/// <summary>
+		/// Returns a JSON representation of this chatroom.
+		/// </summary>
+		/// <returns></returns>
+		public JObject GetJson() => new JObject()
+			{
+				{"Name", Name},
+				{"Private", Private },
+				{"ID", ID },
+				{"LastMessage", GetLastMessage().ID }
+			};
 	}
 
 	public class ChatroomMembership

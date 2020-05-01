@@ -17,7 +17,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		/// Call base ClassInit because it can't be inherited
 		/// </summary>
 		[ClassInitialize]
-		public new static void ClassInit(TestContext C) => APITestMethods.ClassInit(C);
+		public static new void ClassInit(TestContext C) => APITestMethods.ClassInit(C);
 
 		/// <summary>
 		/// Check if we can retrieve a single user when given valid arguments

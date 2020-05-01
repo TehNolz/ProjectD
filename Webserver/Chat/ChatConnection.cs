@@ -8,7 +8,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -42,7 +41,7 @@ namespace Webserver.Chat
 		/// <summary>
 		/// The chatrooms this user has joined.
 		/// </summary>
-		public ConcurrentBag<Chatroom> Chatrooms;
+		public List<Chatroom> Chatrooms;
 
 		/// <summary>
 		/// The user this connection belongs to.
@@ -108,7 +107,7 @@ namespace Webserver.Chat
 			#endregion
 
 			//Get all the chatrooms this user is a part of.
-			Chatrooms = new ConcurrentBag<Chatroom>(ChatManagement.Database.Select<Chatroom>("Private = false"));
+			Chatrooms = new List<Chatroom>(ChatManagement.Database.Select<Chatroom>("Private = false"));
 
 			//Open the connection.
 			OpenConnection();
@@ -135,16 +134,8 @@ namespace Webserver.Chat
 			//Send channel info to the client.
 			var chatroomInfo = new JArray();
 			foreach (Chatroom chatroom in Chatrooms)
-			{
-				chatroomInfo.Add(new JObject()
-				{
-					{"Name", chatroom.Name},
-					{"Private", chatroom.Private },
-					{"ID", chatroom.ID },
-					{"LastMessage", chatroom.GetLastMessage().ID }
-				});
-			}
-			Send(new ChatMessage(MessageType.Chat, chatroomInfo));
+				chatroomInfo.Add(chatroom.GetJson());
+			Send(new ChatMessage(MessageType.ChatroomUpdate, chatroomInfo));
 		}
 
 		/// <summary>
@@ -189,12 +180,13 @@ namespace Webserver.Chat
 					try
 					{
 						message = ChatMessage.FromBytes(receiveBuffer);
-					} catch (JsonReaderException e)
+					}
+					catch (JsonReaderException e)
 					{
 						Send(new ChatMessage(MessageType.InvalidMessage, e.Message));
 						continue;
 					}
-					
+
 					message.Connection = this;
 					message.User = User;
 

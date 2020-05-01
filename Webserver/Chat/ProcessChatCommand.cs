@@ -41,7 +41,7 @@ namespace Webserver.Chat
 			MethodInfo executor = commandType.GetMethod("Execute");
 
 			//If this command requires a specific permission, check if the user is allowed to use this command.
-			PermissionAttribute attribute = executor.GetCustomAttribute<PermissionAttribute>();
+			PermissionAttribute attribute = commandType.GetCustomAttribute<PermissionAttribute>();
 			if (attribute != null)
 			{
 				if (message.User.PermissionLevel < attribute.PermissionLevel)

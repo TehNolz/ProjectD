@@ -12,7 +12,7 @@ using static Webserver.Program;
 
 namespace Webserver.LoadBalancer
 {
-	class Listener
+	internal class Listener
 	{
 		/// <summary>
 		/// Listener thread. Waits for incoming HTTP requests and relays them to slaves.

@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Text;
+
 using Webserver.Models;
 
 namespace Webserver.Chat
@@ -23,7 +24,8 @@ namespace Webserver.Chat
 		/// </summary>
 		/// <param name="command">The command this message will call</param>
 		/// <param name="data">The data attached to this message</param>
-		public ChatMessage(string command, object data) : base(MessageType.Chat, data) {
+		public ChatMessage(string command, object data) : base(MessageType.ChatMessage, data)
+		{
 			Command = command;
 		}
 
@@ -100,7 +102,7 @@ namespace Webserver.Chat
 		/// <returns></returns>
 		public static ChatMessage FromJson(JObject json)
 		{
-			json["Type"] = MessageType.Chat.ToString();
+			json["Type"] = MessageType.ChatMessage.ToString();
 			if (!json.TryGetValue("Command", out string command))
 				throw new JsonReaderException("Invalid JSON: missing Command");
 			ChatMessage result = FromJson<ChatMessage>(json);

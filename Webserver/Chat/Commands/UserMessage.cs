@@ -47,25 +47,28 @@ namespace Webserver.Chat.Commands
 			var logMessage = new Chatlog(Message.User, chatroom, messageText);
 			ChatManagement.Database.Insert(logMessage);
 
-			var serverMessage = new ServerMessage(MessageType.Chat, logMessage.GetJson());
+			var serverMessage = new ServerMessage(MessageType.ChatMessage, logMessage.GetJson());
 			ServerConnection.Broadcast(serverMessage);
 			UserMessageHandler(serverMessage);
 		}
 
 		/// <summary>
-		/// Event handler for ChatMessage events. Sends 
+		/// Event handler for ChatMessage events. Sends received chat messages to all connected clients.
 		/// </summary>
 		/// <param name="message"></param>
 		public static void UserMessageHandler(ServerMessage message)
 		{
 			//Ignore everything other than messages with type ChatMessage
-			if (message.Type != MessageType.Chat)
+			if (message.Type != MessageType.ChatMessage)
 				return;
 
 			//Broadcast the data to all connected clients.
 			foreach (ChatConnection connection in ChatConnection.ActiveConnections)
 			{
-				var chatMessage = new ChatMessage(MessageType.Chat, message.Data)
+				if (!connection.Chatrooms.Contains(message.Data.Chatroom))
+					continue;
+
+				var chatMessage = new ChatMessage(MessageType.ChatMessage, message.Data)
 				{
 					StatusCode = ChatStatusCode.OK
 				};

@@ -45,6 +45,7 @@ namespace Webserver.LoadBalancer
 
 			//Chat system events
 			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
+			ServerConnection.MessageReceived += EditChatroom.ChatroomUpdateHandler;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);

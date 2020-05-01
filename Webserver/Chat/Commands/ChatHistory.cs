@@ -1,15 +1,12 @@
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using Webserver.LoadBalancer;
 
 namespace Webserver.Chat.Commands
 {
 	[CommandName("ChatHistory")]
-	class ChatHistory : ChatCommand
+	internal class ChatHistory : ChatCommand
 	{
 		public override void Execute()
 		{

@@ -35,6 +35,7 @@ namespace Webserver.LoadBalancer
 
 			//Chat system events
 			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
+			ServerConnection.MessageReceived += EditChatroom.ChatroomUpdateHandler;
 
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));

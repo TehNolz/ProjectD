@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using Webserver.Models;
 
 namespace Webserver.Chat
@@ -105,7 +106,7 @@ namespace Webserver.Chat
 				throw new ArgumentNullException(nameof(chatroom));
 
 			//Lol what is "MAX"? Never heard of it /s
-			return ChatManagement.Database.Select<Chatlog>("Chatroom = @chatroom ORDER BY ID LIMIT 1", new{ chatroom = chatroom.ID }).FirstOrDefault();
+			return ChatManagement.Database.Select<Chatlog>("Chatroom = @chatroom ORDER BY ID LIMIT 1", new { chatroom = chatroom.ID }).FirstOrDefault();
 		}
 	}
 }
