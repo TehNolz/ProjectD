@@ -12,6 +12,7 @@ namespace Webserver.Models
 	{
 		[Primary]
 		public Guid ID { get; set; } = Guid.NewGuid();
+		public string Username { get; set; }
 		public string Email { get; set; }
 		public string PasswordHash { get; set; }
 		public PermissionLevel PermissionLevel { get; set; } = PermissionLevel.User;
@@ -29,8 +30,9 @@ namespace Webserver.Models
 		public User(SQLiteAdapter database, string email, string password)
 		{
 			Email = email;
+			Username = email.Split('@').First();
 			PasswordHash = CreateHash(password, email);
-			database.Insert<User>(this);
+			database.Insert(this);
 		}
 
 		/// <summary>

@@ -30,7 +30,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		}
 
 		[SuppressMessage("Code Quality", "IDE0051")]
-		static IEnumerable<object[]> InvalidPatchTestData => new[]{
+		private static IEnumerable<object[]> InvalidPatchTestData => new[]{
 			//Change administrator name
 			new object[] {
 				new JObject() {

@@ -32,7 +32,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		}
 
 		[SuppressMessage("Code Quality", "IDE0051")]
-		static IEnumerable<object[]> InvalidPostTestData => new[]{
+		private static IEnumerable<object[]> InvalidPostTestData => new[]{
 
 			//Bad email
 			new object[] {

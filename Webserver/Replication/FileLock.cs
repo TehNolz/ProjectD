@@ -123,7 +123,7 @@ namespace Webserver.Replication
 		#region IDisposable Support
 		private bool isDisposed = false; // To detect redundant calls
 
-		void Dispose(bool disposing)
+		private void Dispose(bool disposing)
 		{
 			if (!isDisposed)
 			{

@@ -9,7 +9,7 @@ using System.Security.Cryptography;
 
 namespace Webserver
 {
-	class Integrity
+	internal class Integrity
 	{
 		/// <summary>
 		/// Checks file integrity for the given directory, comparing it with the MD5 hashes stored in Checksums.json.
