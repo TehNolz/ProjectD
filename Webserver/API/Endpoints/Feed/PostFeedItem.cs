@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using Newtonsoft.Json.Linq;
 using Webserver.Models;
@@ -18,8 +19,16 @@ namespace Webserver.API.Endpoints.Feed
 				return;
 			}
 
+			// Check if the given category is a valid feed item category.
+			if (!FeedItem.IsCategoryValid(category))
+			{
+				Response.Send("Category " + category + " not supported", HttpStatusCode.BadRequest);
+				return;
+			}
+
 			// Create a new feed item
-			var feedItem = new FeedItem(Database, title, description, category);
+			FeedItem.FeedItemCategory categoryEnum = FeedItem.GetFeedItemCategoryFromString(category);
+			var feedItem = new FeedItem(Database, title, description, categoryEnum);
 
 			// Store feed item in the database
 			Database.Insert(feedItem);
