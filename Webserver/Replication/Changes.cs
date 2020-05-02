@@ -1,22 +1,29 @@
-using System.Collections.Generic;
-using System.Linq;
-using Webserver.LoadBalancer;
-using System.Security.Cryptography;
-using Database.SQLite;
-using System.IO;
 using Database.SQLite.Modeling;
-using Newtonsoft.Json.Linq;
-using System;
-using System.Reflection;
+
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
+
+using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
 {
+	/// <summary>
+	/// Represents all changes made to a <see cref="ServerDatabase"/>. Instances of this class can
+	/// be stored in a <see cref="ChangeLog"/>.
+	/// <para/>
+	/// This class uses JSON serialization to store the data related to the query.
+	/// </summary>
 	public class Changes
 	{
 		[Primary]
-		public long? Id { get; set; }
-		public ChangeType Type { get; set; }
+		public long? ID { get; set; }
+		public ChangeType? Type { get; set; }
 		public string CollectionTypeName
 		{
 			get => _collectionTypeName;
@@ -26,11 +33,20 @@ namespace Webserver.Replication
 				_collectionTypeName = value;
 			}
 		}
-		public string CollectionJSON { get; set; }
-		public string Condition { get; set; }
+		public string Data
+		{
+			get => _data;
+			set
+			{
+				_collection = null;
+				_data = value;
+			}
+		}
 
 		private string _collectionTypeName;
 		private Type _collectionType;
+		private string _data;
+		private JArray _collection;
 
 		public virtual Type CollectionType
 		{
@@ -48,22 +64,52 @@ namespace Webserver.Replication
 		}
 		public virtual JArray Collection
 		{
-			get => JArray.Parse(CollectionJSON);
-			set => CollectionJSON = value.ToString(Formatting.None);
+			get
+			{
+				if (_collection is null && !(Type?.HasFlag(ChangeType.WithCondition) ?? true))
+					_collection = JArray.Parse(Data);
+				return _collection;
+			}
+			set
+			{
+				_data = value?.ToString(Formatting.None);
+				_collection = value;
+			}
 		}
 		public virtual Message Source { get; }
 
+		/// <summary>
+		/// Initializes a new instance of <see cref="Changes"/>.
+		/// </summary>
 		public Changes() { }
-
-		public Changes(Message message)
+		/// <summary>
+		/// Initializes a new instance of <see cref="Changes"/> by deserializing the given
+		/// <paramref name="message"/> object.
+		/// </summary>
+		/// <param name="message">The message to deserialize.</param>
+		public Changes(Message message) : this((JObject)message.Data)
 		{
 			Source = message;
-			Id = message.Data.Id;
-			Type = Enum.Parse<ChangeType>(message.Data.Type);
-			CollectionTypeName = message.Data.ItemType;
-			CollectionJSON = message.Data.Items;
+		}
+		/// <summary>
+		/// Deserializes the given <paramref name="data"/> into a new instance of <see cref="Changes"/>.
+		/// </summary>
+		/// <param name="data">The data to deserialize.</param>
+		protected Changes(dynamic data)
+		{
+			// TODO Use JArray to decrease message size
+			ID = (long?)data.ID;
+			Type = Enum.Parse<ChangeType>((string)data.Type);
+			CollectionTypeName = (string)data.ItemType;
+			Data = (string)data.Data;
 		}
 
+		/// <summary>
+		/// Sends the data of this <see cref="Changes"/> instance to all other servers.
+		/// <para/>
+		/// If this <see cref="Changes"/> instance was serialized from a <see cref="Message"/>
+		/// object, a reply will be sent to <see cref="Source"/>.
+		/// </summary>
 		public void Broadcast()
 		{
 			if (Source is null)
@@ -82,8 +128,7 @@ namespace Webserver.Replication
 				);
 			}
 		}
-		private void Broadcast(IEnumerable<ServerConnection> servers)
-			=> ServerConnection.Send(servers, new Message(MessageType.DbChange, (JObject)this));
+		private void Broadcast(IEnumerable<ServerConnection> servers) => ServerConnection.Send(servers, new Message(MessageType.DbChange, (JObject)this));
 
 		/// <summary>
 		/// Synchronizes these changes with the master server.
@@ -96,24 +141,35 @@ namespace Webserver.Replication
 			if (!Balancer.IsMaster)
 			{
 				var newChanges = new Changes(new Message(MessageType.DbChange, (JObject)this).SendAndWait(Balancer.MasterServer));
-				CollectionJSON = newChanges.CollectionJSON;
-				Id = newChanges.Id;
+				Data = newChanges.Data;
+				ID = newChanges.ID;
 			}
 		}
 
+		public override string ToString() => $"{GetType().Name}<{ID}>";
+
 		public static explicit operator JObject(Changes changes) => new JObject() {
-				{ "Id", changes.Id },
+				{ "ID", changes.ID },
 				{ "Type", changes.Type.ToString() },
 				{ "ItemType", changes.CollectionTypeName },
-				{ "Items", changes.CollectionJSON },
+				{ "Data", changes.Data },
 			};
+		public static explicit operator Changes(JObject jObject) => new Changes(jObject);
 	}
-
+	
+	/// <summary>
+	/// Represents the different variants of <see cref="Changes"/> instances.
+	/// </summary>
+	/// <remarks>
+	/// Flags <see cref="INSERT"/>, <see cref="UPDATE"/> and <see cref="DELETE"/> are
+	/// mutually exclusive.
+	/// </remarks>
+	[Flags]
 	public enum ChangeType
 	{
-		None = default,
-		INSERT,
-		UPDATE,
-		DELETE
+		INSERT = 0b00000001,
+		UPDATE = 0b00000011,
+		DELETE = 0b00000111,
+		WithCondition = 1<<3
 	}
 }
