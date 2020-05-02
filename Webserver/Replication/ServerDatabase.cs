@@ -1,18 +1,16 @@
 using Database.SQLite;
+
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Data.SQLite;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading;
-using Webserver.LoadBalancer;
 
-using static Webserver.Program;
+using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
 {
@@ -26,6 +24,8 @@ namespace Webserver.Replication
 	{
 		/// <inheritdoc cref="ChangeLog.Version"/>
 		public long Version => changelog.Version;
+		/// <inheritdoc cref="ChangeLog.TypeList"/>
+		public ReadOnlyCollection<ModelType> TypeList => changelog.TypeList;
 
 		/// <summary>
 		/// Gets or sets the maximum amount of changes that are requested each time
@@ -82,11 +82,10 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes()
+				changes = new Changes(items as IList<object>)
 				{
 					Type = ChangeType.INSERT,
-					CollectionType = typeof(T),
-					Collection = JArray.FromObject(items)
+					CollectionType = typeof(T)
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -120,7 +119,7 @@ namespace Webserver.Replication
 						@out = base.Insert(items);
 
 						// Update the collection in the changes
-						changes.Collection = JArray.FromObject(items);
+						changes.SetCollection(items as IList<object>);
 
 						// Store the new changes
 						changelog.Push(changes, false);
@@ -200,11 +199,10 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes()
+				changes = new Changes(items as IList<object>)
 				{
 					Type = ChangeType.DELETE,
-					CollectionType = typeof(T),
-					Collection = JArray.FromObject(items)
+					CollectionType = typeof(T)
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -252,11 +250,10 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes()
+				changes = new Changes(items as IList<object>)
 				{
 					Type = ChangeType.UPDATE,
-					CollectionType = typeof(T),
-					Collection = JArray.FromObject(items)
+					CollectionType = typeof(T)
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -307,39 +304,50 @@ namespace Webserver.Replication
 			if (Balancer.IsMaster)
 				throw new InvalidOperationException();
 
-			// Get the amount of new changes to request
-			long updateCount = new Message(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data.Version - changelog.Version;
-			
+			// Get the amount of new changes to request and the typelist from the master
+			dynamic data = new Message(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data;
+
+			long updateCount = data.Version - changelog.Version;
+			var types = ((JArray)data.Types).Select(x => x.ToObject<ModelType>()).ToDictionary(x => x.ID);
+
 			lock (this)
 			{
-				SQLiteTransaction databaseTransaction = changelog.database.Connection.BeginTransaction();
-				SQLiteTransaction changelogTransaction = changelog.changeLog.Connection.BeginTransaction();
-
-				int chunkSize = SynchronizeChunkSize; // Copy the value to keep things thread-safe
-				long interval = Math.Max(1, (long)(updateCount / (Console.WindowWidth * 0.8))); // Interval for refreshing the progress bar
-
-				for (long l = 0; l < updateCount;)
+				// Create transaction to commit the changes only at the end (increases speed)
+				SQLiteTransaction transaction = changelog.BeginTransaction();
+				try
 				{
-					// Request another chunk of updates
-					JArray updates = new Message(
-						MessageType.DbSync,
-						new { changelog.Version, Amount = Math.Min(updateCount - l, chunkSize) }
-					).SendAndWait(Balancer.MasterServer).Data;
-					
-					// Apply each update, increment l and occasionally update the progressbar
-					foreach (Changes update in updates.Select(x => (Changes)x))
+					int chunkSize = SynchronizeChunkSize; // Copy the value to keep things thread-safe
+					long interval = Math.Max(1, (long)(updateCount / (Console.WindowWidth * 0.8))); // Interval for refreshing the progress bar
+
+					for (long l = 0; l < updateCount;)
 					{
-						changelog.Push(update);
-						if (l++ % interval == 0) Utils.ProgressBar(l, updateCount);
+						// Request another chunk of updates
+						JArray updates = new Message(
+							MessageType.DbSync,
+							new { changelog.Version, Amount = Math.Min(updateCount - l, chunkSize) }
+						).SendAndWait(Balancer.MasterServer).Data;
+
+						// Apply each update, increment l and occasionally update the progressbar
+						foreach (Changes update in updates.Select(x => (Changes)x))
+						{
+							update.CollectionType = new ModelType() { FullName = types[update.ModelTypeID].FullName };
+
+							changelog.Push(update);
+							if (l++ % interval == 0)
+								Utils.ProgressBar(l, updateCount);
+						}
+
+						Utils.ProgressBar(l, updateCount);
 					}
+					transaction.Commit();
 
-					Utils.ProgressBar(l, updateCount);
+					Utils.ClearProgressBar();
 				}
-				
-				databaseTransaction.Commit();
-				changelogTransaction.Commit();
-
-				Utils.ClearProgressBar();
+				catch (Exception)
+				{
+					transaction.Rollback();
+					throw;
+				}
 			}
 		}
 

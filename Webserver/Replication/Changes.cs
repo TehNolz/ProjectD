@@ -5,10 +5,9 @@ using Newtonsoft.Json.Linq;
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
-
 using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
@@ -19,20 +18,14 @@ namespace Webserver.Replication
 	/// <para/>
 	/// This class uses JSON serialization to store the data related to the query.
 	/// </summary>
+	[Table("__changes")]
 	public class Changes
 	{
 		[Primary]
 		public long? ID { get; set; }
 		public ChangeType? Type { get; set; }
-		public string CollectionTypeName
-		{
-			get => _collectionTypeName;
-			set
-			{
-				_collectionType = null;
-				_collectionTypeName = value;
-			}
-		}
+		[ForeignKey(typeof(ModelType))]
+		public int? ModelTypeID { get; set; }
 		public string Data
 		{
 			get => _data;
@@ -43,23 +36,17 @@ namespace Webserver.Replication
 			}
 		}
 
-		private string _collectionTypeName;
-		private Type _collectionType;
 		private string _data;
 		private JArray _collection;
+		private ModelType _collectionType;
 
-		public virtual Type CollectionType
+		public virtual ModelType CollectionType
 		{
-			get
-			{
-				if (_collectionType is null)
-					_collectionType = Assembly.GetExecutingAssembly().GetType(CollectionTypeName);
-				return _collectionType;
-			}
+			get => _collectionType;
 			set
 			{
+				ModelTypeID = value.ID;
 				_collectionType = value;
-				_collectionTypeName = value.FullName;
 			}
 		}
 		public virtual JArray Collection
@@ -70,7 +57,7 @@ namespace Webserver.Replication
 					_collection = JArray.Parse(Data);
 				return _collection;
 			}
-			set
+			private set
 			{
 				_data = value?.ToString(Formatting.None);
 				_collection = value;
@@ -82,6 +69,12 @@ namespace Webserver.Replication
 		/// Initializes a new instance of <see cref="Changes"/>.
 		/// </summary>
 		public Changes() { }
+		/// <summary>
+		/// Initializes a new instance of <see cref="Changes"/> with the specified collection
+		/// of objects.
+		/// </summary>
+		/// <param name="collection">The list of objects to add to this <see cref="Changes"/> instance.</param>
+		public Changes(IList<object> collection) => SetCollection(collection);
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/> by deserializing the given
 		/// <paramref name="message"/> object.
@@ -100,7 +93,7 @@ namespace Webserver.Replication
 			// TODO Use JArray to decrease message size
 			ID = (long?)data.ID;
 			Type = Enum.Parse<ChangeType>((string)data.Type);
-			CollectionTypeName = (string)data.ItemType;
+			ModelTypeID = (int)data.ItemType;
 			Data = (string)data.Data;
 		}
 
@@ -146,17 +139,25 @@ namespace Webserver.Replication
 			}
 		}
 
+		/// <summary>
+		/// Converts the given <paramref name="collection"/> to a JArray and sets the
+		/// <see cref="Collection"/> property.
+		/// </summary>
+		/// <param name="collection">The list of objects to add to this <see cref="Changes"/> instance.</param>
+		public void SetCollection([AllowNull] IList<object> collection)
+			=> Collection = collection is null ? null : JArray.FromObject(collection.Select(x => JObject.FromObject(x).Values()));
+
 		public override string ToString() => $"{GetType().Name}<{ID}>";
 
 		public static explicit operator JObject(Changes changes) => new JObject() {
 				{ "ID", changes.ID },
 				{ "Type", changes.Type.ToString() },
-				{ "ItemType", changes.CollectionTypeName },
+				{ "ItemType", changes.ModelTypeID },
 				{ "Data", changes.Data },
 			};
 		public static explicit operator Changes(JObject jObject) => new Changes(jObject);
 	}
-	
+
 	/// <summary>
 	/// Represents the different variants of <see cref="Changes"/> instances.
 	/// </summary>
@@ -170,6 +171,6 @@ namespace Webserver.Replication
 		INSERT = 0b00000001,
 		UPDATE = 0b00000011,
 		DELETE = 0b00000111,
-		WithCondition = 1<<3
+		WithCondition = 1 << 3
 	}
 }

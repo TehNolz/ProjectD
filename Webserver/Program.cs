@@ -132,9 +132,9 @@ namespace Webserver
 			Database.BroadcastChanges = false;
 
 			//Create tables if they don't already exist.
-			Database.TryCreateTable<ExampleModel>();
-			Database.TryCreateTable<User>();
-			Database.TryCreateTable<Session>();
+			Database.CreateTableIfNotExists<ExampleModel>();
+			Database.CreateTableIfNotExists<User>();
+			Database.CreateTableIfNotExists<Session>();
 
 			//Create Admin account if it doesn't exist already;
 			if (Database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)
