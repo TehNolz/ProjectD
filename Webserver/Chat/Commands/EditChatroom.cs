@@ -21,10 +21,10 @@ namespace Webserver.Chat.Commands
 			if (!json.TryGetValue("ChatroomID", out string rawChatroomID) ||
 				!Guid.TryParse(rawChatroomID, out Guid chatroomID) ||
 				!json.TryGetValue("Setting", out string setting) ||
-				!json.ContainsKey("NewValye")
+				!json.ContainsKey("NewValue")
 			)
 			{
-				Message.Reply(ChatStatusCode.BadMessageData);
+				Message.Reply(ChatStatusCode.BadMessageData, "Missing keys");
 				return;
 			}
 
@@ -41,9 +41,9 @@ namespace Webserver.Chat.Commands
 			{
 				//Change the name
 				case "Name":
-					if(!json.TryGetValue("newValue", out string newName))
+					if(!json.TryGetValue("NewValue", out string newName))
 					{
-						Message.Reply(ChatStatusCode.BadMessageData);
+						Message.Reply(ChatStatusCode.BadMessageData, "Invalid newValue (must be string)");
 						return;
 					}
 
@@ -52,16 +52,16 @@ namespace Webserver.Chat.Commands
 						chatroom.Name = newName;
 					else
 					{
-						Message.Reply(ChatStatusCode.BadMessageData);
+						Message.Reply(ChatStatusCode.BadMessageData, "Invalid newValue (name regex)");
 						return;
 					}
 					break;
 
 				//Change privacy mode
 				case "Private":
-					if (!json.TryGetValue("newValue", out bool privacyval))
+					if (!json.TryGetValue("NewValue", out bool privacyval))
 					{
-						Message.Reply(ChatStatusCode.BadMessageData);
+						Message.Reply(ChatStatusCode.BadMessageData, "Invalid newValue (must be bool)");
 						return;
 					}
 
@@ -69,7 +69,7 @@ namespace Webserver.Chat.Commands
 					break;
 
 				default:
-					Message.Reply(ChatStatusCode.BadMessageData);
+					Message.Reply(ChatStatusCode.BadMessageData, "No such setting");
 					return;
 			}
 
@@ -86,23 +86,21 @@ namespace Webserver.Chat.Commands
 		/// <param name="message"></param>
 		public static void ChatroomUpdateHandler(ServerMessage message)
 		{
-			var data = (JObject)message.Data;
 
 			//Ignore everything other than messages with type ChatMessage
 			if (message.Type != MessageType.ChatroomUpdate)
 				return;
 
+			var data = (JObject)message.Data;
+
 			foreach(ChatConnection connection in ChatConnection.ActiveConnections)
 			{
 				//Check if the client has access to this chatroom
-				if (!(bool)data["Private"] && !(from CR in connection.Chatrooms where CR.ID == Guid.Parse((string)data["ID"]) select CR).Any())
+				Chatroom room = ChatManagement.Database.Select<Chatroom>("ID = @ID", new { ID = Guid.Parse((string)data["ID"])}).First();
+				if(!room.CanUserAccess(ChatManagement.Database, connection.User))
 					continue;
 
-				var chatMessage = new ChatMessage(MessageType.ChatroomUpdate, message.Data)
-				{
-					StatusCode = ChatStatusCode.OK
-				};
-				connection.Send(chatMessage);
+				connection.Send(new ChatMessage(MessageType.ChatroomUpdate, Chatroom.GetJsonBulk(connection.Chatrooms)));
 			}
 		}
 	}

@@ -140,6 +140,7 @@ namespace Webserver
 			Database.TryCreateTable<Session>();
 			Database.TryCreateTable<Chatroom>();
 			Database.TryCreateTable<Chatlog>();
+			Database.TryCreateTable<ChatroomMembership>();
 
 			//Create Admin account if it doesn't exist already;
 			if (Database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)

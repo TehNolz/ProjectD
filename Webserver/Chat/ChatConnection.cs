@@ -41,7 +41,7 @@ namespace Webserver.Chat
 		/// <summary>
 		/// The chatrooms this user has joined.
 		/// </summary>
-		public List<Chatroom> Chatrooms;
+		public IEnumerable<Chatroom> Chatrooms { get => Chatroom.GetAccessableByUser(ChatManagement.Database, User); }
 
 		/// <summary>
 		/// The user this connection belongs to.
@@ -106,9 +106,6 @@ namespace Webserver.Chat
 			User = ChatManagement.Database.Select<User>("Email = @email", new { email = session.UserEmail }).FirstOrDefault();
 			#endregion
 
-			//Get all the chatrooms this user is a part of.
-			Chatrooms = new List<Chatroom>(ChatManagement.Database.Select<Chatroom>("Private = false"));
-
 			//Open the connection.
 			OpenConnection();
 		}
@@ -132,10 +129,7 @@ namespace Webserver.Chat
 			ActiveConnections.Add(this);
 
 			//Send channel info to the client.
-			var chatroomInfo = new JArray();
-			foreach (Chatroom chatroom in Chatrooms)
-				chatroomInfo.Add(chatroom.GetJson());
-			Send(new ChatMessage(MessageType.ChatroomUpdate, chatroomInfo));
+			Send(new ChatMessage(MessageType.ChatroomUpdate, Chatroom.GetJsonBulk(Chatrooms)));
 		}
 
 		/// <summary>
@@ -229,6 +223,17 @@ namespace Webserver.Chat
 
 			// Add message to the queue
 			TransmitQueue.Add(message);
+		}
+
+		/// <summary>
+		/// Send data to the client on the other side of this relay connection.
+		/// </summary>
+		/// <param name="statusCode">The message status code</param>
+		/// <param name="message">The message to send.</param>
+		public void Send(ChatStatusCode statusCode, ChatMessage message)
+		{
+			message.StatusCode = statusCode;
+			Send(message);
 		}
 
 		/// <summary>
