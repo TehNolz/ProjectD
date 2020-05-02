@@ -8,8 +8,9 @@ namespace Webserver.API.Endpoints
 	[Route("example")]
 	internal class Example : APIEndpoint
 	{
-		public override void GET() => Response.Send(new JObject() { { "test", "Greetings Earth" } },
-				System.Net.HttpStatusCode.BadRequest
-			);
+		public override void GET()
+		{
+			Response.Send(JObject.FromObject(Params));
+		}
 	}
 }

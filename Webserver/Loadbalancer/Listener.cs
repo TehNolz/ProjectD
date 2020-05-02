@@ -50,7 +50,7 @@ namespace Webserver.LoadBalancer
 					}
 				}
 				IPAddress slaveAddress = GetBestSlave();
-				string URL = $"http://{slaveAddress}:{BalancerConfig.HttpRelayPort}{context.Request.Url.LocalPath}";
+				string URL = $"http://{slaveAddress}:{BalancerConfig.HttpRelayPort}{context.Request.Url.PathAndQuery}";
 
 				//Start relaying the request.
 				var requestRelay = (HttpWebRequest)WebRequest.Create(URL);
