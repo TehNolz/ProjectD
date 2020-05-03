@@ -95,7 +95,7 @@ namespace Webserver.Replication
 					changes.Synchronize();
 
 					// Swap the elements in the collections
-					T[] newItems = changes.Collection.Select(x => x.ToObject<T>()).ToArray();
+					T[] newItems = changes.ExpandCollection().Select(x => x.ToObject<T>()).ToArray();
 					for (int i = 0; i < items.Count; ++i)
 						items[i] = newItems[i];
 				}

@@ -113,18 +113,8 @@ namespace Webserver.Replication
 				}
 				else
 				{
-					// Convert the JArrays into JObjects by adding the keys of the type's properties
-					PropertyInfo[] props = Utils.GetProperties(type).ToArray();
-					IEnumerable<JObject> collection = changes.Collection.Select(x =>
-					{
-						var @out = new JObject();
-						for (int i = 0; i < props.Length; i++)
-							@out[props[i].Name] = x[i];
-						return @out;
-					});
-
 					// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
-					items = collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+					items = changes.ExpandCollection().Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
 				}
 
 				// Copy parent db settings

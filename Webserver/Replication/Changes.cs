@@ -157,6 +157,24 @@ namespace Webserver.Replication
 		}
 
 		/// <summary>
+		/// Changes the <see cref="Collection"/> <see cref="JArray"/> by combining the
+		/// values from the nested arrays with the property names of the <see cref="CollectionType"/>.
+		/// </summary>
+		/// <returns>A new <see cref="JArray"/> with nested <see cref="JObject"/>s.</returns>
+		public JArray ExpandCollection()
+		{
+			// Convert the JArrays into JObjects by adding the keys of the type's properties
+			PropertyInfo[] props = Utils.GetProperties(CollectionType).ToArray();
+			return new JArray(Collection.Select(x =>
+			{
+				var @out = new JObject();
+				for (int i = 0; i < props.Length; i++)
+					@out[props[i].Name] = x[i];
+				return @out;
+			}));
+		}
+
+		/// <summary>
 		/// Converts the given <paramref name="collection"/> to a JArray and sets the
 		/// <see cref="Collection"/> property.
 		/// </summary>
