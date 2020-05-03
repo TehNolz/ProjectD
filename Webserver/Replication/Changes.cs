@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
+
 using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
@@ -21,10 +22,11 @@ namespace Webserver.Replication
 	[Table("__changes")]
 	public class Changes
 	{
-		[Primary]
+		[AutoIncrement]
 		public long? ID { get; set; }
 		public ChangeType? Type { get; set; }
 		[ForeignKey(typeof(ModelType))]
+		[Database.SQLite.Modeling.NotNull]
 		public int? ModelTypeID { get; set; }
 		public string Data
 		{
@@ -196,12 +198,23 @@ namespace Webserver.Replication
 			Type |= ChangeType.WithCondition;
 		}
 
-		public override string ToString() => $"{GetType().Name}<{ID}>";
+		public override string ToString()
+		{
+			var typeText = Type switch
+			{
+				ChangeType.INSERT => "I",
+				ChangeType.UPDATE => "U",
+				ChangeType.DELETE => "D",
+				ChangeType.DELETE | ChangeType.WithCondition => "D`",
+				_ => "?"
+			};
+			return $"{GetType().Name}<{typeText}>[{ID ?? '?'}]";
+		}
 
 		public static explicit operator JObject(Changes changes) => new JObject() {
 				{ "ID", changes.ID },
 				{ "Type", (int)changes.Type },
-				{ "ItemType", new JValue((object)changes.ModelTypeID ?? changes.CollectionType.FullName) },
+				{ "ItemType", new JValue((object)changes.CollectionType.ID ?? changes.CollectionType.FullName) },
 				{ "Data", changes.Data },
 			};
 		public static explicit operator Changes(JObject jObject) => new Changes(jObject);
