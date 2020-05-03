@@ -1,14 +1,15 @@
-using Newtonsoft.Json.Linq;
-
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
-
+using System.Threading;
+using Webserver.Chat;
+using Webserver.Chat.Commands;
 using Webserver.Config;
+using Webserver.Replication;
+
+using static Webserver.Program;
 
 namespace Webserver.LoadBalancer
 {
@@ -21,7 +22,7 @@ namespace Webserver.LoadBalancer
 		/// <returns>The local IP address.</returns>
 		public static void Init(IPAddress masterAddress)
 		{
-			Console.WriteLine("Server is running as slave. Connecting to the Master server at {0}", masterAddress);
+			Log.Config($"Server is running as slave. Connecting to the Master server at {masterAddress}");
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
 			new ServerProfile(Balancer.LocalAddress);
 
@@ -30,7 +31,11 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += TimeoutMessage;
 			ServerConnection.MessageReceived += RegistrationResponse;
 			ServerConnection.MessageReceived += NewServer;
-			ServerConnection.MessageReceived += OnQueryInsert;
+			ServerConnection.MessageReceived += OnDbChange;
+
+			//Chat system events
+			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
+			ServerConnection.MessageReceived += Chatroom.ChatroomUpdateHandler;
 
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
@@ -41,31 +46,20 @@ namespace Webserver.LoadBalancer
 			Balancer.MasterServer = connection;
 
 			//Send registration request.
-			connection.Send(new Message(MessageType.Register, null));
+			connection.Send(new ServerMessage(MessageType.Register, null));
 
-			Console.WriteLine("Connected to master at {0}. Local address is {1}", masterAddress, (IPEndPoint)client.Client.LocalEndPoint);
+			Log.Config($"Connected to master at {masterAddress}. Local address is {(IPEndPoint)client.Client.LocalEndPoint}");
 		}
 
-		private static void OnQueryInsert(Message message)
+		private static void OnDbChange(ServerMessage message)
 		{
 			// Check if the type is QueryInsert
 			if (message.Type != MessageType.DbChange)
 				return;
 
-			Console.WriteLine("Got QueryInsert from master");
-			Console.WriteLine(message.Data.Type);
+			var changes = new Changes(message);
 
-			// Parse the type string into a Type object from this assembly
-			Type modelType = Assembly.GetExecutingAssembly().GetType((string)message.Data.Type);
-
-			Console.WriteLine("Inserting object batch");
-			// Convert the message item array to an object array and insert it into the database
-			dynamic[] items = ((JArray)message.Data.Items).Select(x => x.ToObject(modelType)).Cast(modelType);
-			Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)Program.Database.Insert,
-				modelType,
-				new[] { items }
-			);
-			Console.WriteLine("Done inserting batch");
+			new Thread(() => Program.Database.Apply(changes)) { Name = $"OnDbChange<{changes.ID}>" }.Start();
 		}
 
 		/// <summary>
@@ -73,7 +67,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server who sent the response</param>
 		/// <param name="message">The response</param>
-		public static void RegistrationResponse(Message message)
+		public static void RegistrationResponse(ServerMessage message)
 		{
 			//If this message isn't a registration response, ignore it.
 			if (message.Type != MessageType.RegisterResponse)
@@ -94,7 +88,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server that sent the announcement</param>
 		/// <param name="message">The announcement</param>
-		public static void NewServer(Message message)
+		public static void NewServer(ServerMessage message)
 		{
 			//If this message isn't an announcement, ignore it.
 			if (message.Type != MessageType.NewServer)
@@ -106,7 +100,7 @@ namespace Webserver.LoadBalancer
 			if (endpoint.ToString() == Balancer.LocalAddress.ToString())
 				return;
 
-			Console.WriteLine($"Master announced new server at {endpoint}");
+			Log.Info($"Master announced new server at {endpoint}");
 			new ServerProfile(endpoint);
 		}
 
@@ -115,12 +109,12 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server"></param>
 		/// <param name="message"></param>
-		public static void TimeoutMessage(Message message)
+		public static void TimeoutMessage(ServerMessage message)
 		{
 			if (message.Type != MessageType.Timeout)
 				return;
 
-			Console.WriteLine($"Master lost connection with slave at {message.Data}");
+			Log.Warning($"Master lost connection with slave at {message.Data}");
 			ServerProfile.KnownServers.TryRemove(IPAddress.Parse(message.Data), out ServerProfile _);
 		}
 		/// <summary>
@@ -129,10 +123,10 @@ namespace Webserver.LoadBalancer
 		/// <param name="server"></param>
 		public static void OnServerTimeout(ServerProfile server, string message)
 		{
-			Console.WriteLine($"Connection lost to master: {message}");
+			Log.Warning($"Connection lost to master: {message}");
 			ServerProfile.KnownServers.Remove(server.Address, out _);
 
-			Console.WriteLine("Electing a new master.");
+			Log.Info("Electing a new master.");
 
 			//Elect a new master by finding the slave with the lowest IPv4 address. This is guaranteed to give the same result on every slave.
 			//TODO: Maybe find a better algorithm to elect a master?
@@ -158,13 +152,13 @@ namespace Webserver.LoadBalancer
 			//If this slave was selected, promote to Master. Otherwise, restart the slave using the new master's address.
 			if (newMaster.Address.ToString() == Balancer.LocalAddress.ToString())
 			{
-				Console.WriteLine("Elected this slave as new master. Promoting.");
+				Log.Info("Elected this slave as new master. Promoting.");
 				Master.Init();
 			}
 			else
 			{
-				Console.WriteLine("Elected {0} as new master. Connecting.", newMaster.Address);
-				Slave.Init(newMaster.Address);
+				Log.Info($"Elected {newMaster.Address} as new master. Connecting.");
+				Init(newMaster.Address);
 			}
 		}
 	}

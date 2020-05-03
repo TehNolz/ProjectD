@@ -16,7 +16,7 @@ namespace WebserverTests.API_Endpoints
 		/// Call base ClassInit because it can't be inherited
 		/// </summary>
 		[ClassInitialize]
-		public new static void ClassInit(TestContext C) => APITestMethods.ClassInit(C);
+		public static new void ClassInit(TestContext C) => APITestMethods.ClassInit(C);
 
 		/// <summary>
 		/// Check if we get an Unauthorized status code if we try to use an API method without being logged in.

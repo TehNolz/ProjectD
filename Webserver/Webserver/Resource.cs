@@ -1,6 +1,5 @@
 using MimeKit;
 
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,7 +33,7 @@ namespace Webserver.Webserver
 			//Check if the file exists. If it doesn't, send a 404.
 			if (!WebPages.Contains(target) || !File.Exists(target))
 			{
-				Console.WriteLine($"Refused request for {target}: File not found");
+				Program.Log.Warning($"Refused request for {target}: File not found");
 				response.Send(Redirects.GetErrorPage(HttpStatusCode.NotFound), HttpStatusCode.NotFound);
 				return;
 			}
@@ -60,7 +59,7 @@ namespace Webserver.Webserver
 
 				default:
 					//Resources only support the three methods defined above, so send back a 405 Method Not Allowed.
-					Console.WriteLine("Refused request for resource " + target + ": Method Not Allowed (" + request.HttpMethod + ")");
+					Program.Log.Warning("Refused request for resource " + target + ": Method Not Allowed (" + request.HttpMethod + ")");
 					response.Send(Redirects.GetErrorPage(HttpStatusCode.MethodNotAllowed), HttpStatusCode.MethodNotAllowed);
 					return;
 			}

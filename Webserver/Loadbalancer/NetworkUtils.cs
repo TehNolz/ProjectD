@@ -18,6 +18,7 @@ namespace Webserver.LoadBalancer
 			{
 				new IPAddressConverter(),
 			},
+			Formatting = Formatting.None,
 			TypeNameHandling = TypeNameHandling.All,
 			MetadataPropertyHandling = MetadataPropertyHandling.ReadAhead
 		};

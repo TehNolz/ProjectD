@@ -36,6 +36,10 @@ namespace Webserver.LoadBalancer
 		/// Dictionary containing all known servers.
 		/// </summary>
 		public static ConcurrentDictionary<IPAddress, ServerProfile> KnownServers { get; set; }
+		/// <summary>
+		/// Get a list of all connected servers.
+		/// </summary>
+		public static List<ServerConnection> ConnectedServers => (from ServerProfile server in KnownServers.Values where server is ServerConnection select server).Cast<ServerConnection>().ToList();
 	}
 
 	/// <summary>
@@ -54,7 +58,7 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// Queue of Message objects that need to be transmitted to this server.
 		/// </summary>
-		private BlockingCollection<Message> TransmitQueue = new BlockingCollection<Message>();
+		private BlockingCollection<ServerMessage> TransmitQueue = new BlockingCollection<ServerMessage>();
 
 		/// <summary>
 		/// Sender thread, which sents the data received by SendData to this server.
@@ -68,14 +72,14 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// Track whether this connection is still active.
 		/// </summary>
-		private bool disposed = false;
+		private bool Disposed = false;
 
 		#region Delegates
 		/// <summary>
 		/// Delegate for the <see cref="MessageReceived"/> and <see cref="ReplyReceived"/> events.
 		/// </summary>
 		/// <param name="message">The message that was received</param>
-		public delegate void ReceiveEventHandler(Message message);
+		public delegate void ReceiveEventHandler(ServerMessage message);
 		/// <summary>
 		/// Delegate for the <see cref="ServerTimeout"/> event.
 		/// </summary>
@@ -126,10 +130,10 @@ namespace Webserver.LoadBalancer
 		/// Sends data to this server.
 		/// </summary>
 		/// <param name="message">The message to send.</param>
-		public void Send(Message message)
+		public void Send(ServerMessage message)
 		{
 			// Throw an exception if this connection is no longer active.
-			if (disposed)
+			if (Disposed)
 				throw new ObjectDisposedException(GetType().Name);
 
 			// Add message to the queue
@@ -141,12 +145,10 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="servers">A list of servers to send the message to.</param>
 		/// <param name="message">The message to send to each server.</param>
-		public static void Send(IEnumerable<ServerConnection> servers, Message message)
+		public static void Send(IEnumerable<ServerConnection> servers, ServerMessage message)
 		{
 			foreach (ServerConnection connection in servers)
-			{
 				connection.Send(message);
-			}
 		}
 
 		/// <summary>
@@ -154,21 +156,21 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="message">The message to send.</param>
 		/// <param name="timeout">The amount of milliseconds to wait for the reply to arrive. If no message is received within this time, a SocketException is thrown with the TimedOut status code.</param>
-		public Message SendAndWait(Message message, int timeout = 500)
+		public ServerMessage SendAndWait(ServerMessage message)
 		{
 			// Use the Message.SendAndWait to set the ID if it is null
-			if (message.ID is null)
-				return message.SendAndWait(this, timeout);
+			if (message.ID == Guid.Empty)
+				return message.SendAndWait(this);
 
 			// Create a semaphore to block this function untill a reply is received
 			var responseLock = new SemaphoreSlim(0, 1);
 
 			// Unlocker function that unblocks SendAndAwait
-			Message reply = null;
-			void unlocker(Message _reply)
+			ServerMessage reply = null;
+			void unlocker(ServerMessage _reply)
 			{
 				// Check if the _reply is in response to the sent message
-				if (message.ID != _reply.ID)
+				if (_reply != null && message.ID != _reply.ID)
 					return;
 
 				reply = _reply;
@@ -179,22 +181,25 @@ namespace Webserver.LoadBalancer
 			ReplyReceived += unlocker;
 			Send(message);
 
-			// Block until the reply event handler unlocks the semaphore. Otherwise throw an exception
-			if (!responseLock.Wait(timeout))
-				throw new SocketException((int)SocketError.TimedOut);
+			// Block until the reply event handler unlocks this semaphore
+			responseLock.Wait();
 			ReplyReceived -= unlocker;
 
-			return reply;
+			// If reply is null, the events have been reset.
+			return reply ?? throw new SocketException((int)SocketError.ConnectionReset);
 		}
 
 		/// <summary>
 		/// Send data to all known servers
 		/// </summary>
 		/// <param name="message">The message that will be sent.</param>
-		public static void Broadcast(Message message)
+		public static void Broadcast(ServerMessage message)
 		{
-			var servers = (from ServerProfile server in KnownServers.Values where server is ServerConnection select server).Cast<ServerConnection>().ToList();
-			Send(servers, message);
+			message.isBroadcast = true;
+			if (Balancer.IsMaster)
+				Send(ConnectedServers, message);
+			else
+				message.Send(Balancer.MasterServer);
 		}
 
 		/// <summary>
@@ -215,10 +220,11 @@ namespace Webserver.LoadBalancer
 					Stream.Write(messageLength, 0, messageLength.Length);
 					Stream.Write(message, 0, message.Length);
 				}
-				catch (IOException e)
+				catch (Exception e) when (e is SocketException || e is IOException)
 				{
 					ServerTimeout(this, e.Message);
 					Dispose();
+					return;
 				}
 			}
 		}
@@ -231,7 +237,7 @@ namespace Webserver.LoadBalancer
 			//Keep receiving data as long as the client is connected.
 			while (Client.Connected)
 			{
-				Message message;
+				ServerMessage message;
 				try
 				{
 					//Send a 0-byte package to test the connection
@@ -249,19 +255,20 @@ namespace Webserver.LoadBalancer
 					byte[] rawMessage = Stream.Read(messageLength);
 
 					//Read the incoming message and convert it into a Message object.
-					message = new Message(rawMessage, this);
+					message = Message.FromBytes<ServerMessage>(rawMessage);
+					message.Connection = this;
 
 					if (message.ID != null && message.Flags.HasFlag(MessageFlags.Reply))
 						ReplyReceived?.Invoke(message);
 					else
 						MessageReceived?.Invoke(message);
 				}
-				catch (SocketException e)
+				catch (Exception e) when (e is SocketException || e is IOException)
 				{
 					// A connection issue occured. Trigger the OnServerTimeout event and drop this connection.
 					ServerTimeout(this, e.Message);
 					Dispose();
-					continue;
+					return;
 				}
 			}
 		}
@@ -273,6 +280,7 @@ namespace Webserver.LoadBalancer
 		{
 			ServerTimeout = null;
 			MessageReceived = null;
+			ReplyReceived?.Invoke(null);
 			ReplyReceived = null;
 		}
 
@@ -282,11 +290,11 @@ namespace Webserver.LoadBalancer
 		public void Dispose()
 		{
 			// Detect redundant calls
-			if (disposed)
+			if (Disposed)
 				return;
 
 			Client.Dispose();
-			disposed = true;
+			Disposed = true;
 		}
 	}
 }

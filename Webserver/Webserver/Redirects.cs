@@ -7,6 +7,8 @@ using System.Text.RegularExpressions;
 
 using Webserver.Config;
 
+using static Webserver.Program;
+
 namespace Webserver.Webserver
 {
 	public static class Redirects
@@ -47,7 +49,7 @@ namespace Webserver.Webserver
 				string[] Split = line.Split(" => ");
 				if (Split.Length != 2)
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid format", redirectsFile, lineCount);
+					Log.Warning($"Skipping invalid redirection in {redirectsFile} (line: {lineCount}): Invalid format");
 					continue;
 				}
 
@@ -58,28 +60,28 @@ namespace Webserver.Webserver
 				}
 				else if (!Regex.IsMatch(line, @"[A-Za-z-_/]{1,}$"))
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid source", redirectsFile, lineCount);
+					Log.Warning($"Skipping invalid redirection in {redirectsFile} (line: {lineCount}): Invalid source");
 					continue;
 				}
 
 				//Check if the destination is in the correct format.
 				if (!Regex.IsMatch(Split[1], @"[A-Za-z-_/]{1,}$"))
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Invalid destination", redirectsFile, lineCount);
+					Log.Warning($"Skipping invalid redirection in {redirectsFile} (line: {lineCount}): Invalid destination");
 					continue;
 				}
 
 				//Check if the source is the same as the destination
 				if (Split[0] == Split[1])
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Destination same as source", redirectsFile, lineCount);
+					Log.Warning($"Skipping invalid redirection in {redirectsFile} (line: {lineCount}): Destination same as source");
 					continue;
 				}
 
 				//Check for duplicate source
 				if (RedirectDict.ContainsKey(Split[0]))
 				{
-					Console.WriteLine("Skipping invalid redirection in {0} (line: {1}): Duplicate source URL", redirectsFile, lineCount);
+					Log.Warning($"Skipping invalid redirection in {redirectsFile} (line: {lineCount}): Duplicate source URL");
 					continue;
 				}
 
@@ -106,10 +108,7 @@ namespace Webserver.Webserver
 			while (RedirectDict.ContainsKey(url))
 			{
 				if (resolveStack.Contains(url))
-				{
-					Console.WriteLine("Redirection loop for URL: {0}", url);
 					return null;
-				}
 
 				resolveStack.Push(url);
 				url = RedirectDict[url];
@@ -129,7 +128,7 @@ namespace Webserver.Webserver
 				url = Resolve(url);
 				if (url == null)
 				{
-					Console.WriteLine("Failed to get error page for statuscode {0}: Infinite loop", statusCode);
+					Log.Warning("Failed to get error page for statuscode {statusCode}: Infinite loop");
 				}
 			}
 

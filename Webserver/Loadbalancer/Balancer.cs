@@ -9,6 +9,8 @@ using System.Text;
 
 using Webserver.Config;
 
+using static Webserver.Program;
+
 namespace Webserver.LoadBalancer
 {
 	public static class Balancer
@@ -17,6 +19,7 @@ namespace Webserver.LoadBalancer
 		/// The ServerConnection representing our connection to the master server.
 		/// </summary>
 		public static ServerConnection MasterServer { get; set; }
+
 		/// <summary>
 		/// A list of all valid IP addresses found in the config file.
 		/// </summary>
@@ -56,7 +59,7 @@ namespace Webserver.LoadBalancer
 				foreach (string rawAddress in BalancerConfig.IPAddresses)
 				{
 					if (!IPAddress.TryParse(rawAddress, out IPAddress Address))
-						Console.WriteLine("Skipping invalid address {0}", Address);
+						Log.Warning($"Skipping invalid address {Address}");
 					else
 						Addresses.Add(Address);
 				}
@@ -78,7 +81,7 @@ namespace Webserver.LoadBalancer
 				}
 				catch (SocketException e)
 				{
-					Console.WriteLine($"Failed to bind to address {address}: {e.Message}");
+					Log.Warning($"Failed to bind to address {address}: {e.Message}");
 					continue;
 				}
 			}
@@ -89,10 +92,10 @@ namespace Webserver.LoadBalancer
 
 			//Get our local address
 			LocalAddress = ((IPEndPoint)Client.Client.LocalEndPoint).Address;
-			Console.WriteLine($"Local address is {LocalAddress}");
+			Log.Config($"Local address is {LocalAddress}");
 
 			//Use 10 UDP broadcasts to try and find the master server (if one exists).
-			byte[] discoveryMessage = new Message(MessageType.Discover, null).GetBytes();
+			byte[] discoveryMessage = new ServerMessage(MessageType.Discover, null).GetBytes();
 			var serverEndpoint = new IPEndPoint(IPAddress.Any, 0);
 			bool foundMaster = false;
 			bool preventEcho = false;
@@ -148,6 +151,25 @@ namespace Webserver.LoadBalancer
 			if (foundMaster)
 			{
 				Slave.Init(serverEndpoint.Address);
+
+				//File.WriteAllText("stats.csv", string.Join(',', new[]
+				//{
+				//	"Chunk Size",
+				//	"Duration",
+				//	"Max Chunk Duration",
+				//	"Average Chunk Duration",
+				//	"Min Chunk Duration",
+				//	"Max Chunk IO Time",
+				//	"Average IO Time",
+				//	"Min IO Time",
+				//	"Ping",
+				//}) + '\n');
+				//var stepsize = 5;
+				//Program.Database.SynchronizeChunkSize += stepsize;
+				//for (; Program.Database.SynchronizeChunkSize <= 1500; Program.Database.SynchronizeChunkSize += stepsize)
+				//{
+				//	Program.Database.Synchronize();
+				//}
 				Program.Database.Synchronize();
 			}
 			else

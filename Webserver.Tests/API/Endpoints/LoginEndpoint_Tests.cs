@@ -21,7 +21,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		/// Call base ClassInit because it can't be inherited
 		/// </summary>
 		[ClassInitialize]
-		public new static void ClassInit(TestContext C) => APITestMethods.ClassInit(C);
+		public static new void ClassInit(TestContext C) => APITestMethods.ClassInit(C);
 
 		[TestMethod]
 		public void POST_ValidArguments()
@@ -56,7 +56,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		}
 
 		[SuppressMessage("Code Quality", "IDE0051")]
-		static IEnumerable<object[]> InvalidPostTestData => new[]{
+		private static IEnumerable<object[]> InvalidPostTestData => new[]{
 			new object[] {
 				new JObject() {
 					{ "Email", "Administrator" }

@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
 
 namespace Webserver.Replication
 {
@@ -123,7 +121,7 @@ namespace Webserver.Replication
 		#region IDisposable Support
 		private bool isDisposed = false; // To detect redundant calls
 
-		void Dispose(bool disposing)
+		private void Dispose(bool disposing)
 		{
 			if (!isDisposed)
 			{

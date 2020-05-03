@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,6 +15,11 @@ namespace Webserver
 	/// </summary>
 	public static class Utils
 	{
+		/// <summary>
+		/// Convert a NameValueCollection to a dictionary for ease of access.
+		/// </summary>
+		/// <param name="data">The NameValueCollection to convert</param>
+		/// <returns></returns>
 		public static Dictionary<string, List<string>> NameValueToDict(NameValueCollection data)
 		{
 			var result = new Dictionary<string, List<string>>();
@@ -39,8 +45,33 @@ namespace Webserver
 		}
 
 		private static IEnumerable<A> Cast<A>(IEnumerable<dynamic> yeet) => yeet.Cast<A>().ToArray();
+		/// <summary>
+		/// Performs black magic.
+		/// </summary>
 		public static dynamic[] Cast<T>(this IEnumerable<T> obj, Type type)
 			=> InvokeGenericMethod<dynamic[]>((Func<IEnumerable<dynamic>, object>)Cast<object>, type, new[] { obj });
+
+		/// <summary>
+		/// Returns a formatted string depicting the elapsed time in either nanoseconds, microseconds or milliseconds
+		/// depending on the magnitude of elapsed time.
+		/// </summary>
+		/// <param name="stopwatch">The <see cref="Stopwatch"/> instance whose elapsed time to format.</param>
+		public static string Format(this Stopwatch stopwatch)
+		{
+			stopwatch.Stop();
+			try
+			{
+				if (stopwatch.ElapsedTicks < 10)
+					return (stopwatch.ElapsedTicks * 100) + " ns";
+				if (stopwatch.ElapsedTicks < 10000)
+					return (stopwatch.ElapsedTicks / 10) + " µs";
+				return stopwatch.ElapsedMilliseconds + " ms";
+			}
+			finally
+			{
+				stopwatch.Start();
+			}
+		}
 
 		public static double oldProgress = 0;
 		public static int previousBar = -1;
@@ -82,7 +113,7 @@ namespace Webserver
 			Console.CursorVisible = false;
 
 			// Move the cursor value back to the end of the stream
-			Console.Write((string)null); 
+			Console.Write((string)null);
 
 			int wtop = Console.WindowTop;
 			if (Console.CursorTop > Console.WindowHeight - 1)
@@ -146,7 +177,7 @@ namespace Webserver
 		/// </summary>
 		/// <param name="value">The current value.</param>
 		/// <param name="max">The maximum value.</param>
-		public static void ProgressBar(int value, int max)
+		public static void ProgressBar(long value, long max)
 		{
 			int maxLen = max.ToString().Length;
 			double progress = (double)value / max;
@@ -164,7 +195,7 @@ namespace Webserver
 			(int left, int top, bool showCursor, int wtop) = (Console.CursorLeft, Console.CursorTop, Console.CursorVisible, Console.WindowTop);
 			Console.CursorVisible = false;
 			Console.SetCursorPosition(0, CustomWriter.ProgressBarPos);
-			
+
 			// Clear the progress bar
 			Console.Write(new string(' ', Console.BufferWidth));
 
@@ -194,9 +225,12 @@ namespace Webserver
 
 		public override void Write(char value)
 		{
-			writer.Write(value);
-			if (value == '\n')
-				MoveProgressBar();
+			lock (this)
+			{
+				writer.Write(value);
+				if (value == '\n')
+					MoveProgressBar();
+			}
 		}
 
 		private void MoveProgressBar()

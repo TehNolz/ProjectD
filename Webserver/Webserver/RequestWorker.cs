@@ -1,16 +1,13 @@
 using Database.SQLite;
 
-using Newtonsoft.Json.Linq;
-
 using System;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Net;
 using System.Threading;
 
 using Webserver.API;
-//using Webserver.Chat;
-using Webserver.LoadBalancer;
+
+using static Webserver.Program;
 
 namespace Webserver.Webserver
 {
@@ -76,7 +73,7 @@ namespace Webserver.Webserver
 				string url = Redirects.Resolve(request.Url.LocalPath.ToLower());
 				if (url == null)
 				{
-					Console.WriteLine("Couldn't resolve URL; infinite redirection loop. URL: " + request.Url.LocalPath.ToLower());
+					Log.Error("Couldn't resolve URL; infinite redirection loop. URL: " + request.Url.LocalPath.ToLower());
 					continue;
 				}
 
@@ -87,14 +84,19 @@ namespace Webserver.Webserver
 				//Redirect if necessary
 				if (url != request.Url.LocalPath.ToLower())
 				{
-					Console.WriteLine("Request redirected to " + url);
+					Log.Trace("Request redirected to " + url);
 					response.Redirect = url;
 					response.Send(HttpStatusCode.PermanentRedirect);
 					continue;
 				}
 
 				// If the url starts with /api, pass the request to the API Endpoints
-				if (url.StartsWith("/api/")) // TODO: Remove hardcoded string
+				// If the url starts with /chat, create a new chat connection
+				if (url.StartsWith("/chat"))
+				{
+					//ChatConnection.ProcessChatConnection(context, Database);
+				}
+				else if (url.StartsWith("/api/"))
 				{
 					APIEndpoint.ProcessEndpoint(context, Database);
 				}
@@ -107,9 +109,6 @@ namespace Webserver.Webserver
 			} while (!Debug || Queue.Count != 0);
 		}
 
-		public void Dispose()
-		{
-			Database.Dispose();
-		}
+		public void Dispose() => Database.Dispose();
 	}
 }

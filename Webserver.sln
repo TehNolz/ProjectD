@@ -16,7 +16,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SQLite Adapter", "Database-
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Core", "Database-Adapter\Core\Core.csproj", "{F87C4712-571F-4D50-9BBC-83055F7398AD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Webserver.Tests", "Webserver.Tests\Webserver.Tests.csproj", "{D1BF4333-02CA-4C84-9927-1A1526B7F3B7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Webserver.Tests", "Webserver.Tests\Webserver.Tests.csproj", "{D1BF4333-02CA-4C84-9927-1A1526B7F3B7}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Logger", "Logger\Logger\Logger.csproj", "{0A69FE8A-2067-4B8A-8A56-390297F26B28}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -44,6 +46,10 @@ Global
 		{D1BF4333-02CA-4C84-9927-1A1526B7F3B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D1BF4333-02CA-4C84-9927-1A1526B7F3B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D1BF4333-02CA-4C84-9927-1A1526B7F3B7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0A69FE8A-2067-4B8A-8A56-390297F26B28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A69FE8A-2067-4B8A-8A56-390297F26B28}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A69FE8A-2067-4B8A-8A56-390297F26B28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A69FE8A-2067-4B8A-8A56-390297F26B28}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

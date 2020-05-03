@@ -65,4 +65,13 @@ namespace Webserver.Config
 		[Comment("The amount of worker threads the server will use. More threads means that more simultaneous requests can be processed, but increases hardware usage.")]
 		public static int WorkerThreadCount = 5;
 	}
+
+	[ConfigSection]
+	internal static class ChatConfig
+	{
+		[Comment("The regex that all chatroom names must match.")]
+		public static string ChatroomNameRegex = @"[A-Za-z0-1 !@#$%^&*()_/+\-=]";
+		[Comment("Allow users to change their username")]
+		public static bool AllowUsernameChange = true;
+	}
 }

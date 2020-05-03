@@ -3,10 +3,9 @@ using Newtonsoft.Json.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
 
-using Webserver.API;
 using Webserver.Models;
 
-namespace Webserver.API_Endpoints
+namespace Webserver.API.Endpoints
 {
 
 	/// <summary>

@@ -40,8 +40,9 @@ namespace Webserver.API
 		}
 
 		/// <summary>
-		/// TODO: Implement permission system
+		/// Specifies the minimum permission level the user needs to use this endpoint.
 		/// </summary>
+		[AttributeUsage(AttributeTargets.Method)]
 		public class PermissionAttribute : Attribute
 		{
 			public PermissionLevel PermissionLevel { get; }

@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.WebSockets;
 using System.Text;
+using System.Threading.Tasks;
 using System.Web;
 
 namespace Webserver.Webserver
@@ -18,6 +20,11 @@ namespace Webserver.Webserver
 		public RequestProvider Request;
 		/// <inheritdoc cref="HttpListenerContext.Response"/>
 		public ResponseProvider Response;
+		/// <summary>
+		/// The HttpListenerContext that was used to construct this ContextProvider. Null if this ContextProvider is a mock.
+		/// </summary>
+		private HttpListenerContext Context;
+
 		/// <summary>
 		/// Manually create a new ContextProvider by combining a Request- and ResponseProvider.
 		/// Used to create mock requests for unit testing.
@@ -36,9 +43,14 @@ namespace Webserver.Webserver
 		/// <param name="context"></param>
 		public ContextProvider(HttpListenerContext context)
 		{
+			Context = context;
 			Request = new RequestProvider(context.Request);
 			Response = new ResponseProvider(context.Response);
 		}
+
+		/// <inheritdoc cref="HttpListenerContext.AcceptWebSocketAsync(string)"/>
+		public async Task<HttpListenerWebSocketContext> AcceptWebSocketAsync(string subProtocol) => await Context.AcceptWebSocketAsync(subProtocol);
+
 	}
 
 	/// <summary>
@@ -46,6 +58,7 @@ namespace Webserver.Webserver
 	/// </summary>
 	public class RequestProvider
 	{
+
 		/// <summary>
 		/// The HttpListenerRequest that represents the incoming request. Null when the RequestProvider was created as part of a unit test.
 		/// </summary>
@@ -117,6 +130,14 @@ namespace Webserver.Webserver
 			set => _inputStream = value;
 		}
 		#endregion
+
+		public bool _IsWebSocketRequest;
+		/// <inheritdoc cref="HttpListenerRequest.IsWebSocketRequest"/>
+		public bool IsWebSocketRequest
+		{
+			get => Request == null ? _IsWebSocketRequest : Request.IsWebSocketRequest;
+			set => _IsWebSocketRequest = true;
+		}
 
 		#region ContentEncoding
 		private Encoding _contentEncoding;
@@ -305,7 +326,7 @@ namespace Webserver.Webserver
 				}
 				catch (HttpListenerException e)
 				{
-					Console.WriteLine("Failed to send data to host: " + e.Message);
+					Program.Log.Warning("Failed to send data to host: " + e.Message);
 				}
 			}
 		}

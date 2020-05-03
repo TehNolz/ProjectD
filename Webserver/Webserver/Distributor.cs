@@ -1,5 +1,8 @@
-using System;
 using System.Net;
+
+using Webserver.Chat;
+
+using static Webserver.Program;
 
 namespace Webserver.Webserver
 {
@@ -20,18 +23,30 @@ namespace Webserver.Webserver
 			Listener.Prefixes.Add($"http://{address}:{port}/");
 			Listener.Start();
 
-			Console.WriteLine("Distributor listening on {0}:{1}", address, port);
+			Log.Config($"Distributor listening on {address}:{port}");
 			while (true)
 			{
 				try
 				{
-					HttpListenerContext context = Listener.GetContext();
-					Console.WriteLine("Received request from {0}", context.Request.RemoteEndPoint);
-					RequestWorker.Queue.Add(new ContextProvider(context));
+					//Wait for incoming requests.
+					var context = new ContextProvider(Listener.GetContext());
+
+					//If the received request is a request to open a websocket, accept it only if the URL ends with /chat
+					if (context.Request.IsWebSocketRequest)
+					{
+						if (context.Request.Url.LocalPath.EndsWith("/chat"))
+							new ChatConnection(context);
+						else
+							context.Response.Send(HttpStatusCode.BadRequest);
+						continue;
+					}
+
+					Log.Trace($"Received request from {context.Request.RemoteEndPoint}");
+					RequestWorker.Queue.Add(context);
 				}
 				catch (HttpListenerException e)
 				{
-					Console.WriteLine(e);
+					Log.Warning($"{e.GetType().Name}: {e.Message}");
 				}
 			}
 		}

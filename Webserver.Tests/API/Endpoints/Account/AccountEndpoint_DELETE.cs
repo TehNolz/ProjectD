@@ -29,7 +29,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		}
 
 		[SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "<Pending>")]
-		static IEnumerable<object[]> InvalidDeleteTestData => new[]{
+		private static IEnumerable<object[]> InvalidDeleteTestData => new[]{
 			new object[] {
 				new JObject() {
 					{"Email", "Administrator"},

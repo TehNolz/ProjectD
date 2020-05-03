@@ -7,12 +7,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Text;
 using System.Threading;
-
+using Webserver.Chat;
+using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
+
+using static Webserver.Program;
 
 namespace Webserver.LoadBalancer
 {
@@ -32,7 +34,7 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		public static void Init()
 		{
-			Console.WriteLine("Server is running as master");
+			Log.Config("Server is running as master");
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
 			ServerProfile.KnownServers.TryAdd(Balancer.LocalAddress, new ServerProfile(Balancer.LocalAddress));
 
@@ -40,6 +42,10 @@ namespace Webserver.LoadBalancer
 			ServerConnection.ServerTimeout += OnServerTimeout;
 			ServerConnection.MessageReceived += OnDbChange;
 			ServerConnection.MessageReceived += OnDbSynchronize;
+
+			//Chat system events
+			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
+			ServerConnection.MessageReceived += Chatroom.ChatroomUpdateHandler;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
@@ -52,22 +58,43 @@ namespace Webserver.LoadBalancer
 			Listener.ListenerThread = new Thread(() => Listener.Listen(((IPEndPoint)listener.LocalEndpoint).Address, BalancerConfig.HttpPort));
 			Listener.ListenerThread.Start();
 
-			Console.WriteLine("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
+			Log.Config("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
 		}
 
-		private static void OnDbSynchronize(Message message)
+		/// <summary>
+		/// Handles message broadcasts from slaves.
+		/// </summary>
+		/// <param name="message"></param>
+		private static void BroadcastHandler(ServerMessage message)
+		{
+			// If this message is a broadcast, send it to all servers except the one it came from.
+			if (message.isBroadcast && message.ID == null)
+			{
+				var destinations = new List<ServerConnection>(ServerProfile.ConnectedServers);
+				destinations.Remove(message.Connection);
+				message.Send(destinations);
+			}
+		}
+
+		private static void OnDbSynchronize(ServerMessage message)
 		{
 			// Check if the type is QueryInsert
 			if (message.Type != MessageType.DbSync)
 				return;
 
-			var changeList = Program.Database.GetChanges((long)message.Data.Id).ToList();
-			changeList.Reverse();
-			var changes = JArray.FromObject(changeList);
-			message.Reply(changes);
+			if (message.Data is null)
+			{
+				// Send the current database version to begin the chunked synchronization
+				message.Reply(new { Program.Database.Version });
+				return;
+			}
+
+			// Get `amount` of changes and send them in the reply
+			IEnumerable<JObject> changes = Program.Database.GetNewChanges((long)message.Data.Version, (int)message.Data.Amount).Select(x => (JObject)x);
+			message.Reply(JArray.FromObject(changes));
 		}
 
-		private static void OnDbChange(Message message)
+		private static void OnDbChange(ServerMessage message)
 		{
 			// Check if the type is DbChange
 			if (message.Type != MessageType.DbChange)
@@ -86,8 +113,8 @@ namespace Webserver.LoadBalancer
 		public static void OnServerTimeout(ServerProfile server, string message)
 		{
 			ServerProfile.KnownServers.TryRemove(server.Address, out _);
-			Console.WriteLine($"Lost connection to slave at {server.Address}: {message}");
-			ServerConnection.Broadcast(new Message(MessageType.Timeout, server.Address));
+			Log.Warning($"Lost connection to slave at {server.Address}: {message}");
+			ServerConnection.Broadcast(new ServerMessage(MessageType.Timeout, server.Address));
 		}
 
 		///<inheritdoc cref="RegistryThread"/>
@@ -103,26 +130,26 @@ namespace Webserver.LoadBalancer
 					//Get the length of the incoming message
 					int messageLength = BitConverter.ToInt32(client.GetStream().Read(sizeof(int)));
 					//Read the incoming message and convert it into a Message object.
-					var message = new Message(client.GetStream().Read(messageLength));
+					ServerMessage message = Message.FromBytes<ServerMessage>(client.GetStream().Read(messageLength));
 
 					//Check if the client sent a registration request. Drop the connection if it didn't.
 					if (message.Type != MessageType.Register)
 					{
-						Console.WriteLine("Dropped connection to server {0} during registration: invalid registration request", client.Client.RemoteEndPoint);
+						Log.Warning($"Dropped connection to server {client.Client.RemoteEndPoint} during registration: invalid registration request");
 						client.Close();
 						continue;
 					}
 
 					//Register the server and answer its request.
 					var connection = new ServerConnection(client);
-					connection.Send(new Message(MessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
+					connection.Send(new ServerMessage(MessageType.RegisterResponse, (from SP in ServerProfile.KnownServers.Values where !SP.Equals(connection) && !SP.Address.Equals(Balancer.LocalAddress) select SP.Address).ToList()));
 
-					ServerConnection.Broadcast(new Message(MessageType.NewServer, connection.Address));
-					Console.WriteLine("Successfully registered the server at {0}. Informed other slaves.", connection.Address);
+					ServerConnection.Broadcast(new ServerMessage(MessageType.NewServer, connection.Address));
+					Log.Info($"Successfully registered the server at {connection.Address}. Informed other slaves.");
 				}
 				catch (SocketException e)
 				{
-					Console.WriteLine($"Lost connection to server {client.Client.RemoteEndPoint} during registration: {e.Message}");
+					Log.Warning($"Lost connection to server {client.Client.RemoteEndPoint} during registration: {e.Message}");
 					continue;
 				}
 			}
@@ -136,7 +163,7 @@ namespace Webserver.LoadBalancer
 			Balancer.Client = new UdpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.DiscoveryPort));
 
 			//Create the standard response message, so that we don't have to constantly recreate it. It's always the same message anyway.
-			byte[] response = new Message(MessageType.DiscoverResponse, Balancer.LocalAddress).GetBytes();
+			byte[] response = new ServerMessage(MessageType.DiscoverResponse, Balancer.LocalAddress).GetBytes();
 
 			//Main loop
 			while (true)
@@ -172,12 +199,12 @@ namespace Webserver.LoadBalancer
 
 					//Answer it.
 					Balancer.Client.Send(response, response.Length, clientEndPoint);
-					Console.WriteLine($"Recived discovery message from {clientEndPoint.Address}.");
+					Log.Info($"Recived discovery message from {clientEndPoint.Address}.");
 				}
 				catch (SocketException e)
 				{
 					//If an error occured during receiving/sending, then there's not much we can do about it. Slave's just gotta retry.
-					Console.WriteLine($"Failed to receive or answer discovery message: {e.Message}");
+					Log.Warning($"Failed to receive or answer discovery message: {e.Message}");
 				}
 			}
 		}

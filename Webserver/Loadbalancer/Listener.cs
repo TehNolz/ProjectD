@@ -5,13 +5,15 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 
+using Webserver.Chat;
 using Webserver.Config;
+
+using static Webserver.Program;
 
 namespace Webserver.LoadBalancer
 {
-	class Listener
+	internal class Listener
 	{
-
 		/// <summary>
 		/// Listener thread. Waits for incoming HTTP requests and relays them to slaves.
 		/// </summary>
@@ -24,16 +26,31 @@ namespace Webserver.LoadBalancer
 			listener.Prefixes.Add($"http://{address}:{port}/");
 			listener.Prefixes.Add($"http://localhost:{port}/");
 			listener.Start();
-			Console.WriteLine("Load Balancer Listener now listening on {0}:{1}", address, port);
+			Log.Config($"Load Balancer Listener now listening on {address}:{port}");
 
 			//Main loop
 			while (true)
 			{
 				//Get incoming requests
 				HttpListenerContext context = listener.GetContext();
-				string slaveAddress = GetBestSlave();
-				string URL = slaveAddress + context.Request.Url.LocalPath;
-				Console.WriteLine($"Relaying request for {URL} to {slaveAddress}");
+
+				//If the received request is a request to open a websocket, accept it only if the URL ends with /chat
+				if (context.Request.IsWebSocketRequest)
+				{
+					if (context.Request.Url.LocalPath.EndsWith("/chat"))
+					{
+						Log.Trace("Received websocket request");
+						new WebSocketRelay(context).Start();
+						continue;
+					}
+					else
+					{
+						context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+						context.Response.OutputStream.Dispose();
+					}
+				}
+				IPAddress slaveAddress = GetBestSlave();
+				string URL = $"http://{slaveAddress}:{BalancerConfig.HttpRelayPort}{context.Request.Url.PathAndQuery}";
 
 				//Start relaying the request.
 				var requestRelay = (HttpWebRequest)WebRequest.Create(URL);
@@ -53,6 +70,7 @@ namespace Webserver.LoadBalancer
 					context.Request.InputStream.CopyTo(requestRelay.GetRequestStream());
 
 				//Wait for a response from the slave.
+				Log.Trace($"Relaying request for {context.Request.Url.LocalPath} to {slaveAddress}");
 				requestRelay.BeginGetResponse(Respond, new RequestState(requestRelay, context));
 			}
 		}
@@ -62,7 +80,7 @@ namespace Webserver.LoadBalancer
 		/// Find the best slave to relay incoming requests to.
 		/// </summary>
 		/// <returns>The URL of the chosen slave</returns>
-		public static string GetBestSlave()
+		public static IPAddress GetBestSlave()
 		{
 			ICollection<ServerProfile> servers = ServerProfile.KnownServers.Values;
 
@@ -73,7 +91,7 @@ namespace Webserver.LoadBalancer
 			// Increment the server index and wrap back to 0 when the index reaches servers.Count
 			serverIndex = (serverIndex + 1) % servers.Count;
 
-			return $"http://{servers.ElementAt(serverIndex).Address}:{BalancerConfig.HttpRelayPort}";
+			return servers.ElementAt(serverIndex).Address;
 		}
 
 		/// <summary>
@@ -88,6 +106,7 @@ namespace Webserver.LoadBalancer
 			HttpWebResponse workerResponse;
 			try
 			{
+				Log.Trace("Received websocket request.");
 				workerResponse = (HttpWebResponse)data.WebRequest.EndGetResponse(result);
 			}
 			catch (WebException e)
@@ -97,6 +116,20 @@ namespace Webserver.LoadBalancer
 			}
 
 			HttpListenerResponse response = data.Context.Response;
+
+
+			//If the worker didn't send a response for some reason, send an InternalServerError.
+			if (workerResponse == null)
+			{
+				//How did we get here?
+				Log.Error($"Slave {data.WebRequest.Address.Host} did not respond in time.");
+
+				response.StatusCode = (int)HttpStatusCode.InternalServerError;
+				response.OutputStream.Close();
+				return;
+			}
+
+			//Transfer worker response headers, status code.
 			response.Headers = workerResponse.Headers;
 			response.StatusCode = (int)workerResponse.StatusCode;
 			response.StatusDescription = workerResponse.StatusDescription;
@@ -104,13 +137,12 @@ namespace Webserver.LoadBalancer
 			using Stream outStream = workerResponse.GetResponseStream();
 			outStream.CopyTo(response.OutputStream);
 
+			//Dispose the response, transmitting it to the client.
 			try
 			{
 				response.OutputStream.Close();
 			}
 			catch (Exception) { }
-
-			//Dispose the response, transmitting it to the client.
 			workerResponse.Dispose();
 		}
 

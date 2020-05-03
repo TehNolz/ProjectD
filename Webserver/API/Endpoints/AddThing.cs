@@ -9,7 +9,7 @@ using Webserver.Models;
 namespace Webserver.API.Endpoints
 {
 	[Route("add")]
-	class AddThing : APIEndpoint
+	internal class AddThing : APIEndpoint
 	{
 		[ContentType("application/json")]
 		public override void POST()
