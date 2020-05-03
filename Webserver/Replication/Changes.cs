@@ -53,7 +53,7 @@ namespace Webserver.Replication
 		{
 			get
 			{
-				if (_collection is null && !(Type?.HasFlag(ChangeType.WithCondition) ?? true))
+				if (_collection is null)
 					_collection = JArray.Parse(Data);
 				return _collection;
 			}
@@ -63,6 +63,7 @@ namespace Webserver.Replication
 				_collection = value;
 			}
 		}
+		[JsonIgnore]
 		public virtual Message Source { get; }
 
 		/// <summary>
@@ -75,6 +76,16 @@ namespace Webserver.Replication
 		/// </summary>
 		/// <param name="collection">The list of objects to add to this <see cref="Changes"/> instance.</param>
 		public Changes(IList<object> collection) => SetCollection(collection);
+		/// <summary>
+		/// Initializes a new instance of <see cref="Changes"/> with the specified condition
+		/// string and optional parameter object.
+		/// <para/>
+		/// This also sets the <see cref="ChangeType.WithCondition"/> flag in <see cref="Type"/>.
+		/// </summary>
+		/// <param name="condition">The condition string used in the query.</param>
+		/// <param name="param">An optional parameter object whose properties will be
+		/// included in the command.</param>
+		public Changes(string condition, [AllowNull] object param) => SetCondition(condition, param);
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/> by deserializing the given
 		/// <paramref name="message"/> object.
@@ -93,8 +104,14 @@ namespace Webserver.Replication
 			// TODO Use JArray to decrease message size
 			ID = (long?)data.ID;
 			Type = Enum.Parse<ChangeType>((string)data.Type);
-			ModelTypeID = (int)data.ItemType;
 			Data = (string)data.Data;
+
+			// Get the type as id or as fullname based on type
+			JValue itemType = data.ItemType;
+			if (itemType.Type == JTokenType.Integer)
+				CollectionType = new ModelType() { ID = (int)data.ItemType };
+			else
+				CollectionType = new ModelType() { FullName = (string)data.ItemType };
 		}
 
 		/// <summary>
@@ -146,13 +163,27 @@ namespace Webserver.Replication
 		/// <param name="collection">The list of objects to add to this <see cref="Changes"/> instance.</param>
 		public void SetCollection([AllowNull] IList<object> collection)
 			=> Collection = collection is null ? null : JArray.FromObject(collection.Select(x => JObject.FromObject(x).Values()));
+		/// <summary>
+		/// Packs the given <paramref name="condition"/> and <paramref name="param"/>
+		/// into a <see cref="JArray"/> and sets the <see cref="Collection"/> property.
+		/// </summary>
+		/// <para/>
+		/// This also sets the <see cref="ChangeType.WithCondition"/> flag in <see cref="Type"/>.
+		/// <param name="condition">The condition string used in the query.</param>
+		/// <param name="param">An optional parameter object whose properties will be
+		/// included in the command.</param>
+		public void SetCondition(string condition, object param = null)
+		{
+			Collection = new JArray() { condition, JObject.FromObject(param) };
+			Type |= ChangeType.WithCondition;
+		}
 
 		public override string ToString() => $"{GetType().Name}<{ID}>";
 
 		public static explicit operator JObject(Changes changes) => new JObject() {
 				{ "ID", changes.ID },
-				{ "Type", changes.Type.ToString() },
-				{ "ItemType", changes.ModelTypeID },
+				{ "Type", (int)changes.Type },
+				{ "ItemType", new JValue((object)changes.ModelTypeID ?? changes.CollectionType.FullName) },
 				{ "Data", changes.Data },
 			};
 		public static explicit operator Changes(JObject jObject) => new Changes(jObject);

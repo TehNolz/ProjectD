@@ -1,7 +1,7 @@
 using Database.SQLite;
 
 using Newtonsoft.Json.Linq;
-
+using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -82,29 +82,50 @@ namespace Webserver.Replication
 				synchronizer.WaitUntilReady(changes.ID.Value);
 
 			// Assign the foreign key to the changes object
-			ModelType type = typeList.FirstOrDefault(x => x.FullName == changes.CollectionType.FullName);
-			if (type is null)
+			ModelType type;
+			lock (typeList)
 			{
-				// Insert a new type if it doesn't already exist
-				type = new ModelType() { FullName = changes.CollectionType.FullName };
-				database.Insert(type);
-				typeList.Add(type);
+				type = typeList.FirstOrDefault(x => x == changes.CollectionType);
+				if (type is null)
+				{
+					// Insert a new type if it doesn't already exist
+					type = new ModelType() { FullName = changes.CollectionType.FullName };
+					database.Insert(type);
+					typeList.Add(type);
+				}
 			}
 			changes.CollectionType = type;
 
 			if (applyChanges)
 			{
-				// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
-				PropertyInfo[] props = Utils.GetProperties(type).ToArray();
-				IEnumerable<JObject> collection = changes.Collection.Select(x =>
-				{
-					var @out = new JObject();
-					for (int i = 0; i < props.Length; i++)
-						@out[props[i].Name] = x[i];
-					return @out;
-				});
+				dynamic[] items;
 
-				dynamic[] items = collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+				// Unpack the changes object's data
+				if (changes.Type.Value.HasFlag(ChangeType.WithCondition))
+				{
+					// Convert the first element to string and the second (if present) to dynamic
+					items = new dynamic[2];
+					items[0] = (string)changes.Collection[0];
+					items[1] = (System.Collections.IDictionary)new Dictionary<string, JToken>(
+						(JObject)changes.Collection.ElementAtOrDefault(1))
+							.ToDictionary(x => x.Key, x => x.Value.ToObject<object>()
+					);
+				}
+				else
+				{
+					// Convert the JArrays into JObjects by adding the keys of the type's properties
+					PropertyInfo[] props = Utils.GetProperties(type).ToArray();
+					IEnumerable<JObject> collection = changes.Collection.Select(x =>
+					{
+						var @out = new JObject();
+						for (int i = 0; i < props.Length; i++)
+							@out[props[i].Name] = x[i];
+						return @out;
+					});
+
+					// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
+					items = collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+				}
 
 				// Copy parent db settings
 				(bool, bool) oldSettings = (database.AutoAssignRowId, database.StoreEnumsAsText);
@@ -132,15 +153,17 @@ namespace Webserver.Replication
 						);
 						break;
 					case ChangeType.DELETE | ChangeType.WithCondition:
-						Utils.InvokeGenericMethod<int>((Func<string, int>)database.Delete<object>,
+						Utils.InvokeGenericMethod<int>((Func<string, object, int>)database.Delete<object>,
 							changes.CollectionType,
-							new[] { changes.Data }
+							items
 						);
 						break;
 					default:
 						throw new ArgumentOutOfRangeException(nameof(changes.Type));
 				}
-				changes.SetCollection(items as IList<object>);
+
+				if (!changes.Type.Value.HasFlag(ChangeType.WithCondition))
+					changes.SetCollection(items as IList<object>);
 
 				// Reset db settings
 				(database.AutoAssignRowId, database.StoreEnumsAsText) = oldSettings;
@@ -169,7 +192,7 @@ namespace Webserver.Replication
 		public SQLiteTransaction BeginTransaction()
 		{
 			SQLiteTransaction transaction = database.Connection.BeginTransaction();
-			
+
 			database.Connection.RollBack += OnRollback;
 
 			return transaction;

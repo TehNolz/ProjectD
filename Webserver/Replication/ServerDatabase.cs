@@ -85,7 +85,7 @@ namespace Webserver.Replication
 				changes = new Changes(items as IList<object>)
 				{
 					Type = ChangeType.INSERT,
-					CollectionType = typeof(T)
+					CollectionType = GetModelType<T>()
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -148,11 +148,10 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes()
+				changes = new Changes(condition, param)
 				{
 					Type = ChangeType.DELETE | ChangeType.WithCondition,
-					CollectionType = typeof(T),
-					Data = condition
+					CollectionType = GetModelType<T>()
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -202,7 +201,7 @@ namespace Webserver.Replication
 				changes = new Changes(items as IList<object>)
 				{
 					Type = ChangeType.DELETE,
-					CollectionType = typeof(T)
+					CollectionType = GetModelType<T>()
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -253,7 +252,7 @@ namespace Webserver.Replication
 				changes = new Changes(items as IList<object>)
 				{
 					Type = ChangeType.UPDATE,
-					CollectionType = typeof(T)
+					CollectionType = GetModelType<T>()
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -350,6 +349,13 @@ namespace Webserver.Replication
 				}
 			}
 		}
+
+		/// <summary>
+		/// Returns an existing <see cref="ModelType"/> instance from the <see cref="TypeList"/>
+		/// or creates a new one.
+		/// </summary>
+		/// <typeparam name="T">The type to get a <see cref="ModelType"/> for.</typeparam>
+		private ModelType GetModelType<T>() => TypeList.FirstOrDefault(x => x == typeof(T)) ?? typeof(T);
 
 		/// <summary>
 		/// Pushes the given changes onto this database's changelog and applies the 
