@@ -62,17 +62,16 @@ namespace Webserver.Chat.Commands
 			if (message.Type != MessageType.ChatMessage)
 				return;
 
+			var data = (JObject)message.Data;
+
 			//Broadcast the data to all connected clients.
 			foreach (ChatConnection connection in ChatConnection.ActiveConnections)
 			{
-				if (!connection.Chatrooms.Contains(message.Data.Chatroom))
+				Chatroom room = ChatManagement.Database.Select<Chatroom>("ID = @ID", new { ID = Guid.Parse((string)data["ID"]) }).First();
+				if (!room.CanUserAccess(ChatManagement.Database, connection.User))
 					continue;
 
-				var chatMessage = new ChatMessage(MessageType.ChatMessage, message.Data)
-				{
-					StatusCode = ChatStatusCode.OK
-				};
-				connection.Send(chatMessage);
+				connection.Send(ChatStatusCode.OK, new ChatMessage(MessageType.ChatMessage, message.Data));
 			}
 		}
 	}

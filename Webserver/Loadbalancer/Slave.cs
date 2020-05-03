@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-
+using Webserver.Chat;
 using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
@@ -35,7 +35,7 @@ namespace Webserver.LoadBalancer
 
 			//Chat system events
 			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
-			ServerConnection.MessageReceived += EditChatroom.ChatroomUpdateHandler;
+			ServerConnection.MessageReceived += Chatroom.ChatroomUpdateHandler;
 
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));

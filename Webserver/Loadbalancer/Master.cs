@@ -9,7 +9,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-
+using Webserver.Chat;
 using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
@@ -45,7 +45,7 @@ namespace Webserver.LoadBalancer
 
 			//Chat system events
 			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
-			ServerConnection.MessageReceived += EditChatroom.ChatroomUpdateHandler;
+			ServerConnection.MessageReceived += Chatroom.ChatroomUpdateHandler;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);

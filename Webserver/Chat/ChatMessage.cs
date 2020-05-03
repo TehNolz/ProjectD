@@ -144,6 +144,7 @@ namespace Webserver.Chat
 		BadMessageType = 400,
 		BadMessageData = 401,
 		NoSuchChatroom = 402,
+		AlreadyExists = 403,
 
 		//We fucked up. (500-599)
 		InternalServerError = 500,
