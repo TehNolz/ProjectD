@@ -1,12 +1,14 @@
 using Database.SQLite;
 
 using Newtonsoft.Json.Linq;
-
+using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
+using System.Collections.ObjectModel;
+using System.Data.SQLite;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 
 namespace Webserver.Replication
@@ -23,11 +25,16 @@ namespace Webserver.Replication
 		/// </summary>
 		public long Version { get; private set; }
 
-		// TODO: Make these members private and handle transactions differently
-		public SQLiteAdapter changeLog;
-		public SQLiteAdapter database;
+		/// <summary>
+		/// Gets the collection of model types listed in the database.
+		/// </summary>
+		public ReadOnlyCollection<ModelType> TypeList => typeList.AsReadOnly();
 
+		private List<ModelType> typeList;
 		private SynchronizingHandle synchronizer;
+
+		private readonly SQLiteAdapter database;
+		private readonly ServerDatabase parentDatabase;
 
 		/// <summary>
 		/// Initializes a new instance of <see cref="ChangeLog"/> by creating a new
@@ -36,13 +43,21 @@ namespace Webserver.Replication
 		/// <param name="database">The database to create a changelog for.</param>
 		public ChangeLog(ServerDatabase database)
 		{
-			string changeLogName = $"{Path.GetDirectoryName(database.Connection.FileName)}\\{database.Connection.DataSource}_changelog.db";
+			// Keep a reference to the parent to copy settings such as StoreEnumsAsText when applying changes
+			parentDatabase = database;
 
-			changeLog = new SQLiteAdapter(changeLogName);
-			changeLog.TryCreateTable<Changes>();
+			// Open an extra connection to the database in for applying changes
+			this.database = new SQLiteAdapter(database.Connection.FileName)
+			{
+				StoreEnumsAsText = false
+			};
 
-			// Open an extra connection to the main database in for applying changes
-			this.database = new SQLiteAdapter(database.Connection.FileName);
+			// Add the changelog to the database
+			this.database.CreateTableIfNotExists<ModelType>();
+			this.database.CreateTableIfNotExists<Changes>();
+
+			// Build the typeList cache
+			typeList = this.database.Select<ModelType>().ToList();
 
 			// Set the synchronizer's id to 1 + the id of the last changelog item
 			Version = Peek()?.ID ?? 0;
@@ -62,15 +77,59 @@ namespace Webserver.Replication
 			if (changes.ID <= Version)
 				throw new ArgumentException($"The given {nameof(Changes)} object is already present in the changelog.");
 
+			// Block until it is this id's turn to be applied
 			if (changes.ID.HasValue)
-			{
 				synchronizer.WaitUntilReady(changes.ID.Value);
+
+			// Assign the foreign key to the changes object
+			ModelType type;
+			lock (typeList)
+			{
+				type = typeList.FirstOrDefault(x => x == changes.CollectionType);
+				if (type is null)
+				{
+					// Insert a new type if it doesn't already exist
+					type = new ModelType() { FullName = changes.CollectionType.FullName };
+					database.Insert(type);
+					typeList.Add(type);
+				}
 			}
+			changes.CollectionType = type;
 
 			if (applyChanges)
 			{
-				// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
-				dynamic[] items = changes.Collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+				dynamic[] items;
+
+				// Unpack the changes object's data
+				if (changes.Type.Value.HasFlag(ChangeType.WithCondition))
+				{
+					// Convert the first element to string and the second (if present) to dynamic
+					items = new dynamic[2];
+					items[0] = (string)changes.Collection[0];
+					items[1] = (System.Collections.IDictionary)new Dictionary<string, JToken>(
+						(JObject)changes.Collection.ElementAtOrDefault(1))
+							.ToDictionary(x => x.Key, x => x.Value.ToObject<object>()
+					);
+				}
+				else
+				{
+					// Convert the JArrays into JObjects by adding the keys of the type's properties
+					PropertyInfo[] props = Utils.GetProperties(type).ToArray();
+					IEnumerable<JObject> collection = changes.Collection.Select(x =>
+					{
+						var @out = new JObject();
+						for (int i = 0; i < props.Length; i++)
+							@out[props[i].Name] = x[i];
+						return @out;
+					});
+
+					// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
+					items = collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+				}
+
+				// Copy parent db settings
+				(bool, bool) oldSettings = (database.AutoAssignRowId, database.StoreEnumsAsText);
+				(database.AutoAssignRowId, database.StoreEnumsAsText) = (parentDatabase.AutoAssignRowId, parentDatabase.StoreEnumsAsText);
 
 				// Apply changes
 				switch (changes.Type)
@@ -93,14 +152,25 @@ namespace Webserver.Replication
 							new[] { items }
 						);
 						break;
+					case ChangeType.DELETE | ChangeType.WithCondition:
+						Utils.InvokeGenericMethod<int>((Func<string, object, int>)database.Delete<object>,
+							changes.CollectionType,
+							items
+						);
+						break;
 					default:
 						throw new ArgumentOutOfRangeException(nameof(changes.Type));
 				}
-				changes.Collection = JArray.FromObject(items);
+
+				if (!changes.Type.Value.HasFlag(ChangeType.WithCondition))
+					changes.SetCollection(items as IList<object>);
+
+				// Reset db settings
+				(database.AutoAssignRowId, database.StoreEnumsAsText) = oldSettings;
 			}
 
 			// Push the changes onto the stack
-			changeLog.Insert(changes);
+			database.Insert(changes);
 			Version = changes.ID.Value;
 
 			synchronizer.Increment();
@@ -110,20 +180,37 @@ namespace Webserver.Replication
 		/// Returns the most recent <see cref="Changes"/> object from the changelog database without
 		/// removing it.
 		/// </summary>
-		public Changes Peek() => changeLog.Select<Changes>("1 ORDER BY `ROWID` DESC LIMIT 1").SingleOrDefault();
-
-		/// <summary>
-		/// Returns the most recent <see cref="Changes"/> object and removes it from the changelog
-		/// database.
-		/// </summary>
-		public Changes Pop()
+		public Changes Peek()
 		{
-			// Pop may be unnescessary
-			// Instead, the changestack with the most changes / most recent changes is uses as a reference
-			// Though this still poses a problem for unsynchronized databases
-			// TODO: Test this stuff
-			Program.Log.Debug("TODO: Add database 'pop' functionality.");
-			return null;
+			Changes changes = database.Select<Changes>("1 ORDER BY `ROWID` DESC LIMIT 1").SingleOrDefault();
+			if (!(changes is null))
+				changes.CollectionType = typeList.First(x => x.ID == changes.ModelTypeID);
+			return changes;
+		}
+
+		/// <inheritdoc cref="SQLiteConnection.BeginTransaction()"/>
+		public SQLiteTransaction BeginTransaction()
+		{
+			SQLiteTransaction transaction = database.Connection.BeginTransaction();
+
+			database.Connection.RollBack += OnRollback;
+
+			return transaction;
+		}
+
+		private void OnRollback(object sender, EventArgs e)
+		{
+			synchronizer.Dispose();
+
+			// Reset the version and synchronizer
+			Version = Peek()?.ID ?? 0;
+			synchronizer = new SynchronizingHandle(Version + 1);
+
+			// Rebuild the typeList cache
+			typeList = database.Select<ModelType>().ToList();
+
+			// Remove this handler
+			database.Connection.RollBack -= OnRollback;
 		}
 
 		/// <summary>
@@ -133,19 +220,26 @@ namespace Webserver.Replication
 		/// <param name="limit">An optional limit to how many changes are returned.
 		/// Values less than 0 indicate no limit.</param>
 		public IEnumerable<Changes> GetNewChanges(long id, long limit = -1)
-			=> changeLog.Select<Changes>("1 LIMIT @id,@limit", new { id, limit });
+		{
+			foreach (Changes changes in database.Select<Changes>("1 LIMIT @id,@limit", new { id, limit }))
+			{
+				changes.CollectionType = typeList.First(x => x.ID == changes.ModelTypeID);
+				yield return changes;
+			}
+		}
 
 		public void Dispose()
 		{
 			database.Dispose();
-			changeLog.Dispose();
+			database.Dispose();
+			synchronizer.Dispose();
 		}
 	}
 
 	/// <summary>
 	/// A class that provides ID-based synchronization using blocking function calls.
 	/// </summary>
-	public class SynchronizingHandle : IDisposable
+	internal class SynchronizingHandle : IDisposable
 	{
 		/// <summary>
 		/// Gets the current "un-blocking threshold" value.
@@ -246,9 +340,11 @@ namespace Webserver.Replication
 		}
 
 		// This code added to correctly implement the disposable pattern.
-		public void Dispose() =>
+		public void Dispose()
+		{
 			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
 			Dispose(true);
+		}
 		#endregion
 	}
 }

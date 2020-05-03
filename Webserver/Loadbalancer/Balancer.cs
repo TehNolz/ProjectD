@@ -151,25 +151,6 @@ namespace Webserver.LoadBalancer
 			if (foundMaster)
 			{
 				Slave.Init(serverEndpoint.Address);
-
-				//File.WriteAllText("stats.csv", string.Join(',', new[]
-				//{
-				//	"Chunk Size",
-				//	"Duration",
-				//	"Max Chunk Duration",
-				//	"Average Chunk Duration",
-				//	"Min Chunk Duration",
-				//	"Max Chunk IO Time",
-				//	"Average IO Time",
-				//	"Min IO Time",
-				//	"Ping",
-				//}) + '\n');
-				//var stepsize = 5;
-				//Program.Database.SynchronizeChunkSize += stepsize;
-				//for (; Program.Database.SynchronizeChunkSize <= 1500; Program.Database.SynchronizeChunkSize += stepsize)
-				//{
-				//	Program.Database.Synchronize();
-				//}
 				Program.Database.Synchronize();
 			}
 			else
