@@ -1,7 +1,6 @@
 using Config;
 
 using Logging;
-
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -11,7 +10,6 @@ using System.Net;
 using System.Threading;
 
 using Webserver.API;
-using Webserver.Chat;
 using Webserver.Config;
 using Webserver.LoadBalancer;
 using Webserver.Models;
@@ -84,9 +82,8 @@ namespace Webserver
 			// Initialize database
 			InitDatabase(DatabaseName);
 
-			//Register all API endpoints, chat commands
+			//Register all API endpoints
 			APIEndpoint.DiscoverEndpoints();
-			ChatCommand.DiscoverCommands();
 
 			//Start load balancer
 			IPAddress localAddress;
@@ -135,12 +132,9 @@ namespace Webserver
 			Database.BroadcastChanges = false;
 
 			//Create tables if they don't already exist.
-			Database.TryCreateTable<ExampleModel>();
-			Database.TryCreateTable<User>();
-			Database.TryCreateTable<Session>();
-			Database.TryCreateTable<Chatroom>();
-			Database.TryCreateTable<Chatlog>();
-			Database.TryCreateTable<ChatroomMembership>();
+			Database.CreateTableIfNotExists<ExampleModel>();
+			Database.CreateTableIfNotExists<User>();
+			Database.CreateTableIfNotExists<Session>();
 
 			//Create Admin account if it doesn't exist already;
 			if (Database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)
@@ -150,16 +144,6 @@ namespace Webserver
 					PermissionLevel = PermissionLevel.Admin
 				};
 				Database.Update(admin);
-			}
-
-			//Create default channel if none exist
-			if (Database.Select<Chatroom>().Count() == 0)
-			{
-				Database.Insert<Chatroom>(new Chatroom()
-				{
-					Name = "General",
-					Private = false,
-				});
 			}
 		}
 	}
