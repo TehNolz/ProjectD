@@ -7,7 +7,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-
+using Webserver.LoadBalancer;
 using Webserver.Models;
 
 namespace Webserver.Chat
@@ -95,6 +95,14 @@ namespace Webserver.Chat
 		public List<Chatlog> GetChatHistory(int start, int amount) => Chatlog.GetChatlog(this, start, amount).ToList();
 
 		/// <summary>
+		/// Retrieves the GUID of all users who are part of this chatroom.
+		/// </summary>
+		/// <returns></returns>
+		public IEnumerable<Guid> GetUsers() => Private ?
+				from CM in ChatManagement.Database.Select<ChatroomMembership>("ChatroomID = @ID", new { ID }) select CM.UserID :
+				from U in ChatManagement.Database.Select<User>() select U.ID;
+
+		/// <summary>
 		/// Returns a JSON representation of this chatroom.
 		/// </summary>
 		/// <returns></returns>
@@ -103,7 +111,7 @@ namespace Webserver.Chat
 				{"Name", Name},
 				{"Private", Private },
 				{"ID", ID },
-				{"LastMessage", GetLastMessage().ID }
+				{"LastMessage", GetLastMessage()?.ID }
 			};
 
 		/// <summary>
@@ -117,6 +125,26 @@ namespace Webserver.Chat
 			foreach (Chatroom room in chatrooms)
 				result.Add(room.GetJson());
 			return result;
+		}
+
+		/// <summary>
+		/// Event handler for ChatroomUpdate events. Sends received chatroom updates to all connected clients.
+		/// </summary>
+		/// <param name="message"></param>
+		public static void ChatroomUpdateHandler(ServerMessage message)
+		{
+
+			//Ignore everything other than messages with type ChatMessage
+			if (message.Type != MessageType.ChatroomUpdate)
+				return;
+
+			var data = (JObject)message.Data;
+			if (!data.ContainsKey("Users"))
+				throw new ArgumentException("Missing Users key");
+
+			//Send updated chatroom info to all relevant clients.
+			foreach (ChatConnection connection in from AC in ChatConnection.ActiveConnections where data["Users"].ToList().Contains(AC.User.ID) select AC)
+				connection.Send(new ChatMessage(MessageType.ChatroomUpdate, GetJsonBulk(connection.Chatrooms)));
 		}
 	}
 

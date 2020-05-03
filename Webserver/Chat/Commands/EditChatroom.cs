@@ -74,34 +74,12 @@ namespace Webserver.Chat.Commands
 			}
 
 			//Save the changes to the database and inform all relevant clients about it.
+			var result = chatroom.GetJson();
+			result.Add("Users", new JArray(chatroom.GetUsers()));
 			ChatManagement.Database.Update(chatroom);
-			var serverMessage = new ServerMessage(MessageType.ChatroomUpdate, chatroom.GetJson());
+			var serverMessage = new ServerMessage(MessageType.ChatroomUpdate, result);
 			ServerConnection.Broadcast(serverMessage);
-			ChatroomUpdateHandler(serverMessage);
-		}
-
-		/// <summary>
-		/// Event handler for ChatroomUpdate events. Sends received chatroom updates to all connected clients.
-		/// </summary>
-		/// <param name="message"></param>
-		public static void ChatroomUpdateHandler(ServerMessage message)
-		{
-
-			//Ignore everything other than messages with type ChatMessage
-			if (message.Type != MessageType.ChatroomUpdate)
-				return;
-
-			var data = (JObject)message.Data;
-
-			foreach(ChatConnection connection in ChatConnection.ActiveConnections)
-			{
-				//Check if the client has access to this chatroom
-				Chatroom room = ChatManagement.Database.Select<Chatroom>("ID = @ID", new { ID = Guid.Parse((string)data["ID"])}).First();
-				if(!room.CanUserAccess(ChatManagement.Database, connection.User))
-					continue;
-
-				connection.Send(new ChatMessage(MessageType.ChatroomUpdate, Chatroom.GetJsonBulk(connection.Chatrooms)));
-			}
+			Chatroom.ChatroomUpdateHandler(serverMessage);
 		}
 	}
 }
