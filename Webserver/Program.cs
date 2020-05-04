@@ -135,6 +135,9 @@ namespace Webserver
 			Database.CreateTableIfNotExists<ExampleModel>();
 			Database.CreateTableIfNotExists<User>();
 			Database.CreateTableIfNotExists<Session>();
+			Database.CreateTableIfNotExists<Chatroom>();
+			Database.CreateTableIfNotExists<Chatlog>();
+			Database.CreateTableIfNotExists<ChatroomMembership>();
 
 			//Create Admin account if it doesn't exist already;
 			if (Database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)

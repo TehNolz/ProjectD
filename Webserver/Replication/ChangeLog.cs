@@ -1,15 +1,16 @@
 using Database.SQLite;
 
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Data.SQLite;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
+
+using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
 {
@@ -81,99 +82,100 @@ namespace Webserver.Replication
 			if (changes.ID.HasValue)
 				synchronizer.WaitUntilReady(changes.ID.Value);
 
-			// Assign the foreign key to the changes object
-			ModelType type;
-			lock (typeList)
+			// Lock this instance for additional thread safety for changes with no id
+			lock (this)
 			{
-				type = typeList.FirstOrDefault(x => x == changes.CollectionType);
-				if (type is null)
+				// Assign the foreign key to the changes object
+				ModelType type;
+				lock (typeList)
 				{
-					// Insert a new type if it doesn't already exist
-					type = new ModelType() { FullName = changes.CollectionType.FullName };
-					database.Insert(type);
-					typeList.Add(type);
-				}
-			}
-			changes.CollectionType = type;
-
-			if (applyChanges)
-			{
-				dynamic[] items;
-
-				// Unpack the changes object's data
-				if (changes.Type.Value.HasFlag(ChangeType.WithCondition))
-				{
-					// Convert the first element to string and the second (if present) to dynamic
-					items = new dynamic[2];
-					items[0] = (string)changes.Collection[0];
-					items[1] = (System.Collections.IDictionary)new Dictionary<string, JToken>(
-						(JObject)changes.Collection.ElementAtOrDefault(1))
-							.ToDictionary(x => x.Key, x => x.Value.ToObject<object>()
-					);
-				}
-				else
-				{
-					// Convert the JArrays into JObjects by adding the keys of the type's properties
-					PropertyInfo[] props = Utils.GetProperties(type).ToArray();
-					IEnumerable<JObject> collection = changes.Collection.Select(x =>
+					type = typeList.FirstOrDefault(x => x == changes.CollectionType);
+					if (type is null)
 					{
-						var @out = new JObject();
-						for (int i = 0; i < props.Length; i++)
-							@out[props[i].Name] = x[i];
-						return @out;
-					});
+						// Insert a new type if it doesn't already exist
+						type = new ModelType() { FullName = changes.CollectionType.FullName };
+						database.Insert(type);
+						typeList.Add(type.Clone());
 
-					// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
-					items = collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+						changes.CollectionType = type;
+						// Set the id to null if this server is the master to ensure the type's fulltext gets sent to the other servers
+						if (Balancer.IsMaster)
+							changes.CollectionType.ID = null;
+					}
+					// Copy the complete modeltype over to the changes object
+					else
+						changes.CollectionType = type;
 				}
 
-				// Copy parent db settings
-				(bool, bool) oldSettings = (database.AutoAssignRowId, database.StoreEnumsAsText);
-				(database.AutoAssignRowId, database.StoreEnumsAsText) = (parentDatabase.AutoAssignRowId, parentDatabase.StoreEnumsAsText);
-
-				// Apply changes
-				switch (changes.Type)
+				if (applyChanges)
 				{
-					case ChangeType.INSERT:
-						Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)database.Insert,
-							changes.CollectionType,
-							new[] { items }
+					dynamic[] items;
+
+					// Unpack the changes object's data
+					if (changes.Type.Value.HasFlag(ChangeType.WithCondition))
+					{
+						// Convert the first element to string and the second (if present) to dynamic
+						items = new dynamic[2];
+						items[0] = (string)changes.Collection[0];
+						items[1] = (System.Collections.IDictionary)new Dictionary<string, JToken>(
+							(JObject)changes.Collection.ElementAtOrDefault(1))
+								.ToDictionary(x => x.Key, x => x.Value.ToObject<object>()
 						);
-						break;
-					case ChangeType.UPDATE:
-						Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Update,
-							changes.CollectionType,
-							new[] { items }
-						);
-						break;
-					case ChangeType.DELETE:
-						Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Delete,
-							changes.CollectionType,
-							new[] { items }
-						);
-						break;
-					case ChangeType.DELETE | ChangeType.WithCondition:
-						Utils.InvokeGenericMethod<int>((Func<string, object, int>)database.Delete<object>,
-							changes.CollectionType,
-							items
-						);
-						break;
-					default:
-						throw new ArgumentOutOfRangeException(nameof(changes.Type));
+					}
+					else
+					{
+						// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
+						items = changes.ExpandCollection().Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+					}
+
+					// Copy parent db settings
+					(bool, bool) oldSettings = (database.AutoAssignRowId, database.StoreEnumsAsText);
+					(database.AutoAssignRowId, database.StoreEnumsAsText) = (parentDatabase.AutoAssignRowId, parentDatabase.StoreEnumsAsText);
+
+					// Apply changes
+					switch (changes.Type)
+					{
+						case ChangeType.INSERT:
+							Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)database.Insert,
+								changes.CollectionType,
+								new[] { items }
+							);
+							break;
+						case ChangeType.UPDATE:
+							Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Update,
+								changes.CollectionType,
+								new[] { items }
+							);
+							break;
+						case ChangeType.DELETE:
+							Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Delete,
+								changes.CollectionType,
+								new[] { items }
+							);
+							break;
+						case ChangeType.DELETE | ChangeType.WithCondition:
+							Utils.InvokeGenericMethod<int>((Func<string, object, int>)database.Delete<object>,
+								changes.CollectionType,
+								items
+							);
+							break;
+						default:
+							throw new ArgumentOutOfRangeException(nameof(changes.Type));
+					}
+
+					if (!changes.Type.Value.HasFlag(ChangeType.WithCondition))
+						changes.SetCollection(items as IList<object>);
+
+					// Reset db settings
+					(database.AutoAssignRowId, database.StoreEnumsAsText) = oldSettings;
 				}
 
-				if (!changes.Type.Value.HasFlag(ChangeType.WithCondition))
-					changes.SetCollection(items as IList<object>);
+				// Push the changes onto the stack
+				database.Insert(changes);
+				Version = changes.ID.Value;
 
-				// Reset db settings
-				(database.AutoAssignRowId, database.StoreEnumsAsText) = oldSettings;
+				synchronizer.Increment();
 			}
-
-			// Push the changes onto the stack
-			database.Insert(changes);
-			Version = changes.ID.Value;
-
-			synchronizer.Increment();
 		}
 
 		/// <summary>

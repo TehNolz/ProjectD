@@ -17,8 +17,12 @@ namespace Webserver.Replication
 		[Unique]
 		public string FullName { get; set; }
 
+		public ModelType Clone() => MemberwiseClone() as ModelType;
+
 		public override bool Equals(object obj) => obj is ModelType other ? other.ID == ID || other.FullName == FullName : base.Equals(obj);
 		public override int GetHashCode() => FullName?.GetHashCode() ?? ID?.GetHashCode() ?? base.GetHashCode();
+
+		public override string ToString() => $"{GetType().Name}<{FullName}>[{ID ?? '?'}]";
 
 		public static bool operator ==(ModelType a, ModelType b) => a.Equals(b);
 		public static bool operator !=(ModelType a, ModelType b) => !(a == b);
