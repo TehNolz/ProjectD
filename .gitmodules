@@ -1,0 +1,6 @@
+[submodule "Database-Adapter"]
+	path = Database-Adapter
+	url = https://github.com/Snerble/.NET-CS-Database-Adapter.git
+[submodule "Logger"]
+	path = Logger
+	url = https://github.com/Snerble/CS-Logger.git

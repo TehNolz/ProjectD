@@ -1,0 +1,295 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logd</Title>
+			<Shortcut>logd</Shortcut>
+			<Description>Code snippet for Program.Log.Debug</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a "debug" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Debug($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+	
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logf</Title>
+			<Shortcut>logf</Shortcut>
+			<Description>Code snippet for Program.Log.Fatal</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a "fatal" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Fatal($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+	
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logfe</Title>
+			<Shortcut>logfe</Shortcut>
+			<Description>Code snippet for Program.Log.Fatal with an exception message</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a "fatal" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+				<Object Editable="true">
+					<ID>Exception</ID>
+					<ToolTip>Choose an exception</ToolTip>
+					<Type>System.Exception</Type>
+					<Default>e</Default>
+				</Object>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Fatal(string.Concat($Message$, ": ", $Exception$.Message), $Exception$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+	
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>loge</Title>
+			<Shortcut>loge</Shortcut>
+			<Description>Code snippet for Program.Log.Error</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write an "error" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Error($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+	
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logee</Title>
+			<Shortcut>logee</Shortcut>
+			<Description>Code snippet for Program.Log.Error with an exception message</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write an "error" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+				<Object Editable="true">
+					<ID>Exception</ID>
+					<ToolTip>Choose an exception</ToolTip>
+					<Type>System.Exception</Type>
+					<Default>e</Default>
+				</Object>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Error(string.Concat($Message$, ": ", $Exception$.Message), $Exception$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logw</Title>
+			<Shortcut>logw</Shortcut>
+			<Description>Code snippet for Program.Log.Warning</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a "warning" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Warning($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logi</Title>
+			<Shortcut>logi</Shortcut>
+			<Description>Code snippet for Program.Log.Info</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write an "info" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Info($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+	
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logc</Title>
+			<Shortcut>logc</Shortcut>
+			<Description>Code snippet for Program.Log.Config</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a "config" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Config($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logfi</Title>
+			<Shortcut>logfi</Shortcut>
+			<Description>Code snippet for Program.Log.Fine</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a "fine" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Fine($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+	
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>logt</Title>
+			<Shortcut>logt</Shortcut>
+			<Description>Code snippet for Program.Log.Trace</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a "trace" log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Trace($Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+
+	<CodeSnippet Format="1.0.0">
+		<Header>
+			<Title>log</Title>
+			<Shortcut>log</Shortcut>
+			<Description>Code snippet for Program.Log.Write with a custom log level</Description>
+			<SnippetTypes>
+				<SnippetType>Expansion</SnippetType>
+			</SnippetTypes>
+		</Header>
+		<Snippet>
+			<Declarations>
+				<Literal Editable="false">
+					<ID>Logger</ID>
+					<Function>SimpleTypeName(global::Webserver.Program.Log)</Function>
+				</Literal>
+				<Object Editable="true">
+					<ID>Level</ID>
+					<Type>Logging.Level</Type>
+					<ToolTip>Choose or create a custom logging level</ToolTip>
+					<Default>level</Default>
+				</Object>
+				<Literal Editable="true">
+					<ID>Message</ID>
+					<ToolTip>Write a log message.</ToolTip>
+					<Default>$""</Default>
+				</Literal>
+			</Declarations>
+			<Code Language="CSharp"><![CDATA[$Logger$.Write($Level$, $Message$);]]></Code>
+		</Snippet>
+	</CodeSnippet>
+</CodeSnippets>
