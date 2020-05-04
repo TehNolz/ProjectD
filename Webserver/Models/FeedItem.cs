@@ -25,7 +25,7 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="title">The feed item's title.</param>
 		/// <param name="description">The feed item's description.</param>
-		public FeedItem(SQLiteAdapter database, string title, string description, FeedItemCategory category)
+		public FeedItem(string title, string description, FeedItemCategory category)
 		{
 			Title = title;
 			Description = description;
