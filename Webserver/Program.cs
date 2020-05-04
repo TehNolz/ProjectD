@@ -135,6 +135,7 @@ namespace Webserver
 			Database.BroadcastChanges = false;
 
 			//Create tables if they don't already exist.
+			Database.CreateTableIfNotExists<FeedItem>();
 			Database.CreateTableIfNotExists<ExampleModel>();
 			Database.CreateTableIfNotExists<User>();
 			Database.CreateTableIfNotExists<Session>();
