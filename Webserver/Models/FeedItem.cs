@@ -30,8 +30,6 @@ namespace Webserver.Models
 			Title = title;
 			Description = description;
 			Category = category;
-
-			database.Insert(this);
 		}
 
 		/// <summary>
