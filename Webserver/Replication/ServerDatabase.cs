@@ -82,10 +82,9 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes(items as IList<object>)
+				changes = new Changes(items as IList<object>, GetModelType<T>())
 				{
-					Type = ChangeType.INSERT,
-					CollectionType = typeof(T)
+					Type = ChangeType.INSERT
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -95,7 +94,7 @@ namespace Webserver.Replication
 					changes.Synchronize();
 
 					// Swap the elements in the collections
-					T[] newItems = changes.Collection.Select(x => x.ToObject<T>()).ToArray();
+					T[] newItems = changes.ExpandCollection().Select(x => x.ToObject<T>()).ToArray();
 					for (int i = 0; i < items.Count; ++i)
 						items[i] = newItems[i];
 				}
@@ -148,11 +147,10 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes()
+				changes = new Changes(condition, param)
 				{
 					Type = ChangeType.DELETE | ChangeType.WithCondition,
-					CollectionType = typeof(T),
-					Data = condition
+					CollectionType = GetModelType<T>()
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -199,10 +197,9 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes(items as IList<object>)
+				changes = new Changes(items as IList<object>, GetModelType<T>())
 				{
-					Type = ChangeType.DELETE,
-					CollectionType = typeof(T)
+					Type = ChangeType.DELETE
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -250,10 +247,9 @@ namespace Webserver.Replication
 			Changes changes = null;
 			try
 			{
-				changes = new Changes(items as IList<object>)
+				changes = new Changes(items as IList<object>, GetModelType<T>())
 				{
-					Type = ChangeType.UPDATE,
-					CollectionType = typeof(T)
+					Type = ChangeType.UPDATE
 				};
 
 				// Synchronize the changes if this server is not a master
@@ -305,7 +301,7 @@ namespace Webserver.Replication
 				throw new InvalidOperationException();
 
 			// Get the amount of new changes to request and the typelist from the master
-			dynamic data = new Message(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data;
+			dynamic data = new ServerMessage(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data;
 
 			long updateCount = data.Version - changelog.Version;
 			var types = ((JArray)data.Types).Select(x => x.ToObject<ModelType>()).ToDictionary(x => x.ID);
@@ -322,7 +318,7 @@ namespace Webserver.Replication
 					for (long l = 0; l < updateCount;)
 					{
 						// Request another chunk of updates
-						JArray updates = new Message(
+						JArray updates = new ServerMessage(
 							MessageType.DbSync,
 							new { changelog.Version, Amount = Math.Min(updateCount - l, chunkSize) }
 						).SendAndWait(Balancer.MasterServer).Data;
@@ -350,6 +346,13 @@ namespace Webserver.Replication
 				}
 			}
 		}
+
+		/// <summary>
+		/// Returns an existing <see cref="ModelType"/> instance from the <see cref="TypeList"/>
+		/// or creates a new one.
+		/// </summary>
+		/// <typeparam name="T">The type to get a <see cref="ModelType"/> for.</typeparam>
+		private ModelType GetModelType<T>() => TypeList.FirstOrDefault(x => x == typeof(T)) ?? typeof(T);
 
 		/// <summary>
 		/// Pushes the given changes onto this database's changelog and applies the 

@@ -8,8 +8,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Data.SQLite;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
+
+using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
 {
@@ -81,76 +82,100 @@ namespace Webserver.Replication
 			if (changes.ID.HasValue)
 				synchronizer.WaitUntilReady(changes.ID.Value);
 
-			// Assign the foreign key to the changes object
-			ModelType type = typeList.FirstOrDefault(x => x.FullName == changes.CollectionType.FullName);
-			if (type is null)
+			// Lock this instance for additional thread safety for changes with no id
+			lock (this)
 			{
-				// Insert a new type if it doesn't already exist
-				type = new ModelType() { FullName = changes.CollectionType.FullName };
-				database.Insert(type);
-				typeList.Add(type);
-			}
-			changes.CollectionType = type;
-
-			if (applyChanges)
-			{
-				// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
-				PropertyInfo[] props = Utils.GetProperties(type).ToArray();
-				IEnumerable<JObject> collection = changes.Collection.Select(x =>
+				// Assign the foreign key to the changes object
+				ModelType type;
+				lock (typeList)
 				{
-					var @out = new JObject();
-					for (int i = 0; i < props.Length; i++)
-						@out[props[i].Name] = x[i];
-					return @out;
-				});
+					type = typeList.FirstOrDefault(x => x == changes.CollectionType);
+					if (type is null)
+					{
+						// Insert a new type if it doesn't already exist
+						type = new ModelType() { FullName = changes.CollectionType.FullName };
+						database.Insert(type);
+						typeList.Add(type.Clone());
 
-				dynamic[] items = collection.Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
-
-				// Copy parent db settings
-				(bool, bool) oldSettings = (database.AutoAssignRowId, database.StoreEnumsAsText);
-				(database.AutoAssignRowId, database.StoreEnumsAsText) = (parentDatabase.AutoAssignRowId, parentDatabase.StoreEnumsAsText);
-
-				// Apply changes
-				switch (changes.Type)
-				{
-					case ChangeType.INSERT:
-						Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)database.Insert,
-							changes.CollectionType,
-							new[] { items }
-						);
-						break;
-					case ChangeType.UPDATE:
-						Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Update,
-							changes.CollectionType,
-							new[] { items }
-						);
-						break;
-					case ChangeType.DELETE:
-						Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Delete,
-							changes.CollectionType,
-							new[] { items }
-						);
-						break;
-					case ChangeType.DELETE | ChangeType.WithCondition:
-						Utils.InvokeGenericMethod<int>((Func<string, int>)database.Delete<object>,
-							changes.CollectionType,
-							new[] { changes.Data }
-						);
-						break;
-					default:
-						throw new ArgumentOutOfRangeException(nameof(changes.Type));
+						changes.CollectionType = type;
+						// Set the id to null if this server is the master to ensure the type's fulltext gets sent to the other servers
+						if (Balancer.IsMaster)
+							changes.CollectionType.ID = null;
+					}
+					// Copy the complete modeltype over to the changes object
+					else
+						changes.CollectionType = type;
 				}
-				changes.SetCollection(items as IList<object>);
 
-				// Reset db settings
-				(database.AutoAssignRowId, database.StoreEnumsAsText) = oldSettings;
+				if (applyChanges)
+				{
+					dynamic[] items;
+
+					// Unpack the changes object's data
+					if (changes.Type.Value.HasFlag(ChangeType.WithCondition))
+					{
+						// Convert the first element to string and the second (if present) to dynamic
+						items = new dynamic[2];
+						items[0] = (string)changes.Collection[0];
+						items[1] = (System.Collections.IDictionary)new Dictionary<string, JToken>(
+							(JObject)changes.Collection.ElementAtOrDefault(1))
+								.ToDictionary(x => x.Key, x => x.Value.ToObject<object>()
+						);
+					}
+					else
+					{
+						// Get a dynamic[] from the changes' collection JArray (this uses a custom extension method)
+						items = changes.ExpandCollection().Select(x => x.ToObject(changes.CollectionType)).Cast(changes.CollectionType);
+					}
+
+					// Copy parent db settings
+					(bool, bool) oldSettings = (database.AutoAssignRowId, database.StoreEnumsAsText);
+					(database.AutoAssignRowId, database.StoreEnumsAsText) = (parentDatabase.AutoAssignRowId, parentDatabase.StoreEnumsAsText);
+
+					// Apply changes
+					switch (changes.Type)
+					{
+						case ChangeType.INSERT:
+							Utils.InvokeGenericMethod<long>((Func<IList<object>, long>)database.Insert,
+								changes.CollectionType,
+								new[] { items }
+							);
+							break;
+						case ChangeType.UPDATE:
+							Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Update,
+								changes.CollectionType,
+								new[] { items }
+							);
+							break;
+						case ChangeType.DELETE:
+							Utils.InvokeGenericMethod<int>((Func<IList<object>, int>)database.Delete,
+								changes.CollectionType,
+								new[] { items }
+							);
+							break;
+						case ChangeType.DELETE | ChangeType.WithCondition:
+							Utils.InvokeGenericMethod<int>((Func<string, object, int>)database.Delete<object>,
+								changes.CollectionType,
+								items
+							);
+							break;
+						default:
+							throw new ArgumentOutOfRangeException(nameof(changes.Type));
+					}
+
+					if (!changes.Type.Value.HasFlag(ChangeType.WithCondition))
+						changes.SetCollection(items as IList<object>);
+
+					// Reset db settings
+					(database.AutoAssignRowId, database.StoreEnumsAsText) = oldSettings;
+				}
+
+				// Push the changes onto the stack
+				database.Insert(changes);
+				Version = changes.ID.Value;
+
+				synchronizer.Increment();
 			}
-
-			// Push the changes onto the stack
-			database.Insert(changes);
-			Version = changes.ID.Value;
-
-			synchronizer.Increment();
 		}
 
 		/// <summary>
@@ -169,7 +194,7 @@ namespace Webserver.Replication
 		public SQLiteTransaction BeginTransaction()
 		{
 			SQLiteTransaction transaction = database.Connection.BeginTransaction();
-			
+
 			database.Connection.RollBack += OnRollback;
 
 			return transaction;

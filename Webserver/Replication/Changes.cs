@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
+
 using Webserver.LoadBalancer;
 
 namespace Webserver.Replication
@@ -21,10 +22,11 @@ namespace Webserver.Replication
 	[Table("__changes")]
 	public class Changes
 	{
-		[Primary]
+		[AutoIncrement]
 		public long? ID { get; set; }
 		public ChangeType? Type { get; set; }
 		[ForeignKey(typeof(ModelType))]
+		[Database.SQLite.Modeling.NotNull]
 		public int? ModelTypeID { get; set; }
 		public string Data
 		{
@@ -53,7 +55,7 @@ namespace Webserver.Replication
 		{
 			get
 			{
-				if (_collection is null && !(Type?.HasFlag(ChangeType.WithCondition) ?? true))
+				if (_collection is null)
 					_collection = JArray.Parse(Data);
 				return _collection;
 			}
@@ -63,7 +65,8 @@ namespace Webserver.Replication
 				_collection = value;
 			}
 		}
-		public virtual Message Source { get; }
+		[JsonIgnore]
+		public virtual ServerMessage Source { get; }
 
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/>.
@@ -72,15 +75,27 @@ namespace Webserver.Replication
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/> with the specified collection
 		/// of objects.
+		/// <para/>
 		/// </summary>
 		/// <param name="collection">The list of objects to add to this <see cref="Changes"/> instance.</param>
-		public Changes(IList<object> collection) => SetCollection(collection);
+		/// <param name="type">The type of the collection elements.</param>
+		public Changes(IList<object> collection, ModelType type) => SetCollection(collection, type);
+		/// <summary>
+		/// Initializes a new instance of <see cref="Changes"/> with the specified condition
+		/// string and optional parameter object.
+		/// <para/>
+		/// This also sets the <see cref="ChangeType.WithCondition"/> flag in <see cref="Type"/>.
+		/// </summary>
+		/// <param name="condition">The condition string used in the query.</param>
+		/// <param name="param">An optional parameter object whose properties will be
+		/// included in the command.</param>
+		public Changes(string condition, [AllowNull] object param) => SetCondition(condition, param);
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/> by deserializing the given
 		/// <paramref name="message"/> object.
 		/// </summary>
 		/// <param name="message">The message to deserialize.</param>
-		public Changes(Message message) : this((JObject)message.Data)
+		public Changes(ServerMessage message) : this((JObject)message.Data)
 		{
 			Source = message;
 		}
@@ -93,8 +108,14 @@ namespace Webserver.Replication
 			// TODO Use JArray to decrease message size
 			ID = (long?)data.ID;
 			Type = Enum.Parse<ChangeType>((string)data.Type);
-			ModelTypeID = (int)data.ItemType;
 			Data = (string)data.Data;
+
+			// Get the type as id or as fullname based on type
+			JValue itemType = data.ItemType;
+			if (itemType.Type == JTokenType.Integer)
+				CollectionType = new ModelType() { ID = (int)data.ItemType };
+			else
+				CollectionType = new ModelType() { FullName = (string)data.ItemType };
 		}
 
 		/// <summary>
@@ -121,7 +142,7 @@ namespace Webserver.Replication
 				);
 			}
 		}
-		private void Broadcast(IEnumerable<ServerConnection> servers) => ServerConnection.Send(servers, new Message(MessageType.DbChange, (JObject)this));
+		private void Broadcast(IEnumerable<ServerConnection> servers) => ServerConnection.Send(servers, new ServerMessage(MessageType.DbChange, (JObject)this));
 
 		/// <summary>
 		/// Synchronizes these changes with the master server.
@@ -133,10 +154,28 @@ namespace Webserver.Replication
 		{
 			if (!Balancer.IsMaster)
 			{
-				var newChanges = new Changes(new Message(MessageType.DbChange, (JObject)this).SendAndWait(Balancer.MasterServer));
+				var newChanges = new Changes(new ServerMessage(MessageType.DbChange, (JObject)this).SendAndWait(Balancer.MasterServer));
 				Data = newChanges.Data;
 				ID = newChanges.ID;
 			}
+		}
+
+		/// <summary>
+		/// Changes the <see cref="Collection"/> <see cref="JArray"/> by combining the
+		/// values from the nested arrays with the property names of the <see cref="CollectionType"/>.
+		/// </summary>
+		/// <returns>A new <see cref="JArray"/> with nested <see cref="JObject"/>s.</returns>
+		public JArray ExpandCollection()
+		{
+			// Convert the JArrays into JObjects by adding the keys of the type's properties
+			PropertyInfo[] props = Utils.GetProperties(CollectionType).ToArray();
+			return new JArray(Collection.Select(x =>
+			{
+				var @out = new JObject();
+				for (int i = 0; i < props.Length; i++)
+					@out[props[i].Name] = x[i];
+				return @out;
+			}));
 		}
 
 		/// <summary>
@@ -144,15 +183,56 @@ namespace Webserver.Replication
 		/// <see cref="Collection"/> property.
 		/// </summary>
 		/// <param name="collection">The list of objects to add to this <see cref="Changes"/> instance.</param>
-		public void SetCollection([AllowNull] IList<object> collection)
-			=> Collection = collection is null ? null : JArray.FromObject(collection.Select(x => JObject.FromObject(x).Values()));
+		/// <param name="type">The type of the collection elements.</param>
+		public void SetCollection([AllowNull] IList<object> collection, ModelType type = null)
+		{
+			type ??= CollectionType;
 
-		public override string ToString() => $"{GetType().Name}<{ID}>";
+			// Local function to parse only the properties of an object into a JObject
+			static JObject parse(PropertyInfo[] props, object item)
+			{
+				var @out = new JObject();
+				foreach (PropertyInfo prop in props)
+					@out[prop.Name] = new JValue(prop.GetValue(item));
+				return @out;
+			}
+			PropertyInfo[] props = Utils.GetProperties(type).ToArray();
+			Collection = collection is null ? null : JArray.FromObject(collection.Select(x => parse(props, x).Values()));
+			CollectionType = type;
+		}
+
+		/// <summary>
+		/// Packs the given <paramref name="condition"/> and <paramref name="param"/>
+		/// into a <see cref="JArray"/> and sets the <see cref="Collection"/> property.
+		/// </summary>
+		/// <para/>
+		/// This also sets the <see cref="ChangeType.WithCondition"/> flag in <see cref="Type"/>.
+		/// <param name="condition">The condition string used in the query.</param>
+		/// <param name="param">An optional parameter object whose properties will be
+		/// included in the command.</param>
+		public void SetCondition(string condition, object param = null)
+		{
+			Collection = new JArray() { condition, JObject.FromObject(param) };
+			Type |= ChangeType.WithCondition;
+		}
+
+		public override string ToString()
+		{
+			var typeText = Type switch
+			{
+				ChangeType.INSERT => "I",
+				ChangeType.UPDATE => "U",
+				ChangeType.DELETE => "D",
+				ChangeType.DELETE | ChangeType.WithCondition => "D`",
+				_ => "?"
+			};
+			return $"{GetType().Name}<{typeText}>[{ID ?? '?'}]";
+		}
 
 		public static explicit operator JObject(Changes changes) => new JObject() {
 				{ "ID", changes.ID },
-				{ "Type", changes.Type.ToString() },
-				{ "ItemType", changes.ModelTypeID },
+				{ "Type", (int)changes.Type },
+				{ "ItemType", new JValue((object)changes.CollectionType.ID ?? changes.CollectionType.FullName) },
 				{ "Data", changes.Data },
 			};
 		public static explicit operator Changes(JObject jObject) => new Changes(jObject);

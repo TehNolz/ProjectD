@@ -1,6 +1,6 @@
 using Database.SQLite;
 using Database.SQLite.Modeling;
-
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using System;
@@ -56,7 +56,7 @@ namespace Webserver.Chat
 		/// </summary>
 		/// <param name="user">The user</param>
 		/// <returns></returns>
-		public bool CanUserAccess(SQLiteAdapter database, User user) => !Private || database.Select<ChatroomMembership>("ChatroomID = @chatroomid AND UserID = @userid", new { chatroomid = ID, userid = user.ID }).Any();
+		public bool CanUserAccess(SQLiteAdapter database, User user) => !Private || database.Select<ChatroomMembership>($"ChatroomID = @chatroomid AND UserID = @userid", new { chatroomid = ID, userid = user.ID }).Any();
 
 		/// <summary>
 		/// Gets all chatrooms that are accessible by the specified user.

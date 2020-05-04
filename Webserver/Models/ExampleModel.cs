@@ -8,7 +8,7 @@ namespace Webserver.Models
 	public sealed class ExampleModel
 	{
 		[Primary]
-		public int? Id { get; set; }
+		public int? ID { get; set; }
 		public string Message { get; set; }
 		public string GuidStr { get; set; } = Guid.NewGuid().ToString();
 	}
