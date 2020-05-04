@@ -135,12 +135,12 @@ namespace Webserver
 			Database.BroadcastChanges = false;
 
 			//Create tables if they don't already exist.
-			Database.TryCreateTable<ExampleModel>();
-			Database.TryCreateTable<User>();
-			Database.TryCreateTable<Session>();
-			Database.TryCreateTable<Chatroom>();
-			Database.TryCreateTable<Chatlog>();
-			Database.TryCreateTable<ChatroomMembership>();
+			Database.CreateTableIfNotExists<ExampleModel>();
+			Database.CreateTableIfNotExists<User>();
+			Database.CreateTableIfNotExists<Session>();
+			Database.CreateTableIfNotExists<Chatroom>();
+			Database.CreateTableIfNotExists<Chatlog>();
+			Database.CreateTableIfNotExists<ChatroomMembership>();
 
 			//Create Admin account if it doesn't exist already;
 			if (Database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)

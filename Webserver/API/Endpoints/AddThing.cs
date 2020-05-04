@@ -1,4 +1,3 @@
-
 using Newtonsoft.Json.Linq;
 
 using System;
@@ -21,6 +20,17 @@ namespace Webserver.API.Endpoints
 			Database.Insert<ExampleModel>(items);
 
 			Response.Send(JObject.FromObject(items[0]), HttpStatusCode.Created);
+		}
+
+		[ContentType("application/json")]
+		public override void DELETE()
+		{
+			int id = Data.ID;
+
+			int deleted = Database.Delete<ExampleModel>("`ID` = @id", new { id });
+
+			if (deleted == 0) Response.Send(HttpStatusCode.Gone);
+			else Response.Send(HttpStatusCode.NoContent);
 		}
 	}
 }

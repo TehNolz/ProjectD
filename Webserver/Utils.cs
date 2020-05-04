@@ -13,7 +13,7 @@ namespace Webserver
 	/// <summary>
 	/// Static package-private class containing miscellaneos utility methods.
 	/// </summary>
-	public static class Utils
+	public static partial class Utils
 	{
 		/// <summary>
 		/// Convert a NameValueCollection to a dictionary for ease of access.
