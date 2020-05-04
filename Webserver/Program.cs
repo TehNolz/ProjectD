@@ -10,6 +10,7 @@ using System.Net;
 using System.Threading;
 
 using Webserver.API;
+using Webserver.Chat;
 using Webserver.Config;
 using Webserver.LoadBalancer;
 using Webserver.Models;
