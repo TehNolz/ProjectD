@@ -37,6 +37,7 @@ namespace Webserver.LoadBalancer
 			Log.Config("Server is running as master");
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
 			ServerProfile.KnownServers.TryAdd(Balancer.LocalAddress, new ServerProfile(Balancer.LocalAddress));
+			Balancer.MasterServer = null;
 
 			//Bind events
 			ServerConnection.ServerTimeout += OnServerTimeout;
