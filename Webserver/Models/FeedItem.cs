@@ -42,6 +42,11 @@ namespace Webserver.Models
 			return database.Select<FeedItem>().ToList();
 		}
 
+		public static List<FeedItem> GetFeedItems(SQLiteAdapter database, int limit, int offset)
+		{
+			return database.Select<FeedItem>("1 ORDER BY ID DESC LIMIT @limit OFFSET @offset", new { limit, offset }).ToList();
+		}
+
 		/// <summary>
 		/// Gets the feed item by the given ID.
 		/// </summary>
