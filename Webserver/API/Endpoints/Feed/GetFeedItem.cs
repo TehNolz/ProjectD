@@ -62,8 +62,8 @@ namespace Webserver.API.Endpoints.Feed
 			{
 				List<FeedItem> feedItems = FeedItem.GetAllFeedItems(Database);
 
-				//var json = JObject.FromObject(feedItems);
-				//Response.Send(json.ToString(), HttpStatusCode.OK);
+				var json = JObject.FromObject(feedItems);
+				Response.Send(json.ToString(), HttpStatusCode.OK);
 			}
 		}
 	}
