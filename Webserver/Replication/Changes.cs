@@ -79,7 +79,11 @@ namespace Webserver.Replication
 		/// </summary>
 		/// <param name="collection">The list of objects to add to this <see cref="Changes"/> instance.</param>
 		/// <param name="type">The type of the collection elements.</param>
-		public Changes(IList<object> collection, ModelType type) => SetCollection(collection, type);
+		public Changes(IList<object> collection, ModelType type)
+		{
+			SetCollection(collection, type);
+		}
+
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/> with the specified condition
 		/// string and optional parameter object.
@@ -89,7 +93,11 @@ namespace Webserver.Replication
 		/// <param name="condition">The condition string used in the query.</param>
 		/// <param name="param">An optional parameter object whose properties will be
 		/// included in the command.</param>
-		public Changes(string condition, [AllowNull] object param) => SetCondition(condition, param);
+		public Changes(string condition, [AllowNull] object param)
+		{
+			SetCondition(condition, param);
+		}
+
 		/// <summary>
 		/// Initializes a new instance of <see cref="Changes"/> by deserializing the given
 		/// <paramref name="message"/> object.
@@ -218,7 +226,7 @@ namespace Webserver.Replication
 
 		public override string ToString()
 		{
-			var typeText = Type switch
+			string typeText = Type switch
 			{
 				ChangeType.INSERT => "I",
 				ChangeType.UPDATE => "U",

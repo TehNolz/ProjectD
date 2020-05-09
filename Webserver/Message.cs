@@ -130,7 +130,7 @@ namespace Webserver
 
 		//Chat
 		Chat,
-		ChatMessage,
 		ChatroomUpdate,
+		ChatMessage,
 	}
 }

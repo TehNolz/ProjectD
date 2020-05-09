@@ -47,6 +47,7 @@ namespace Webserver.LoadBalancer
 					{
 						context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
 						context.Response.OutputStream.Dispose();
+						continue;
 					}
 				}
 				IPAddress slaveAddress = GetBestSlave();

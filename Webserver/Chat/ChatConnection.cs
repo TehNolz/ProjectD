@@ -1,5 +1,4 @@
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 using System;
 using System.Collections.Concurrent;
@@ -41,7 +40,7 @@ namespace Webserver.Chat
 		/// <summary>
 		/// The chatrooms this user has joined.
 		/// </summary>
-		public IEnumerable<Chatroom> Chatrooms { get => Chatroom.GetAccessableByUser(ChatManagement.Database, User); }
+		public IEnumerable<Chatroom> Chatrooms => Chatroom.GetAccessableByUser(Chat.Database, User);
 
 		/// <summary>
 		/// The user this connection belongs to.
@@ -93,7 +92,7 @@ namespace Webserver.Chat
 			}
 
 			//Check if a valid session still exists
-			var session = Session.GetSession(ChatManagement.Database, cookie.Value);
+			var session = Session.GetSession(Chat.Database, cookie.Value);
 			if (session == null)
 			{
 				Log.Trace("Rejected websocket request; no session.");
@@ -102,8 +101,8 @@ namespace Webserver.Chat
 			}
 
 			//The session is valid. Renew the session and retrieve user info.
-			session.Renew(ChatManagement.Database);
-			User = ChatManagement.Database.Select<User>("Email = @email", new { email = session.UserEmail }).FirstOrDefault();
+			session.Renew(Chat.Database);
+			User = Chat.Database.Select<User>("Email = @email", new { email = session.UserEmail }).FirstOrDefault();
 			#endregion
 
 			//Open the connection.
@@ -129,7 +128,7 @@ namespace Webserver.Chat
 			ActiveConnections.Add(this);
 
 			//Send channel info to the client.
-			Send(new ChatMessage(MessageType.ChatroomUpdate, Chatroom.GetJsonBulk(Chatrooms)));
+			UpdateChatrooms();
 		}
 
 		/// <summary>
@@ -284,6 +283,11 @@ namespace Webserver.Chat
 
 			return reply;
 		}
+
+		/// <summary>
+		/// Send updated chatroom information to this client.
+		/// </summary>
+		public void UpdateChatrooms() => Send(new ChatMessage(MessageType.ChatroomUpdate, Chatroom.GetJsonBulk(Chatrooms)));
 
 		/// <summary>
 		/// Send chat messages to all chat clients connected to the system. This includes those connected to remote servers.

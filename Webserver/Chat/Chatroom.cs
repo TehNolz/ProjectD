@@ -1,27 +1,17 @@
 using Database.SQLite;
 using Database.SQLite.Modeling;
-using Newtonsoft.Json;
+
 using Newtonsoft.Json.Linq;
 
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using Webserver.LoadBalancer;
+
 using Webserver.Models;
 
 namespace Webserver.Chat
 {
-	/// <summary>
-	/// Management class for chat system.
-	/// </summary>
-	public static class ChatManagement
-	{
-		/// <summary>
-		/// Database connection for chatroom management. Do not use outside of chatroom system!
-		/// </summary>
-		public static SQLiteAdapter Database = new SQLiteAdapter(Program.DatabaseName);
-	}
 
 	/// <summary>
 	/// Represents a chatroom within the system.
@@ -72,7 +62,7 @@ namespace Webserver.Chat
 			//Get all private rooms this user can access
 			IEnumerable<Guid> IDs = from CM in database.Select<ChatroomMembership>("UserID = @ID", new { user.ID }) select CM.ChatroomID;
 			//TODO Optimize to use less Select calls
-			foreach(Guid ID in IDs)
+			foreach (Guid ID in IDs)
 			{
 				result.Append(database.Select<Chatroom>("ID = @ID", new { ID }).First());
 			}
@@ -99,8 +89,8 @@ namespace Webserver.Chat
 		/// </summary>
 		/// <returns></returns>
 		public IEnumerable<Guid> GetUsers() => Private ?
-				from CM in ChatManagement.Database.Select<ChatroomMembership>("ChatroomID = @ID", new { ID }) select CM.UserID :
-				from U in ChatManagement.Database.Select<User>() select U.ID;
+				from CM in Chat.Database.Select<ChatroomMembership>("ChatroomID = @ID", new { ID }) select CM.UserID :
+				from U in Chat.Database.Select<User>() select U.ID;
 
 		/// <summary>
 		/// Returns a JSON representation of this chatroom.
@@ -125,26 +115,6 @@ namespace Webserver.Chat
 			foreach (Chatroom room in chatrooms)
 				result.Add(room.GetJson());
 			return result;
-		}
-
-		/// <summary>
-		/// Event handler for ChatroomUpdate events. Sends received chatroom updates to all connected clients.
-		/// </summary>
-		/// <param name="message"></param>
-		public static void ChatroomUpdateHandler(ServerMessage message)
-		{
-
-			//Ignore everything other than messages with type ChatMessage
-			if (message.Type != MessageType.ChatroomUpdate)
-				return;
-
-			var data = (JObject)message.Data;
-			if (!data.ContainsKey("Users"))
-				throw new ArgumentException("Missing Users key");
-
-			//Send updated chatroom info to all relevant clients.
-			foreach (ChatConnection connection in from AC in ChatConnection.ActiveConnections where data["Users"].ToList().Contains(AC.User.ID) select AC)
-				connection.Send(new ChatMessage(MessageType.ChatroomUpdate, GetJsonBulk(connection.Chatrooms)));
 		}
 	}
 

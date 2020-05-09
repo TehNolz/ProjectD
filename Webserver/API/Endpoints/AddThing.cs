@@ -29,8 +29,10 @@ namespace Webserver.API.Endpoints
 
 			int deleted = Database.Delete<ExampleModel>("`ID` = @id", new { id });
 
-			if (deleted == 0) Response.Send(HttpStatusCode.Gone);
-			else Response.Send(HttpStatusCode.NoContent);
+			if (deleted == 0)
+				Response.Send(HttpStatusCode.Gone);
+			else
+				Response.Send(HttpStatusCode.NoContent);
 		}
 	}
 }

@@ -297,7 +297,7 @@ namespace Webserver.Webserver
 		/// <param name="text">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
 		/// <param name="contentType">The ContentType of the response. Defaults to "text/html"</param>
-		public void Send(string text, HttpStatusCode statusCode, string contentType = "text/html")
+		public void Send(string text, HttpStatusCode statusCode, string contentType = "text/plain")
 		{
 			Data = text;
 			Send(Encoding.UTF8.GetBytes(text), statusCode, contentType);
@@ -309,7 +309,7 @@ namespace Webserver.Webserver
 		/// <param name="data">The data to be sent to the client.</param>
 		/// <param name="statusCode">The HttpStatusCode. Defaults to HttpStatusCode.OK (200)</param>
 		/// <param name="contentType">The ContentType of the response. Defaults to "text/html"</param>
-		public void Send(byte[] data, HttpStatusCode statusCode = HttpStatusCode.OK, string contentType = "text/html")
+		public void Send(byte[] data, HttpStatusCode statusCode = HttpStatusCode.OK, string contentType = "text/plain")
 		{
 			if (data == null)
 				data = Array.Empty<byte>();

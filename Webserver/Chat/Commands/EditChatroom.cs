@@ -1,11 +1,12 @@
 using Newtonsoft.Json.Linq;
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 
 using Webserver.Config;
-using Webserver.LoadBalancer;
 
 namespace Webserver.Chat.Commands
 {
@@ -19,9 +20,7 @@ namespace Webserver.Chat.Commands
 
 			//Check if the received message data is valid.
 			if (!json.TryGetValue("ChatroomID", out string rawChatroomID) ||
-				!Guid.TryParse(rawChatroomID, out Guid chatroomID) ||
-				!json.TryGetValue("Setting", out string setting) ||
-				!json.ContainsKey("NewValue")
+				!Guid.TryParse(rawChatroomID, out Guid chatroomID)
 			)
 			{
 				Message.Reply(ChatStatusCode.BadMessageData, "Missing keys");
@@ -29,57 +28,36 @@ namespace Webserver.Chat.Commands
 			}
 
 			//Check if the specified chatroom exists
-			Chatroom chatroom = ChatManagement.Database.Select<Chatroom>("ID = @id", new { id = chatroomID }).FirstOrDefault();
+			Chatroom chatroom = Chat.Database.Select<Chatroom>("ID = @id", new { id = chatroomID }).FirstOrDefault();
 			if (chatroom == null)
 			{
 				Message.Reply(ChatStatusCode.NoSuchChatroom);
 				return;
 			}
 
-			//Switch to the proper setting
-			switch (setting)
+			//Change name if necessary
+			if (json.TryGetValue("Name", out string name) && Regex.IsMatch(name, ChatConfig.ChatroomNameRegex))
+				chatroom.Name = name;
+
+			//Set optional fields
+			foreach (KeyValuePair<string, JToken> x in json)
 			{
-				//Change the name
-				case "Name":
-					if(!json.TryGetValue("NewValue", out string newName))
-					{
-						Message.Reply(ChatStatusCode.BadMessageData, "Invalid newValue (must be string)");
-						return;
-					}
-
-					//Check if the name matches the regex in the config.
-					if (Regex.IsMatch(newName, ChatConfig.ChatroomNameRegex))
-						chatroom.Name = newName;
-					else
-					{
-						Message.Reply(ChatStatusCode.BadMessageData, "Invalid newValue (name regex)");
-						return;
-					}
-					break;
-
-				//Change privacy mode
-				case "Private":
-					if (!json.TryGetValue("NewValue", out bool privacyval))
-					{
-						Message.Reply(ChatStatusCode.BadMessageData, "Invalid newValue (must be bool)");
-						return;
-					}
-
-					chatroom.Private = privacyval;
-					break;
-
-				default:
-					Message.Reply(ChatStatusCode.BadMessageData, "No such setting");
-					return;
+				if (x.Key == "ID" || x.Key == "Name")
+				{
+					continue;
+				}
+				PropertyInfo prop = chatroom.GetType().GetProperty(x.Key);
+				if (prop == null)
+				{
+					continue;
+				}
+				dynamic Value = x.Value.ToObject(prop.PropertyType);
+				prop.SetValue(chatroom, Value);
 			}
 
 			//Save the changes to the database and inform all relevant clients about it.
-			var result = chatroom.GetJson();
-			result.Add("Users", new JArray(chatroom.GetUsers()));
-			ChatManagement.Database.Update(chatroom);
-			var serverMessage = new ServerMessage(MessageType.ChatroomUpdate, result);
-			ServerConnection.Broadcast(serverMessage);
-			Chatroom.ChatroomUpdateHandler(serverMessage);
+			Chat.Database.Update(chatroom);
+			BroadcastCommand(TargetType.Users, chatroom.GetUsers(), CommandType.UpdateChatroomInfo);
 		}
 	}
 }

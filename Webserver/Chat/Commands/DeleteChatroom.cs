@@ -1,12 +1,8 @@
 using Newtonsoft.Json.Linq;
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
-
-using Webserver.Config;
-using Webserver.LoadBalancer;
-using Webserver.Models;
 
 namespace Webserver.Chat.Commands
 {
@@ -28,20 +24,23 @@ namespace Webserver.Chat.Commands
 			}
 
 			//Check if the specified chatroom exists
-			Chatroom chatroom = ChatManagement.Database.Select<Chatroom>("ID = @id", new { id = chatroomID }).FirstOrDefault();
+			Chatroom chatroom = Chat.Database.Select<Chatroom>("ID = @id", new { id = chatroomID }).FirstOrDefault();
 			if (chatroom == null)
 			{
 				Message.Reply(ChatStatusCode.NoSuchChatroom);
 				return;
 			}
 
-			//Delete the chatroom from the database and inform all relevant clients about it.
-			var result = chatroom.GetJson();
-			result.Add("Users", new JArray(chatroom.GetUsers()));
-			ChatManagement.Database.Delete(chatroom);
-			var serverMessage = new ServerMessage(MessageType.ChatroomUpdate, result);
-			ServerConnection.Broadcast(serverMessage);
-			Chatroom.ChatroomUpdateHandler(serverMessage);
+			//Get all users who were part of this chatroom so that we can inform them about the deletion later;
+			IEnumerable<Guid> users = chatroom.GetUsers();
+
+			//Delete the chatroom and all associated data
+			Chat.Database.Delete<ChatroomMembership>("ChatroomID = @ID", new { chatroom.ID });
+			Chat.Database.Delete<Chatlog>("Chatroom = @ID", new { chatroom.ID });
+			Chat.Database.Delete(chatroom);
+
+			//Inform all relevant clients about the deletion.
+			BroadcastCommand(TargetType.Users, users, CommandType.UpdateChatroomInfo);
 		}
 	}
 }

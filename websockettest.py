@@ -10,20 +10,19 @@ def on_close(ws):
     print("### closed ###")
 
 def on_open(ws):
-    while(True):
-        message = json.dumps({
-            "MessageID": str(uuid.uuid1()),
-            "Flags": 000,
-            "Type": "Chat",
-            "Command": "EditChatroom",
-            "Data": {
-                "ChatroomID": "36b573d8-ea19-4f08-9ddb-a8606af20951",
-                "Setting": "Name",
-                "NewValue": "MemeChannel",
-            }
-        })
-        ws.send(message)
-        break
+    message = json.dumps({
+        "MessageID": str(uuid.uuid1()),
+        "Flags": 000,
+        "Command": "DeleteChatroom",
+        #"Command": "EditChatroom",
+        #"Command": "CreateChatroom",
+        #"Command": "ChatHistory",
+        #"Command": "ChatMessage",
+        "Data": {
+            "ChatroomID": "686771e1-5c3a-4cd9-b85b-73500b522865",
+        }
+    })
+    ws.send(message)
 
 def GetSessionID(email = "Administrator", password = "W@chtw00rd"):
     address = "http://localhost/api/login"
@@ -38,6 +37,6 @@ if __name__ == "__main__":
         on_message = on_message,
         on_close = on_close,
         on_open = on_open,
-        cookie="SessionID="+GetSessionID(input("Username:"), input("Password:"))
+        cookie="SessionID="+GetSessionID() #input("Username:"), input("Password:")
     )
     ws.run_forever()

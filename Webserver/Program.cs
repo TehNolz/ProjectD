@@ -1,6 +1,7 @@
 using Config;
 
 using Logging;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -83,8 +84,9 @@ namespace Webserver
 			// Initialize database
 			InitDatabase(DatabaseName);
 
-			//Register all API endpoints
+			//Register all API endpoints, chat commands
 			APIEndpoint.DiscoverEndpoints();
+			ChatCommand.DiscoverCommands();
 
 			//Start load balancer
 			IPAddress localAddress;
@@ -148,6 +150,16 @@ namespace Webserver
 					PermissionLevel = PermissionLevel.Admin
 				};
 				Database.Update(admin);
+			}
+
+			//Create default channel if none exist
+			if (Database.Select<Chatroom>().Count() == 0)
+			{
+				Database.Insert(new Chatroom()
+				{
+					Name = "General",
+					Private = false,
+				});
 			}
 		}
 	}
