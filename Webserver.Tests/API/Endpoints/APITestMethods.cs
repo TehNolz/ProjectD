@@ -39,8 +39,8 @@ namespace WebserverTests.API_Endpoints.Tests
 		public static void ClassInit(TestContext _)
 		{
 			//Run inits
-			Program.InitDatabase(":memory:");
-			Database = Program.Database;
+			Database = new SQLiteAdapter(":memory:");
+			Program.InitDatabase(Database);
 		}
 
 		[ClassCleanup]

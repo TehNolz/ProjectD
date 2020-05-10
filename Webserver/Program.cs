@@ -1,5 +1,5 @@
 using Config;
-
+using Database.SQLite;
 using Logging;
 
 using System;
@@ -82,7 +82,9 @@ namespace Webserver
 			Log.Config($"Registered {Redirects.RedirectDict.Count} redirections");
 
 			// Initialize database
-			InitDatabase(DatabaseName);
+			Database = ServerDatabase.CreateConnection(DatabaseName);
+			Database.BroadcastChanges = false;
+			InitDatabase(Database);
 
 			//Register all API endpoints, chat commands
 			APIEndpoint.DiscoverEndpoints();
@@ -129,33 +131,30 @@ namespace Webserver
 		/// Initializes the database.
 		/// </summary>
 		/// Note: Split into its own function to allow for unit testing to use it as well.
-		public static void InitDatabase(string datasource)
+		public static void InitDatabase(SQLiteAdapter database)
 		{
-			Database = ServerDatabase.CreateConnection(datasource);
-			Database.BroadcastChanges = false;
-
 			//Create tables if they don't already exist.
-			Database.CreateTableIfNotExists<ExampleModel>();
-			Database.CreateTableIfNotExists<User>();
-			Database.CreateTableIfNotExists<Session>();
-			Database.CreateTableIfNotExists<Chatroom>();
-			Database.CreateTableIfNotExists<Chatlog>();
-			Database.CreateTableIfNotExists<ChatroomMembership>();
+			database.CreateTableIfNotExists<ExampleModel>();
+			database.CreateTableIfNotExists<User>();
+			database.CreateTableIfNotExists<Session>();
+			database.CreateTableIfNotExists<Chatroom>();
+			database.CreateTableIfNotExists<Chatlog>();
+			database.CreateTableIfNotExists<ChatroomMembership>();
 
 			//Create Admin account if it doesn't exist already;
-			if (Database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)
+			if (database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)
 			{
-				var admin = new User(Database, "Administrator", AuthenticationConfig.AdministratorPassword)
+				var admin = new User(database, "Administrator", AuthenticationConfig.AdministratorPassword)
 				{
 					PermissionLevel = PermissionLevel.Admin
 				};
-				Database.Update(admin);
+				database.Update(admin);
 			}
 
 			//Create default channel if none exist
-			if (Database.Select<Chatroom>().Count() == 0)
+			if (database.Select<Chatroom>().Count() == 0)
 			{
-				Database.Insert(new Chatroom()
+				database.Insert(new Chatroom()
 				{
 					Name = "General",
 					Private = false,
