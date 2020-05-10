@@ -1,5 +1,7 @@
 using Config;
+
 using Database.SQLite;
+
 using Logging;
 
 using System;
