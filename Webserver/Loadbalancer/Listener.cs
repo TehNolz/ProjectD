@@ -107,7 +107,6 @@ namespace Webserver.LoadBalancer
 			HttpWebResponse workerResponse;
 			try
 			{
-				Log.Trace("Received websocket request.");
 				workerResponse = (HttpWebResponse)data.WebRequest.EndGetResponse(result);
 			}
 			catch (WebException e)

@@ -352,6 +352,7 @@ namespace Webserver.Webserver
 				throw new ArgumentOutOfRangeException("Negative cookie expiration");
 			}
 			cookieVal += "; Max-Age=" + expire;
+			cookieVal += @"; Path=/";
 
 			//We manually set the cookie header instead of setting Response.Cookies because some twat decided that HTTPListener should use folded cookies, which every
 			//major browser has no support for. Using folded cookies, we would be limited to only 1 cookie per response, because browsers would otherwise incorrectly

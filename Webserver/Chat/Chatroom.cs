@@ -19,11 +19,6 @@ namespace Webserver.Chat
 	public class Chatroom
 	{
 		/// <summary>
-		/// List of connections to this chatroom.
-		/// </summary>
-		public ConcurrentBag<ChatConnection> Connections = new ConcurrentBag<ChatConnection>();
-
-		/// <summary>
 		/// The name of this chatroom.
 		/// </summary>
 		[NotNull]
