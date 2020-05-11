@@ -27,8 +27,7 @@ namespace Webserver.API.Endpoints.Feed
 			}
 
 			// Create a new feed item
-			FeedItem.FeedItemCategory categoryEnum = FeedItem.GetFeedItemCategoryFromString(category);
-			var feedItem = new FeedItem(title, description, categoryEnum);
+			var feedItem = new FeedItem(title, description, category);
 
 			// Store feed item in the database
 			Database.Insert(feedItem);

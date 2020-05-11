@@ -13,7 +13,7 @@ namespace Webserver.Models
 		public int? ID { get; set; } = null;
 		public string Title { get; set; }
 		public string Description { get; set; }
-		public FeedItemCategory Category { get; set; }
+		public string Category { get; set; }
 
 		/// <summary>
 		/// Parameterless constructor to make SQLiteAdapter happy.
@@ -25,7 +25,7 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="title">The feed item's title.</param>
 		/// <param name="description">The feed item's description.</param>
-		public FeedItem(string title, string description, FeedItemCategory category)
+		public FeedItem(string title, string description, string category)
 		{
 			Title = title;
 			Description = description;
@@ -64,7 +64,7 @@ namespace Webserver.Models
 		/// <param name="database">The database in which to search for the feed items.</param>
 		/// <param name="category">The category of the desired feed items.</param>
 		/// <returns>A list of feed items with the given category.</returns>
-		public static List<FeedItem> GetFeedItemsByCategory(SQLiteAdapter database, FeedItemCategory category)
+		public static List<FeedItem> GetFeedItemsByCategory(SQLiteAdapter database, string category)
 		{
 			return database.Select<FeedItem>("Category = @category", new { category }).ToList();
 		}

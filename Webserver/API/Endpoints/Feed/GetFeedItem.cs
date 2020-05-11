@@ -21,7 +21,7 @@ namespace Webserver.API.Endpoints.Feed
 		///		
 		/// Feed items by limit and offset:
 		///		api/feedItem/?limit=10&offset=0 (to get last 10 feed items)
-		///		api/feedItem/?limit=15&offset=15 (to get feed items 16 to 30)
+		///		api/feedItem/?limit=15&offset=20 (to get feed items 21 to 30)
 		/// </summary>
 		public override void GET()
 		{
@@ -54,9 +54,9 @@ namespace Webserver.API.Endpoints.Feed
 				}
 
 				// Get the feed items with the category from the database.
-				List<FeedItem> feedItems = FeedItem.GetFeedItemsByCategory(Database, FeedItem.GetFeedItemCategoryFromString(category));
+				List<FeedItem> feedItems = FeedItem.GetFeedItemsByCategory(Database, category);
 
-				var json = JObject.FromObject(feedItems);
+				var json = JsonSerializer.Serialize(feedItems);
 				Response.Send(json.ToString(), HttpStatusCode.OK);
 			}
 			// If a limit and an offset are given, the feed items are requested that start at the offset until the limit is reached.
