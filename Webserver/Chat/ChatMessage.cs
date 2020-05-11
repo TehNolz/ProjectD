@@ -118,7 +118,6 @@ namespace Webserver.Chat
 		{
 			StatusCode = statusCode;
 			Data = data;
-			Flags |= MessageFlags.Reply;
 			Connection.Send(this);
 		}
 	}

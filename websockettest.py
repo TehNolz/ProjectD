@@ -12,14 +12,10 @@ def on_close(ws):
 def on_open(ws):
     message = json.dumps({
         "MessageID": str(uuid.uuid1()),
-        "Flags": 000,
-        "Command": "DeleteChatroom",
-        #"Command": "EditChatroom",
-        #"Command": "CreateChatroom",
-        #"Command": "ChatHistory",
-        #"Command": "ChatMessage",
+        "Command": "ChatMessage",
         "Data": {
             "ChatroomID": "686771e1-5c3a-4cd9-b85b-73500b522865",
+            "MessageText": "yeet skeet"
         }
     })
     ws.send(message)

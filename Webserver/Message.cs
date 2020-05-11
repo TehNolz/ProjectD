@@ -15,10 +15,6 @@ namespace Webserver
 		/// </summary>
 		public Guid ID { get; set; }
 		/// <summary>
-		/// Gets or sets the flags for this message. These must be set with bitwise operations.
-		/// </summary>
-		public MessageFlags Flags { get; set; }
-		/// <summary>
 		/// Gets the message type. Used to determine how this message should be processed.
 		/// </summary>
 		public MessageType Type { get; set; }
@@ -59,8 +55,6 @@ namespace Webserver
 			//Check if all necessary keys are present.
 			if (!json.TryGetValue("MessageID", out string rawID))
 				throw new JsonReaderException("Invalid JSON: missing MessageID");
-			if (!json.TryGetValue("Flags", out MessageFlags flags))
-				throw new JsonReaderException("Invalid JSON: missing Flags");
 			if (!json.TryGetValue("Type", out MessageType type))
 				throw new JsonReaderException("Invalid JSON: missing Type");
 			if (!json.TryGetValue("Data", out JToken dataValue))
@@ -72,7 +66,6 @@ namespace Webserver
 			if (!Guid.TryParse(rawID, out Guid ID))
 				throw new FormatException("ID key is not a valid Guid");
 			result.ID = ID;
-			result.Flags = flags;
 
 			//Deserialize data if necessary
 			if (dataValue.Type != JTokenType.Null)
@@ -87,7 +80,6 @@ namespace Webserver
 		/// <returns></returns>
 		public virtual JObject GetJson() => new JObject() {
 				{ "MessageID", ID },
-				{ "Flags", (int)Flags },
 				{ "Type", Type.ToString() },
 				{ "Data", Data == null? null : (Data is JObject || Data is JArray? Data : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings)) }
 			};
