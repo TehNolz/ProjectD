@@ -143,11 +143,13 @@ namespace Webserver.Chat
 				if (Client.WebSocket.State == WebSocketState.CloseReceived)
 				{
 					Log.Debug("Websocket connection closed by relay.");
+					Dispose();
 					return;
 				}
 				else if (Client.WebSocket.State == WebSocketState.Aborted)
 				{
 					Log.Debug("Lost websocket connection to relay.");
+					Dispose();
 					return;
 				}
 			}
@@ -206,8 +208,15 @@ namespace Webserver.Chat
 		/// <inheritdoc cref="SenderThread"/>
 		private async void Sender()
 		{
-			while (!Disposed)
-				await Client.WebSocket.SendAsync(TransmitQueue.Take().GetBytes(), WebSocketMessageType.Text, true, TokenSource.Token);
+			try
+			{
+				while (!Disposed)
+					await Client.WebSocket.SendAsync(TransmitQueue.Take(TokenSource.Token).GetBytes(), WebSocketMessageType.Text, true, TokenSource.Token);
+			}
+			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException || e is OperationCanceledException)
+			{
+				Dispose();
+			}
 		}
 
 		/// <summary>
@@ -305,7 +314,7 @@ namespace Webserver.Chat
 		public void Dispose()
 		{
 			if (Disposed)
-				throw new ObjectDisposedException("Already disposed.");
+				return;
 
 			Disposed = true;
 			Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
