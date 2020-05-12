@@ -60,7 +60,7 @@ namespace Webserver.API.Endpoints.Feed
 				Response.Send(json.ToString(), HttpStatusCode.OK);
 			}
 			// If a limit and an offset are given, the feed items are requested that start at the offset until the limit is reached.
-			else if (Params.ContainsKey("limit") || Params.ContainsKey("offset"))
+			else if (Params.ContainsKey("limit") && Params.ContainsKey("offset"))
 			{
 				// Check if the amount value is an int.
 				if (int.TryParse(Params["limit"][0], out int limit) && int.TryParse(Params["offset"][0], out int offset))
@@ -73,13 +73,13 @@ namespace Webserver.API.Endpoints.Feed
 				}
 				else
 				{
-					Response.Send("Limit or offset value not valid.", HttpStatusCode.BadRequest);
+					Response.Send("Limit or offset value not valid: they must both be integers.", HttpStatusCode.BadRequest);
 				}
 			}
 			// If the request contains no useful information.
 			else
 			{
-				Response.Send("Missing parameters: provide an ID, a category or an amount.", HttpStatusCode.BadRequest);
+				Response.Send("Missing parameters: provide an ID, a category or a limit and offset.", HttpStatusCode.BadRequest);
 			}
 		}
 	}
