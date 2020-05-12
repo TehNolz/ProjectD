@@ -28,10 +28,14 @@ namespace Webserver.API.Endpoints.Feed
 			}
 
 			// Change the properties of the feed item
-			if (!((JObject)Data).TryGetValue("newTitle", out string newTitle))
+			if (((JObject)Data).TryGetValue("newTitle", out string newTitle))
 				feedItem.Title = newTitle;
-			if (!((JObject)Data).TryGetValue("newDescription", out string newDescription))
+
+			if (((JObject)Data).TryGetValue("newDescription", out string newDescription))
 				feedItem.Description = newDescription;
+
+			if (((JObject)Data).TryGetValue("newCategory", out string newCategory))
+				feedItem.Category = newCategory;
 
 			// Update feed item in the database
 			Database.Update(feedItem);
