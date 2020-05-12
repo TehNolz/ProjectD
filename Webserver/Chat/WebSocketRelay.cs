@@ -143,6 +143,7 @@ namespace Webserver.Chat
 				{
 					byte[] receiveBuffer = new byte[1024];
 					WebSocketReceiveResult receivedData = await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
+					Array.Resize(ref receiveBuffer, receivedData.Count);
 					await SlaveConnection.SendAsync(receiveBuffer, WebSocketMessageType.Text, true, TokenSource.Token);
 				}
 			}
@@ -165,6 +166,7 @@ namespace Webserver.Chat
 				{
 					byte[] receiveBuffer = new byte[1024];
 					WebSocketReceiveResult receivedData = await SlaveConnection.ReceiveAsync(receiveBuffer, TokenSource.Token);
+					Array.Resize(ref receiveBuffer, receivedData.Count);
 					await Client.WebSocket.SendAsync(receiveBuffer, WebSocketMessageType.Text, true, TokenSource.Token);
 				}
 			}
