@@ -184,15 +184,22 @@ namespace Webserver.Chat
 			{
 				while (!Disposed)
 				{
-					byte[] receiveBuffer = new byte[1024];
-					await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
+					WebSocketReceiveResult receiveResult = null;
+					var buffer = new List<byte>();
+					while (receiveResult == null || receiveResult.EndOfMessage == false)
+					{
+						byte[] receiveBuffer = new byte[1024];
+						receiveResult = await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
+						Array.Resize(ref receiveBuffer, receiveResult.Count);
+						buffer.AddRange(receiveBuffer);
+					}
 					if (Client.WebSocket.State != WebSocketState.Open)
 						return;
 
 					ChatMessage message;
 					try
 					{
-						message = ChatMessage.FromBytes(receiveBuffer);
+						message = ChatMessage.FromBytes(buffer.ToArray());
 					}
 					catch (JsonReaderException e)
 					{

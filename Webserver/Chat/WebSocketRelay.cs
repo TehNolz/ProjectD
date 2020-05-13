@@ -141,10 +141,16 @@ namespace Webserver.Chat
 			{
 				while (!Disposed)
 				{
-					byte[] receiveBuffer = new byte[1024];
-					WebSocketReceiveResult receivedData = await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
-					Array.Resize(ref receiveBuffer, receivedData.Count);
-					await SlaveConnection.SendAsync(receiveBuffer, WebSocketMessageType.Text, true, TokenSource.Token);
+					WebSocketReceiveResult receiveResult = null;
+					var buffer = new List<byte>();
+					while (receiveResult == null || receiveResult.EndOfMessage == false)
+					{
+						byte[] receiveBuffer = new byte[1024];
+						receiveResult = await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
+						Array.Resize(ref receiveBuffer, receiveResult.Count);
+						buffer.AddRange(receiveBuffer);
+					}
+					await SlaveConnection.SendAsync(buffer.ToArray(), WebSocketMessageType.Text, true, TokenSource.Token);
 				}
 			}
 			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
@@ -164,10 +170,16 @@ namespace Webserver.Chat
 			{
 				while (!Disposed)
 				{
-					byte[] receiveBuffer = new byte[1024];
-					WebSocketReceiveResult receivedData = await SlaveConnection.ReceiveAsync(receiveBuffer, TokenSource.Token);
-					Array.Resize(ref receiveBuffer, receivedData.Count);
-					await Client.WebSocket.SendAsync(receiveBuffer, WebSocketMessageType.Text, true, TokenSource.Token);
+					WebSocketReceiveResult receiveResult = null;
+					var buffer = new List<byte>();
+					while(receiveResult == null || receiveResult.EndOfMessage == false)
+					{
+						byte[] receiveBuffer = new byte[1024];
+						receiveResult = await SlaveConnection.ReceiveAsync(receiveBuffer, TokenSource.Token);
+						Array.Resize(ref receiveBuffer, receiveResult.Count);
+						buffer.AddRange(receiveBuffer);
+					}
+					await Client.WebSocket.SendAsync(buffer.ToArray(), WebSocketMessageType.Text, true, TokenSource.Token);
 				}
 			}
 			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
