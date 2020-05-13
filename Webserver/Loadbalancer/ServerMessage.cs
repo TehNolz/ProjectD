@@ -60,6 +60,7 @@ namespace Webserver.LoadBalancer
 			if (ID == null)
 				throw new InvalidOperationException("Message was either constructed locally or doesn't require a reply.");
 			Data = data;
+			Flags |= MessageFlags.Reply;
 			Connection.Send(this);
 		}
 	}

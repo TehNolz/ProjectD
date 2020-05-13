@@ -258,7 +258,7 @@ namespace Webserver.LoadBalancer
 					message = Message.FromBytes<ServerMessage>(rawMessage);
 					message.Connection = this;
 
-					if (message.ID != null)
+					if (message.ID != null && message.Flags.HasFlag(MessageFlags.Reply))
 						ReplyReceived?.Invoke(message);
 					else
 						MessageReceived?.Invoke(message);

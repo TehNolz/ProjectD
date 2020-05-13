@@ -185,7 +185,7 @@ namespace Webserver.Chat
 					message.Connection = this;
 					message.User = User;
 
-					if (message.ID != null)
+					if (message.ID != null && message.Flags.HasFlag(MessageFlags.Reply))
 						ReplyReceived?.Invoke(message);
 					else
 						ChatCommand.ProcessChatCommand(message);
