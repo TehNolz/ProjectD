@@ -102,7 +102,10 @@ namespace Webserver.Chat
 		/// <returns></returns>
 		public static ChatMessage FromJson(JObject json)
 		{
-			json["Type"] = MessageType.ChatMessage.ToString();
+			if(!json.ContainsKey("Type"))
+				json["Type"] = MessageType.ChatMessage.ToString();
+			if (!json.ContainsKey("Flags"))
+				json["Flags"] = 0;
 			if (!json.TryGetValue("Command", out string command))
 				throw new JsonReaderException("Invalid JSON: missing Command");
 			ChatMessage result = FromJson<ChatMessage>(json);
@@ -136,15 +139,14 @@ namespace Webserver.Chat
 		//The client was a good boy. (200-299)
 		OK = 200,
 
-		//The client tried to access something it doesn't have permission for (300-399)
-		ChatroomAccessDenied = 300,
-		CommandAccessDenied = 301,
-
 		//The client fucked up. (400-499)
-		BadMessageType = 400,
+		BadMessageCommand = 400,
 		BadMessageData = 401,
 		NoSuchChatroom = 402,
-		AlreadyExists = 403,
+		AlreadyExists = 403,	
+		NotFound = 404,
+		ChatroomAccessDenied = 405,
+		CommandAccessDenied = 406,
 
 		//We fucked up. (500-599)
 		InternalServerError = 500,

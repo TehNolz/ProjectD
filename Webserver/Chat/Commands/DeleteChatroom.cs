@@ -40,7 +40,7 @@ namespace Webserver.Chat.Commands
 			Chat.Database.Delete(chatroom);
 
 			//Inform all relevant clients about the deletion.
-			BroadcastCommand(TargetType.Users, users, CommandType.UpdateChatroomInfo);
+			BroadcastChatMessage(TargetType.Users, users, new ChatMessage(MessageType.ChatroomDeleted, chatroom.ID));
 		}
 	}
 }

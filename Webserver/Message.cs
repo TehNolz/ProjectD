@@ -13,7 +13,7 @@ namespace Webserver
 		/// <summary>
 		/// The unique ID associated with this message. Used for replying to messages that require an answer. Null if no answer is required.
 		/// </summary>
-		public Guid ID { get; set; }
+		public Guid ID { get; set; } = Guid.Empty;
 		/// <summary>
 		/// Gets or sets the flags for this message. These must be set with bitwise operations.
 		/// </summary>
@@ -56,6 +56,8 @@ namespace Webserver
 		/// <returns></returns>
 		protected static T FromJson<T>(JObject json) where T : Message
 		{
+			if (json is null)
+				throw new ArgumentNullException(nameof(json));
 			//Check if all necessary keys are present.
 			if (!json.TryGetValue("MessageID", out string rawID))
 				throw new JsonReaderException("Invalid JSON: missing MessageID");
@@ -115,6 +117,7 @@ namespace Webserver
 	{
 		//General
 		InvalidMessage,
+		DebugType, //Test type please ignore.
 
 		// Load balancer message types
 		Timeout,
@@ -128,9 +131,19 @@ namespace Webserver
 		DbChange,
 		DbSync,
 
-		//Chat
-		Chat,
-		ChatroomUpdate,
+		//Chat - external
+		ChatInfo,
+		ChatroomCreated,
+		ChatroomUpdated,
+		ChatroomDeleted,
 		ChatMessage,
+		UserStatusChanged,
+		UserInfo,
+
+		//Chat - internal
+		Chat,
+		WebSocketConnect,
+		WebSocketDisconnect,
+		WebSocketCount,
 	}
 }

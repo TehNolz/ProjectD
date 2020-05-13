@@ -90,13 +90,17 @@ namespace Webserver.Chat
 		/// Returns a JSON representation of this chatroom.
 		/// </summary>
 		/// <returns></returns>
-		public JObject GetJson() => new JObject()
+		public JObject GetJson()
+		{
+			return new JObject()
 			{
 				{"Name", Name},
 				{"Private", Private },
 				{"ID", ID },
-				{"LastMessage", GetLastMessage()?.ID }
+				{"LastMessage", GetLastMessage()?.ID },
+				{"Users", new JArray(GetUsers())}
 			};
+		}
 
 		/// <summary>
 		/// Get the JSON representation of multiple chatrooms.

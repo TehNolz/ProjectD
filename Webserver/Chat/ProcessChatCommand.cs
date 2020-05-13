@@ -29,7 +29,7 @@ namespace Webserver.Chat
 			).FirstOrDefault();
 			if (commandType == null)
 			{
-				message.Reply(ChatStatusCode.BadMessageType);
+				message.Reply(ChatStatusCode.BadMessageCommand);
 				return;
 			}
 

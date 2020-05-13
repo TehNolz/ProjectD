@@ -55,7 +55,7 @@ namespace Webserver.API.Endpoints.Account
 			//Set optional fields
 			foreach (KeyValuePair<string, JToken> field in json)
 			{
-				if (field.Key == "Email" || field.Key == "Password")
+				if (field.Key == "Email" || field.Key == "Password" || field.Key == "PasswordHash")
 				{
 					continue;
 				}

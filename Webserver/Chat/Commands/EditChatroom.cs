@@ -57,7 +57,7 @@ namespace Webserver.Chat.Commands
 
 			//Save the changes to the database and inform all relevant clients about it.
 			Chat.Database.Update(chatroom);
-			BroadcastCommand(TargetType.Users, chatroom.GetUsers(), CommandType.UpdateChatroomInfo);
+			BroadcastChatMessage(TargetType.Users, chatroom.GetUsers(), new ChatMessage(MessageType.ChatroomUpdated, chatroom.GetJson()));
 		}
 	}
 }

@@ -10,6 +10,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
+using Webserver.API.Endpoints;
 using Webserver.Chat;
 using Webserver.Config;
 using Webserver.Replication;
@@ -23,11 +24,11 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// Server registration thread. Waits for incoming registration requests from new slaves.
 		/// </summary>
-		public static Thread RegistryThread;
+		private static Thread RegistryThread;
 		/// <summary>
 		/// Discovery response thread. Waits for- and responds to incoming discovery requests.
 		/// </summary>
-		public static Thread DiscoveryThread;
+		private static Thread DiscoveryThread;
 
 		/// <summary>
 		/// Promotes this server to master.
@@ -43,9 +44,12 @@ namespace Webserver.LoadBalancer
 			ServerConnection.ServerTimeout += OnServerTimeout;
 			ServerConnection.MessageReceived += OnDbChange;
 			ServerConnection.MessageReceived += OnDbSynchronize;
+			ServerConnection.MessageReceived += Example.TestHandler;
 
 			//Chat system events
 			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;
+			ServerConnection.MessageReceived += Chat.Chat.UserConnectionHandler;
+			ServerConnection.MessageReceived += Chat.Chat.UserDisconnectionHandler;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
@@ -68,11 +72,18 @@ namespace Webserver.LoadBalancer
 		private static void BroadcastHandler(ServerMessage message)
 		{
 			// If this message is a broadcast, send it to all servers except the one it came from.
-			if (message.isBroadcast && message.ID == null)
+			if (message.isBroadcast)
 			{
 				var destinations = new List<ServerConnection>(ServerProfile.ConnectedServers);
 				destinations.Remove(message.Connection);
-				message.Send(destinations);
+				if (message.ID == null)
+				{
+					message.Send(destinations);
+				}
+				else
+				{
+					message.Reply(ServerConnection.BroadcastAndWait(message, destinations));
+				}
 			}
 		}
 

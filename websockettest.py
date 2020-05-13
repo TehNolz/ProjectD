@@ -4,7 +4,8 @@ import uuid
 import json
 
 def on_message(ws, message):
-    print("text: "+message)
+    print(message)
+    print(len(message))
 
 def on_close(ws):
     print("### closed ###")
@@ -12,14 +13,12 @@ def on_close(ws):
 def on_open(ws):
     message = json.dumps({
         "MessageID": str(uuid.uuid1()),
-        "Flags": 000,
-        "Command": "DeleteChatroom",
-        #"Command": "EditChatroom",
-        #"Command": "CreateChatroom",
-        #"Command": "ChatHistory",
-        #"Command": "ChatMessage",
+        "Command": "ChatMessage",
         "Data": {
-            "ChatroomID": "686771e1-5c3a-4cd9-b85b-73500b522865",
+            #"Name": "yeeeee",
+            #"Private": False,
+            "ChatroomID": "8f77e594-a58b-4a57-ba78-b55b17510ed9",
+            "MessageText": "yeet skeet"
         }
     })
     ws.send(message)

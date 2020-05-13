@@ -1,5 +1,5 @@
 using Newtonsoft.Json;
-
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 using Webserver.LoadBalancer;
 using Webserver.Models;
 using Webserver.Webserver;
-
+using static Webserver.Chat.Chat;
 using static Webserver.Program;
 
 namespace Webserver.Chat
@@ -127,8 +127,26 @@ namespace Webserver.Chat
 
 			ActiveConnections.Add(this);
 
-			//Send channel info to the client.
-			UpdateChatrooms();
+			UserConnect(User);
+
+			//Get user info
+			//TODO Reduce database + master server calls
+			var users = new JArray();
+			foreach(Guid ID in (from C in Chatrooms from U in C.GetUsers() select U).Distinct())
+			{
+				User user = Chat.Database.Select<User>("ID = @ID", new { ID }).First();
+				JObject json = user.GetJson();
+				json.Add("Status", (int)(GetConnectionCount(user) >= 1 ? UserStatus.Online : UserStatus.Offline));
+				users.Add(json);
+			}
+
+			//Send info to the client.
+			Send(new ChatMessage(MessageType.ChatInfo, new JObject()
+			{
+				{"Chatrooms",  Chatroom.GetJsonBulk(Chatrooms)},
+				{"CurrentUser", User.GetJson() },
+				{"Users", users }
+			}));
 		}
 
 		/// <summary>
@@ -221,13 +239,14 @@ namespace Webserver.Chat
 
 		/// <summary>
 		/// Sends data to the client on the other side of this relay connection.
+		/// Does nothing if this connection has been closed.
 		/// </summary>
 		/// <param name="message">The message to send.</param>
 		public void Send(ChatMessage message)
 		{
 			// Throw an exception if this connection is no longer active.
 			if (Disposed)
-				throw new ObjectDisposedException(GetType().Name);
+				return;
 
 			// Add message to the queue
 			TransmitQueue.Add(message);
@@ -294,11 +313,6 @@ namespace Webserver.Chat
 		}
 
 		/// <summary>
-		/// Send updated chatroom information to this client.
-		/// </summary>
-		public void UpdateChatrooms() => Send(new ChatMessage(MessageType.ChatroomUpdate, Chatroom.GetJsonBulk(Chatrooms)));
-
-		/// <summary>
 		/// Send chat messages to all chat clients connected to the system. This includes those connected to remote servers.
 		/// </summary>
 		/// <param name="message">The message that will be sent.</param>
@@ -319,6 +333,8 @@ namespace Webserver.Chat
 			Disposed = true;
 			Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
 			TokenSource.Cancel();
+
+			Chat.UserDisconnect(User);
 
 			ActiveConnections.Remove(this);
 		}

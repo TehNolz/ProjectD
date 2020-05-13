@@ -29,7 +29,7 @@ namespace Webserver.Chat.Commands
 
 			//Save the chatroom to the database and inform all relevant clients about it.
 			Chat.Database.Insert(chatroom);
-			BroadcastCommand(TargetType.Users, chatroom.GetUsers(), CommandType.UpdateChatroomInfo);
+			BroadcastChatMessage(TargetType.Users, chatroom.GetUsers(), new ChatMessage(MessageType.ChatroomCreated, chatroom.GetJson()));
 		}
 	}
 }

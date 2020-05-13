@@ -1,6 +1,6 @@
 using Database.SQLite;
 using Database.SQLite.Modeling;
-
+using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
 using System.Security.Cryptography;
@@ -73,6 +73,17 @@ namespace Webserver.Models
 		/// <param name="email">The email to search for</param>
 		/// <returns>The user with the specified email address. Null if the user doesn't exist.</returns>
 		public static User GetByEmail(SQLiteAdapter database, string email) => database.Select<User>("Email = @email", new { email }).FirstOrDefault();
+
+		/// <summary>
+		/// Get a JSON object representing this user. Possibly sensitive data is stripped out.
+		/// </summary>
+		/// <returns></returns>
+		public JObject GetJson() => new JObject()
+		{
+			{"ID", ID },
+			{"Username", Username },
+			{"PermissionLevel", (int)PermissionLevel }
+		};
 	}
 
 	public enum PermissionLevel

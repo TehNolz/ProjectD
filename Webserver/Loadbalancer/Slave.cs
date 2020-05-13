@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
+using Webserver.API.Endpoints;
 using Webserver.Chat;
 using Webserver.Config;
 using Webserver.Replication;
@@ -32,6 +33,7 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += RegistrationResponse;
 			ServerConnection.MessageReceived += NewServer;
 			ServerConnection.MessageReceived += OnDbChange;
+			ServerConnection.MessageReceived += Example.TestHandler;
 
 			//Chat system events
 			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;
@@ -110,6 +112,8 @@ namespace Webserver.LoadBalancer
 		/// <param name="message"></param>
 		public static void TimeoutMessage(ServerMessage message)
 		{
+			if (message is null)
+				throw new ArgumentNullException(nameof(message));
 			if (message.Type != MessageType.Timeout)
 				return;
 

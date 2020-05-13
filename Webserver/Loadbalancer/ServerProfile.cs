@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Webserver.LoadBalancer
 {
@@ -200,6 +201,39 @@ namespace Webserver.LoadBalancer
 				Send(ConnectedServers, message);
 			else
 				message.Send(Balancer.MasterServer);
+		}
+
+		/// <summary>
+		/// Send data to multiple servers and wait for them to respond.
+		/// </summary>
+		/// <param name="message">The message to send</param>
+		/// <param name="servers">The ServerConnection to send the data to. If null, the connections in ConnectedServers will be used. Not very useful for slaves as they only have one connection.</param>
+		/// <returns></returns>
+		public static List<ServerMessage> BroadcastAndWait(ServerMessage message, List<ServerConnection> servers = null)
+		{
+			if (servers == null)
+				servers = ConnectedServers;
+
+			message.isBroadcast = true;
+			if (Balancer.IsMaster)
+			{
+				//If the server is master, send the message to all connected servers and wait for them to respond.
+				var tasks = new Task<ServerMessage>[servers.Count];
+				for (int i = 0; i < servers.Count; i++)
+				{
+					tasks[i] = new Task<ServerMessage>(() => servers[i].SendAndWait(message));
+					tasks[i].Start();
+				}
+
+				//Wait for all servers to respond, then return this data.
+				Task.WaitAll(tasks);
+				return (from T in tasks select T.Result).ToList();
+			}
+			else
+			{
+				//Get the master to do our work.
+				return message.SendAndWait(Balancer.MasterServer).Data;
+			}
 		}
 
 		/// <summary>

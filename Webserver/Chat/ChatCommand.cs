@@ -77,11 +77,11 @@ namespace Webserver.Chat
 		}
 
 		/// <summary>
-		/// Executes commands on remote
+		/// Executes commands on the specified targets, including targets on remote servers. Targets can be users or chatrooms.
 		/// </summary>
-		/// <param name="targetType"></param>
-		/// <param name="targets"></param>
-		/// <param name="message"></param>
+		/// <param name="targetType">The type of the target</param>
+		/// <param name="targets">A list of targets that will receive this ChatMessage</param>
+		/// <param name="command">The command to execute</param>
 		public static void BroadcastCommand(TargetType targetType, IEnumerable<Guid> targets, CommandType command)
 		{
 			var serverMessage = new ServerMessage(MessageType.Chat, new JObject()
@@ -127,9 +127,9 @@ namespace Webserver.Chat
 				{
 					switch (Enum.Parse<CommandType>((string)data["Command"]))
 					{
-						case CommandType.UpdateChatroomInfo:
-							connection.UpdateChatrooms();
-							break;
+						//Will put commands here at some point.
+						default:
+							return;
 					}
 				}
 			}
