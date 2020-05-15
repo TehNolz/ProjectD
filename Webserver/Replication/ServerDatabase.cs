@@ -472,6 +472,7 @@ namespace Webserver.Replication
 				fileLock.Release(this);
 				if (!fileLock.Locked)
 				{
+					backupThread_stop = true;
 					backupThread.Interrupt();
 					backupThread.Join();
 					backupThread = null;
