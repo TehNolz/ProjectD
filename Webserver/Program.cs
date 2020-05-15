@@ -122,7 +122,7 @@ namespace Webserver
 			//TODO: Implement proper shutdown
 			Distributor.Dispose();
 			distributor.Join();
-
+			Shutdown();
 		}
 
 		/// <summary>
@@ -161,6 +161,16 @@ namespace Webserver
 					Private = false,
 				});
 			}
+		}
+
+		/// <summary>
+		/// Terminates this program with the specified <paramref name="exitCode"/>;
+		/// </summary>
+		/// <param name="exitCode">Optional exitcode to terminate this program with.</param>
+		public static void Shutdown(int exitCode = 0)
+		{
+			// TODO Add cleanup here
+			Environment.Exit(exitCode);
 		}
 	}
 }
