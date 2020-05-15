@@ -85,7 +85,7 @@ namespace Webserver.LoadBalancer
 			if (message.Data is null)
 			{
 				// Send the current database version and typelist to begin the chunked synchronization
-				message.Reply(new { Types = JArray.FromObject(Program.Database.TypeList), Program.Database.Version });
+				message.Reply(new { Types = JArray.FromObject(Program.Database.TypeList), Program.Database.ChangelogVersion });
 				return;
 			}
 

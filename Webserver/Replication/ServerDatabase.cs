@@ -9,8 +9,11 @@ using System.Data.SQLite;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 using Webserver.LoadBalancer;
+
+using static Webserver.Config.DatabaseConfig;
 
 namespace Webserver.Replication
 {
@@ -22,8 +25,8 @@ namespace Webserver.Replication
 	/// </summary>
 	public sealed class ServerDatabase : SQLiteAdapter, IDisposable
 	{
-		/// <inheritdoc cref="ChangeLog.Version"/>
-		public long Version => changelog.Version;
+		/// <inheritdoc cref="ChangeLog.ChangelogVersion"/>
+		public long ChangelogVersion => changelog.ChangelogVersion;
 		/// <inheritdoc cref="ChangeLog.TypeList"/>
 		public ReadOnlyCollection<ModelType> TypeList => changelog.TypeList;
 
@@ -48,6 +51,11 @@ namespace Webserver.Replication
 		/// </summary>
 		private FileLock fileLock;
 		private ChangeLog changelog;
+		/// <summary>
+		/// The <see cref="Thread"/> responsible for periodically backing up the database.
+		/// </summary>
+		private Thread backupThread;
+		private bool backupThread_stop = false;
 
 		/// <summary>
 		/// Initializes a new instance of <see cref="ServerDatabase"/> with the specified
@@ -62,6 +70,10 @@ namespace Webserver.Replication
 			this.fileLock = fileLock;
 			fileLock.Acquire(this);
 			changelog = new ChangeLog(this);
+
+			// Create a new database backup thread
+			backupThread = new Thread(BackupThread_Run) { Name = "Database Backup" };
+			backupThread.Start(this);
 		}
 		/// <summary>
 		/// Initializes a new instance of <see cref="ServerDatabase"/> by inheriting
@@ -75,8 +87,54 @@ namespace Webserver.Replication
 			fileLock = parent.fileLock;
 			fileLock.Acquire(this);
 			changelog = parent.changelog;
+			backupThread = parent.backupThread;
 		}
 
+		/// <summary>
+		/// Main loop for <see cref="backupThread"/>.
+		/// </summary>
+		/// <param name="db">A <see cref="ServerDatabase"/> that will be cloned.
+		/// The cloned instance will not be a file lock owner.</param>
+		private void BackupThread_Run(object db)
+		{
+			// Clone the given connection
+			ServerDatabase database = (db as ServerDatabase).NewConnection();
+			database.BroadcastChanges = false;
+			database.fileLock.Release(database);
+			try
+			{
+				DateTime lastBackup = DateTime.UtcNow;
+				if (Directory.Exists(BackupDir))
+				{
+					// Get the datetime from the most recent .db or .zip file (if any)
+					FileInfo file = (from f in new DirectoryInfo(BackupDir).GetFiles()
+									  where f.Extension.ToLower() == ".db" || f.Extension.ToLower() == ".zip"
+									  orderby f.LastWriteTimeUtc descending
+									  select f).FirstOrDefault();
+					if (!(file is null))
+						lastBackup = file.LastWriteTimeUtc;
+				}
+
+				while (!backupThread_stop)
+				{
+					// Calculate the remaining time until a new backup must be made
+					TimeSpan remainingTime = BackupPeriod - (DateTime.UtcNow - lastBackup);
+
+					// Only call Thread.Sleep if the remaining time is larger than 0
+					if (remainingTime.Ticks > 0)
+						Thread.Sleep(remainingTime);
+
+					// Backup this connection
+					new DatabaseBackup(database).Dispose();
+					lastBackup = DateTime.UtcNow;
+
+					// 
+				}
+			}
+			catch (ThreadInterruptedException) { } // Thrown only when the thread is sleeping
+		}
+
+		#region SQLiteAdapter overrides
 		public override long Insert<T>(IList<T> items)
 		{
 			Changes changes = null;
@@ -290,7 +348,8 @@ namespace Webserver.Replication
 					changes.Broadcast();
 				}
 			}
-		}
+		} 
+		#endregion
 
 		/// <summary>
 		/// Retrieves all new changes from the master server and applies them.
@@ -303,7 +362,7 @@ namespace Webserver.Replication
 			// Get the amount of new changes to request and the typelist from the master
 			dynamic data = new ServerMessage(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data;
 
-			long updateCount = data.Version - changelog.Version;
+			long updateCount = data.Version - changelog.ChangelogVersion;
 			var types = ((JArray)data.Types).Select(x => x.ToObject<ModelType>()).ToDictionary(x => x.ID);
 
 			lock (this)
@@ -320,7 +379,7 @@ namespace Webserver.Replication
 						// Request another chunk of updates
 						JArray updates = new ServerMessage(
 							MessageType.DbSync,
-							new { changelog.Version, Amount = Math.Min(updateCount - l, chunkSize) }
+							new { changelog.ChangelogVersion, Amount = Math.Min(updateCount - l, chunkSize) }
 						).SendAndWait(Balancer.MasterServer).Data;
 
 						// Apply each update, increment l and occasionally update the progressbar
@@ -346,14 +405,6 @@ namespace Webserver.Replication
 				}
 			}
 		}
-
-		/// <summary>
-		/// Returns an existing <see cref="ModelType"/> instance from the <see cref="TypeList"/>
-		/// or creates a new one.
-		/// </summary>
-		/// <typeparam name="T">The type to get a <see cref="ModelType"/> for.</typeparam>
-		private ModelType GetModelType<T>() => TypeList.FirstOrDefault(x => x == typeof(T)) ?? typeof(T);
-
 		/// <summary>
 		/// Pushes the given changes onto this database's changelog and applies the 
 		/// changes specified in the <paramref name="changes"/> object.
@@ -365,6 +416,13 @@ namespace Webserver.Replication
 		public IEnumerable<Changes> GetNewChanges(long id, long limit = -1) => changelog.GetNewChanges(id, limit);
 
 		/// <summary>
+		/// Returns an existing <see cref="ModelType"/> instance from the <see cref="TypeList"/>
+		/// or creates a new one.
+		/// </summary>
+		/// <typeparam name="T">The type to get a <see cref="ModelType"/> for.</typeparam>
+		private ModelType GetModelType<T>() => TypeList.FirstOrDefault(x => x == typeof(T)) ?? typeof(T);
+
+		/// <summary>
 		/// Returns a new instance of <see cref="ServerDatabase"/> with the same datasource as
 		/// this instance by inheriting the database lock.
 		/// <para/>
@@ -372,7 +430,6 @@ namespace Webserver.Replication
 		/// <see langword="true"/> by default.
 		/// </summary>
 		public ServerDatabase NewConnection() => new ServerDatabase(this) { BroadcastChanges = true };
-
 		/// <summary>
 		/// Returns a new <see cref="ServerDatabase"/> connection for the given datasource.
 		/// <para/>
@@ -410,7 +467,17 @@ namespace Webserver.Replication
 
 		public override void Dispose()
 		{
-			fileLock?.Release(this);
+			if (!(fileLock is null))
+			{
+				fileLock.Release(this);
+				if (!fileLock.Locked)
+				{
+					backupThread.Interrupt();
+					backupThread.Join();
+					backupThread = null;
+				}
+			}
+
 			fileLock = null;
 			changelog.Dispose();
 			base.Dispose();
