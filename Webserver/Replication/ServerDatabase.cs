@@ -103,7 +103,7 @@ namespace Webserver.Replication
 			database.fileLock.Release(database);
 			try
 			{
-				DateTime lastBackup = DateTime.UtcNow;
+				DateTime lastBackup = File.GetCreationTimeUtc(database.Connection.FileName);
 				if (Directory.Exists(BackupDir))
 				{
 					// Get the datetime from the most recent .db or .zip file (if any)
