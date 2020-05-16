@@ -172,7 +172,7 @@ namespace Webserver.Chat
 				{
 					WebSocketReceiveResult receiveResult = null;
 					var buffer = new List<byte>();
-					while(receiveResult == null || receiveResult.EndOfMessage == false)
+					while (receiveResult == null || receiveResult.EndOfMessage == false)
 					{
 						byte[] receiveBuffer = new byte[1024];
 						receiveResult = await SlaveConnection.ReceiveAsync(receiveBuffer, TokenSource.Token);

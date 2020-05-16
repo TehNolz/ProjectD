@@ -1,6 +1,8 @@
 using Database.SQLite;
 using Database.SQLite.Modeling;
+
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Linq;
 using System.Security.Cryptography;
@@ -27,12 +29,11 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="email">The user's email address</param>
 		/// <param name="password">The user's password. This will be converted into a salted hash and stored in the PasswordHash field.</param>
-		public User(SQLiteAdapter database, string email, string password)
+		public User(string email, string password)
 		{
 			Email = email;
 			Username = email.Split('@').First();
 			PasswordHash = CreateHash(password, email);
-			database.Insert(this);
 		}
 
 		/// <summary>

@@ -15,19 +15,9 @@ namespace Webserver.Chat
 	public class ChatMessage : Message
 	{
 		/// <summary>
-		/// Internal constructor. Do not use.
+		/// Create a new chat message.
 		/// </summary>
 		public ChatMessage(MessageType type, object data) : base(type, data) { }
-
-		/// <summary>
-		/// Create a new chat message
-		/// </summary>
-		/// <param name="command">The command this message will call</param>
-		/// <param name="data">The data attached to this message</param>
-		public ChatMessage(string command, object data) : base(MessageType.ChatMessage, data)
-		{
-			Command = command;
-		}
 
 		/// <summary>
 		/// The command this message will call.
@@ -102,7 +92,7 @@ namespace Webserver.Chat
 		/// <returns></returns>
 		public static ChatMessage FromJson(JObject json)
 		{
-			if(!json.ContainsKey("Type"))
+			if (!json.ContainsKey("Type"))
 				json["Type"] = MessageType.ChatMessage.ToString();
 			if (!json.ContainsKey("Flags"))
 				json["Flags"] = 0;
@@ -143,7 +133,7 @@ namespace Webserver.Chat
 		BadMessageCommand = 400,
 		BadMessageData = 401,
 		NoSuchChatroom = 402,
-		AlreadyExists = 403,	
+		AlreadyExists = 403,
 		NotFound = 404,
 		ChatroomAccessDenied = 405,
 		CommandAccessDenied = 406,

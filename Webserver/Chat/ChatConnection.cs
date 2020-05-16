@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,10 +10,11 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
-
+using Webserver.Chat.Commands;
 using Webserver.LoadBalancer;
 using Webserver.Models;
 using Webserver.Webserver;
+
 using static Webserver.Chat.Chat;
 using static Webserver.Program;
 
@@ -127,16 +129,16 @@ namespace Webserver.Chat
 
 			ActiveConnections.Add(this);
 
-			UserConnect(User);
+			UserStatus.UserConnect(User);
 
 			//Get user info
 			//TODO Reduce database + master server calls
 			var users = new JArray();
-			foreach(Guid ID in (from C in Chatrooms from U in C.GetUsers() select U).Distinct())
+			foreach (Guid ID in (from C in Chatrooms from U in C.GetUsers() select U).Distinct())
 			{
 				User user = Chat.Database.Select<User>("ID = @ID", new { ID }).First();
 				JObject json = user.GetJson();
-				json.Add("Status", (int)(GetConnectionCount(user) >= 1 ? UserStatus.Online : UserStatus.Offline));
+				json.Add("Status", (int)(GetConnectionCount(user) >= 1 ? UserStatuses.Online : UserStatuses.Offline));
 				users.Add(json);
 			}
 
@@ -341,7 +343,7 @@ namespace Webserver.Chat
 			Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
 			TokenSource.Cancel();
 
-			Chat.UserDisconnect(User);
+			UserStatus.UserDisconnect(User);
 
 			ActiveConnections.Remove(this);
 		}

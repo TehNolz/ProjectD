@@ -146,11 +146,11 @@ namespace Webserver
 			//Create Admin account if it doesn't exist already;
 			if (database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)
 			{
-				var admin = new User(database, "Administrator", AuthenticationConfig.AdministratorPassword)
+				var admin = new User("Administrator", AuthenticationConfig.AdministratorPassword)
 				{
 					PermissionLevel = PermissionLevel.Admin
 				};
-				database.Update(admin);
+				database.Insert(admin);
 			}
 
 			//Create default channel if none exist

@@ -41,8 +41,8 @@ namespace WebserverTests.API_Endpoints.Tests
 		public void GET_BulkValidArguments()
 		{
 			//Create test user
-			new User(Database, "TestUser1@example.com", "TestPassword1");
-			new User(Database, "TestUser2@example.com", "TestPassword2");
+			Database.Insert(new User("TestUser1@example.com", "TestPassword1"));
+			Database.Insert(new User("TestUser2@example.com", "TestPassword2"));
 
 			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=Administrator,TestUser1@example.com", HttpMethod.GET, contentType: "application/json");
 
@@ -122,8 +122,8 @@ namespace WebserverTests.API_Endpoints.Tests
 		public void GET_AllUsers()
 		{
 			//Create test users
-			new User(Database, "TestUser1@example.com", "TestPassword1");
-			new User(Database, "TestUser2@example.com", "TestPassword2");
+			Database.Insert(new User("TestUser1@example.com", "TestPassword1"));
+			Database.Insert(new User("TestUser2@example.com", "TestPassword2"));
 
 			//Create mock request
 			ResponseProvider Response = ExecuteSimpleRequest("/api/account", HttpMethod.GET, contentType: "application/json");

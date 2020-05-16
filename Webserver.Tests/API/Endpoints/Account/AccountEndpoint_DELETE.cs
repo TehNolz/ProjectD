@@ -19,7 +19,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		[TestMethod]
 		public void DELETE_ValidArguments()
 		{
-			new User(Database, "user@example.com", "SomePassword");
+			Database.Insert(new User("user@example.com", "SomePassword"));
 			ResponseProvider Response = ExecuteSimpleRequest("/api/account", HttpMethod.DELETE, new JObject() {
 				{"Email", "user@example.com"},
 			}, contentType: "application/json");

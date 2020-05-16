@@ -50,7 +50,8 @@ namespace Webserver.API.Endpoints.Account
 			}
 
 			//Create a new user
-			var newUser = new User(Database, email, password);
+			var newUser = new User(email, password);
+			Database.Insert(newUser);
 
 			//Set optional fields
 			foreach (KeyValuePair<string, JToken> field in json)

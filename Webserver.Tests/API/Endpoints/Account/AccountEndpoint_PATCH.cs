@@ -16,7 +16,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		[TestMethod]
 		public void EDIT_ValidArguments()
 		{
-			new User(Database, "user@example.com", "SomePassword");
+			Database.Insert(new User("user@example.com", "SomePassword"));
 			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=user@example.com", HttpMethod.PATCH, new JObject() {
 				{"Email", "test@example.com" },
 			}, contentType: "application/json");
@@ -97,7 +97,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		[DynamicData("InvalidPatchTestData")]
 		public void EDIT_InvalidArguments(JObject JSON, string URL, HttpStatusCode StatusCode, string ResponseMessage)
 		{
-			new User(Database, "user@example.com", "SomePassword");
+			Database.Insert(new User("user@example.com", "SomePassword"));
 			ResponseProvider Response = ExecuteSimpleRequest(URL, HttpMethod.PATCH, JSON, contentType: "application/json");
 			Assert.IsTrue(Response.StatusCode == StatusCode);
 			if (ResponseMessage != null)

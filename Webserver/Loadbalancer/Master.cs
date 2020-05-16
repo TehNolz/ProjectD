@@ -12,6 +12,7 @@ using System.Threading;
 
 using Webserver.API.Endpoints;
 using Webserver.Chat;
+using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
 
@@ -48,8 +49,8 @@ namespace Webserver.LoadBalancer
 
 			//Chat system events
 			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;
-			ServerConnection.MessageReceived += Chat.Chat.UserConnectionHandler;
-			ServerConnection.MessageReceived += Chat.Chat.UserDisconnectionHandler;
+			ServerConnection.MessageReceived += UserStatus.UserConnectionHandler;
+			ServerConnection.MessageReceived += UserStatus.UserDisconnectionHandler;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
