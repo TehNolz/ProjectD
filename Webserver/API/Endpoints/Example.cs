@@ -12,6 +12,7 @@ namespace Webserver.API.Endpoints
 	{
 		public override void GET() => Response.Send(JArray.FromObject(ServerConnection.BroadcastAndWait(new ServerMessage(MessageType.DebugType, 1))));
 
+		[EventMessageType(MessageType.DebugType)]
 		public static void TestHandler(ServerMessage message) => message.Reply(2);
 	}
 }

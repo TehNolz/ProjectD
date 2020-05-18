@@ -108,24 +108,24 @@ namespace Webserver.LoadBalancer
 		[EventMessageType(MessageType.DbSyncBackupStart)]
 		private static void OnDbSyncBackupStart(ServerMessage message)
 		{
-			// Get the user_version of the slave's database and this database
-			long version = Program.Database.UserVersion;
 			long slaveVersion = message.Data;
+			long minVersion = Program.Database.UserVersion;
+			long maxVersion = Program.Database.ChangelogVersion;
 
-			switch (slaveVersion.CompareTo(version))
+			if (slaveVersion < minVersion)
 			{
-				case -1:
-					// Send the name and length of the last backup file
-					FileInfo backup = DatabaseBackup.LastBackup;
-					message.Reply(new
-					{
-						backup.Name,
-						backup.Length
-					});
-					break;
-				case 0: message.Reply(null); break; // Send nothing if the versions are equal
-				default: message.Reply(new JObject() {{ "error", "Database version is larger than the master database version." }}); break;
+				// Send the name and length of the last backup file
+				FileInfo backup = DatabaseBackup.LastBackup;
+				message.Reply(new
+				{
+					backup.Name,
+					backup.Length
+				});
 			}
+			else if (slaveVersion >= minVersion && slaveVersion <= maxVersion)
+				message.Reply(null);
+			else
+				message.Reply(new JObject() { { "error", "Database version is larger than the master database version." } });
 		}
 		/// <summary>
 		/// Accepts an offset value as <see cref="long"/> and filename as string. Responds with the following:

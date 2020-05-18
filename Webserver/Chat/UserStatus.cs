@@ -4,7 +4,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
 using Webserver.LoadBalancer;
 using Webserver.Models;
 
@@ -54,12 +53,9 @@ namespace Webserver.Chat.Commands
 		/// Event handler for WebSocketConnect events
 		/// </summary>
 		/// <param name="connection"></param>
+		[EventMessageType(MessageType.WebSocketConnect)]
 		public static void UserConnectionHandler(ServerMessage message)
-		{
-			if (message.Type == MessageType.WebSocketConnect)
-				return;
-			UserConnect(message.Data, message.Connection.Address);
-		}
+			=> UserConnect(message.Data, message.Connection.Address);
 
 		/// <summary>
 		/// Decrement the connection counter for this user. If the counter is 0, a notification is sent to all relevant clients that this user has logged out.
@@ -95,12 +91,9 @@ namespace Webserver.Chat.Commands
 			}
 		}
 
+		[EventMessageType(MessageType.WebSocketDisconnect)]
 		public static void UserDisconnectionHandler(ServerMessage message)
-		{
-			if (message.Type == MessageType.WebSocketDisconnect)
-				return;
-			UserDisconnect(message.Data, message.Connection.Address);
-		}
+			=> UserDisconnect(message.Data, message.Connection.Address);
 	}
 
 	public enum UserStatuses

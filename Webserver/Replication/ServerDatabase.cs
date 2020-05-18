@@ -421,6 +421,8 @@ namespace Webserver.Replication
 			{
 				dynamic data = new ServerMessage(MessageType.DbSyncBackupStart, ChangelogVersion).SendAndWait(Balancer.MasterServer).Data;
 
+				if (data is JObject json && json.ContainsKey("error"))
+					throw new OperationCanceledException($"Master rejected synchronization request: {json["error"]}");
 				if (data == null)
 					return;
 

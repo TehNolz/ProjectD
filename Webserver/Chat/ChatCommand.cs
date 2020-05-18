@@ -97,14 +97,10 @@ namespace Webserver.Chat
 		/// <summary>
 		/// Event handler for BroadcastChatMessage. Receives ChatMessages and broadcasts them accordingly
 		/// </summary>
-		/// <param name="message"></param>
+		[EventMessageType(MessageType.Chat)]
 		public static void BroadcastHandler(ServerMessage message)
 		{
 			var data = (JObject)message.Data;
-
-			//Ignore everything other than Chat messages
-			if (message.Type != MessageType.Chat)
-				return;
 
 			//Get target connections
 			IEnumerable<ChatConnection> matchingConnections = Enum.Parse<TargetType>((string)data["TargetType"]) == TargetType.Users ?
