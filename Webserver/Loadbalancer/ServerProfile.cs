@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Threading;
 
 namespace Webserver.LoadBalancer
@@ -47,6 +48,28 @@ namespace Webserver.LoadBalancer
 	/// </summary>
 	public class ServerConnection : ServerProfile, IDisposable
 	{
+		private ServerState _state;
+		/// <summary>
+		/// Gets the current state of this <see cref="ServerConnection"/>.
+		/// <para/>
+		/// This value may not be accurate.
+		/// </summary>
+		/// <exception cref="ObjectDisposedException">An attempt was made to set this property
+		/// when this <see cref="ServerConnection"/> has been disposed.</exception>
+		/// <exception cref="ArgumentException"><see langword="value"/> was <see cref="ServerState.Disposed"/>.</exception>
+		public ServerState State
+		{
+			get => _state;
+			set
+			{
+				if (_state == ServerState.Disposed)
+					throw new ObjectDisposedException(null);
+				if (value == ServerState.Disposed)
+					throw new ArgumentException($"Cannot set this property to {nameof(ServerState.Disposed)} manually.");
+				_state = value;
+			}
+		}
+
 		/// <summary>
 		/// The TcpClient representing the connection to this server.
 		/// </summary>
@@ -68,11 +91,6 @@ namespace Webserver.LoadBalancer
 		/// Receiver thread, which receives data sent to us by this server.
 		/// </summary>
 		private Thread ReceiverThread;
-
-		/// <summary>
-		/// Track whether this connection is still active.
-		/// </summary>
-		private bool Disposed = false;
 
 		#region Delegates
 		/// <summary>
@@ -124,6 +142,8 @@ namespace Webserver.LoadBalancer
 			SenderThread.Start();
 			ReceiverThread = new Thread(() => Receiver_Run());
 			ReceiverThread.Start();
+
+			State = ServerState.Open;
 		}
 
 		/// <summary>
@@ -133,24 +153,12 @@ namespace Webserver.LoadBalancer
 		public void Send(ServerMessage message)
 		{
 			// Throw an exception if this connection is no longer active.
-			if (Disposed)
+			if (isDisposed)
 				throw new ObjectDisposedException(GetType().Name);
 
 			// Add message to the queue
 			TransmitQueue.Add(message);
 		}
-
-		/// <summary>
-		/// Send data to multiple servers
-		/// </summary>
-		/// <param name="servers">A list of servers to send the message to.</param>
-		/// <param name="message">The message to send to each server.</param>
-		public static void Send(IEnumerable<ServerConnection> servers, ServerMessage message)
-		{
-			foreach (ServerConnection connection in servers)
-				connection.Send(message);
-		}
-
 		/// <summary>
 		/// Send a message and wait for a response.
 		/// </summary>
@@ -187,6 +195,17 @@ namespace Webserver.LoadBalancer
 
 			// If reply is null, the events have been reset.
 			return reply ?? throw new SocketException((int)SocketError.ConnectionReset);
+		}
+
+		/// <summary>
+		/// Send data to multiple servers
+		/// </summary>
+		/// <param name="servers">A list of servers to send the message to.</param>
+		/// <param name="message">The message to send to each server.</param>
+		public static void Send(IEnumerable<ServerConnection> servers, ServerMessage message)
+		{
+			foreach (ServerConnection connection in servers)
+				connection.Send(message);
 		}
 
 		/// <summary>
@@ -259,9 +278,15 @@ namespace Webserver.LoadBalancer
 					message.Connection = this;
 
 					if (message.ID != null && message.Flags.HasFlag(MessageFlags.Reply))
-						ReplyReceived?.Invoke(message);
+					{
+						foreach (Delegate d in GetHandlersForType(ReplyReceived, message.Type))
+							d.Method.Invoke(d.Target, new[] { message });
+					}
 					else
-						MessageReceived?.Invoke(message);
+					{
+						foreach (Delegate d in GetHandlersForType(MessageReceived, message.Type))
+							d.Method.Invoke(d.Target, new[] { message });
+					}
 				}
 				catch (Exception e) when (e is SocketException || e is IOException)
 				{
@@ -284,17 +309,93 @@ namespace Webserver.LoadBalancer
 			ReplyReceived = null;
 		}
 
+		#region IDisposable Support
+		/// <summary>
+		/// Track whether this connection is still active.
+		/// </summary>
+		private bool isDisposed = false;
+
 		/// <summary>
 		/// Disposes this server connection, stopping all its threads and disposing the underlying TcpClient.
 		/// </summary>
 		public void Dispose()
 		{
 			// Detect redundant calls
-			if (Disposed)
+			if (State == ServerState.Disposed)
 				return;
 
 			Client.Dispose();
-			Disposed = true;
+			_state = ServerState.Disposed;
 		}
+		#endregion
+
+		/// <summary>
+		/// Returns all delegates in the <paramref name="event"/>s invocation list
+		/// with an <see cref="EventMessageType.Type"/> equal to <paramref name="type"/>.
+		/// <para/>
+		/// Also returns every delegate in the invocation list without an <see cref="EventMessageType"/>
+		/// attribute.
+		/// </summary>
+		/// <param name="event">The event delegate whose invocation list to use.</param>
+		/// <param name="type">The type to check for in the invocation lists <see cref="EventMessageType"/>s.</param>
+		private static IEnumerable<Delegate> GetHandlersForType(Delegate @event, MessageType type)
+		{
+			if (!(@event is null))
+			{
+				// Loop through the invocation list and invoke every handler with a matching event message type attribute (or no attribute)
+				foreach (Delegate m in @event.GetInvocationList())
+				{
+					EventMessageType attr = m.Method.GetCustomAttribute<EventMessageType>();
+					if (attr is null || attr.Type == type)
+						yield return m;
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	/// Describes the various states of a <see cref="ServerConnection"/>.
+	/// </summary>
+	public enum ServerState
+	{
+		/// <summary>
+		/// The server connection is closed.
+		/// </summary>
+		Closed,
+		/// <summary>
+		/// The connection to the server is open, but it is not yet
+		/// accepting incoming requests.
+		/// </summary>
+		Open,
+		/// <summary>
+		/// The server is currently synchronizing it's database.
+		/// </summary>
+		Synchronizing,
+		/// <summary>
+		/// The server is accepting requests.
+		/// </summary>
+		Ready,
+		/// <summary>
+		/// The server connection has been disposed.
+		/// </summary>
+		Disposed
+	}
+
+	/// <summary>
+	/// Specifies what <see cref="MessageType"/> should invoke a <see cref="ServerConnection.ReceiveEventHandler"/>.
+	/// </summary>
+	[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+	public class EventMessageType : Attribute
+	{
+		/// <summary>
+		/// Gets the message type that should invoke the event handler.
+		/// </summary>
+		public MessageType Type { get; }
+
+		/// <summary>
+		/// Initializes a new instance of <see cref="EventMessageType"/> with the given <paramref name="type"/>.
+		/// </summary>
+		/// <param name="type"></param>
+		public EventMessageType(MessageType type) => Type = type;
 	}
 }
