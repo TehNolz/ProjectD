@@ -82,14 +82,14 @@ namespace Webserver.Config
 	internal static class DatabaseConfig
 	{
 		[Comment("Defines the time between database backups.")]
-		public static TimeSpan BackupPeriod = TimeSpan.FromDays(2);
+		public static TimeSpan BackupPeriod = TimeSpan.FromHours(6);
 		[Comment("The path to the directory for database backups. This folder will be created automatically.")]
 		public static string BackupDir = "Backups";
 		[Comment("Defines whether the database backups are shrunk and compressed into a .zip file.\n" +
 			"Note: This resizes the backup files and may lead to fragmentation on hard drive disks.")]
 		public static bool CompressBackups = true;
 		[Comment("Sets the chunk size (in bytes) used to transfer database backups between servers. Accepts decimal and binary byte units. (e.g. 2 KiB, 0.5MB, 2E+2 B, 1024)")]
-		public static string BackupTransferChunkSize = "2KiB";
+		public static string BackupTransferChunkSize = "8 KiB";
 		[Comment("Sets the amount of database changes that are sent at once when a server is synchronizing it's database with the master server.\n" +
 			"Higher chunk sizes will keep the master server too busy with sending one message, whereas lower chunk sizes will lead to increased I/O time.")]
 		public static uint SynchronizeChunkSize = 800;
