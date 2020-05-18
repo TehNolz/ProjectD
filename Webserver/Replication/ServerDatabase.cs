@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.Data.SQLite;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 
@@ -31,16 +32,6 @@ namespace Webserver.Replication
 		public ReadOnlyCollection<ModelType> TypeList => changelog.TypeList;
 
 		/// <summary>
-		/// Gets or sets the maximum amount of changes that are requested each time
-		/// during the synchronization process.
-		/// </summary>
-		/// <seealso cref="Synchronize"/>
-		/// <remarks>
-		/// Higher chunk sizes may keep the master server too busy with sending one message,
-		/// whereas lower chunk sizes may lead to excessive IO time.
-		/// </remarks>
-		public int SynchronizeChunkSize { get; set; } = 800;
-		/// <summary>
 		/// Gets or sets whether this <see cref="ServerDatabase"/> broadcasts it's changes
 		/// to other servers.
 		/// </summary>
@@ -49,6 +40,7 @@ namespace Webserver.Replication
 		/// <summary>
 		/// FileLock object used to keep ownership over a specific database.
 		/// </summary>
+		private readonly ServerDatabase parent;
 		private FileLock fileLock;
 		private ChangeLog changelog;
 		/// <summary>
@@ -73,7 +65,7 @@ namespace Webserver.Replication
 
 			// Create a new database backup thread
 			backupThread = new Thread(BackupThread_Run) { Name = "Database Backup" };
-			backupThread.Start(this);
+			backupThread.Start();
 		}
 		/// <summary>
 		/// Initializes a new instance of <see cref="ServerDatabase"/> by inheriting
@@ -95,22 +87,15 @@ namespace Webserver.Replication
 		/// </summary>
 		/// <param name="db">A <see cref="ServerDatabase"/> that will be cloned.
 		/// The cloned instance will not be a file lock owner.</param>
-		private void BackupThread_Run(object db)
+		private void BackupThread_Run()
 		{
-			// Clone the given connection
-			ServerDatabase database = (db as ServerDatabase).NewConnection();
-			database.BroadcastChanges = false;
-			database.fileLock.Release(database);
 			try
 			{
-				DateTime lastBackup = File.GetCreationTimeUtc(database.Connection.FileName);
+				DateTime lastBackup = File.GetCreationTimeUtc(Connection.FileName);
 				if (Directory.Exists(BackupDir))
 				{
 					// Get the datetime from the most recent .db or .zip file (if any)
-					FileInfo file = (from f in new DirectoryInfo(BackupDir).GetFiles()
-									  where f.Extension.ToLower() == ".db" || f.Extension.ToLower() == ".zip"
-									  orderby f.LastWriteTimeUtc descending
-									  select f).FirstOrDefault();
+					FileInfo file = DatabaseBackup.LastBackup;
 					if (!(file is null))
 						lastBackup = file.LastWriteTimeUtc;
 				}
@@ -125,10 +110,18 @@ namespace Webserver.Replication
 						Thread.Sleep(remainingTime);
 
 					// Backup this connection
-					new DatabaseBackup(database).Dispose();
-					lastBackup = DateTime.UtcNow;
+					lock (changelog)
+					{
+						// Clone the connection to prevent changes broadcasts
+						using ServerDatabase database = NewConnection();
+						database.BroadcastChanges = false;
 
-					// 
+						new DatabaseBackup(database).Dispose();
+
+						// Clear the changelog
+						base.Delete<Changes>("1", null);
+					}
+					lastBackup = DateTime.UtcNow;
 				}
 			}
 			catch (ThreadInterruptedException) { } // Thrown only when the thread is sleeping
@@ -359,35 +352,46 @@ namespace Webserver.Replication
 			if (Balancer.IsMaster)
 				throw new InvalidOperationException();
 
-			// Get the amount of new changes to request and the typelist from the master
-			dynamic data = new ServerMessage(MessageType.DbSync, null).SendAndWait(Balancer.MasterServer).Data;
+			SynchronizeBackup();
 
-			long updateCount = data.Version - changelog.ChangelogVersion;
-			var types = ((JArray)data.Types).Select(x => x.ToObject<ModelType>()).ToDictionary(x => x.ID);
+			long updateCount;
+			Dictionary<int?, ModelType> types;
 
-			lock (this)
+			// Get the amount of new changes and a typelist from the master
+			{
+				dynamic data = new ServerMessage(MessageType.DbSyncStart, null).SendAndWait(Balancer.MasterServer).Data;
+				updateCount = data.Version - changelog.ChangelogVersion;
+				types = ((JArray)data.Types).Select(x => x.ToObject<ModelType>()).ToDictionary(x => x.ID);
+			}
+
+			if (updateCount == 0)
+				return;
+
+			Program.Log.Config($"Retrieving {updateCount} change{(updateCount == 1 ? "" : "s")} from master...");
+			lock (changelog)
 			{
 				// Create transaction to commit the changes only at the end (increases speed)
 				SQLiteTransaction transaction = changelog.BeginTransaction();
 				try
 				{
-					int chunkSize = SynchronizeChunkSize; // Copy the value to keep things thread-safe
 					long interval = Math.Max(1, (long)(updateCount / (Console.WindowWidth * 0.8))); // Interval for refreshing the progress bar
 
 					for (long l = 0; l < updateCount;)
 					{
 						// Request another chunk of updates
-						JArray updates = new ServerMessage(
-							MessageType.DbSync,
-							new { changelog.ChangelogVersion, Amount = Math.Min(updateCount - l, chunkSize) }
-						).SendAndWait(Balancer.MasterServer).Data;
+						IEnumerable<Changes> updates = (new ServerMessage(MessageType.DbSync, new
+						{
+							Version = changelog.ChangelogVersion,
+							Amount = (int)Math.Min(updateCount - l, SynchronizeChunkSize)
+						}).SendAndWait(Balancer.MasterServer).Data as JArray).Select(x => (Changes)x);
 
-						// Apply each update, increment l and occasionally update the progressbar
-						foreach (Changes update in updates.Select(x => (Changes)x))
+						// Apply all changes from the last request
+						foreach (Changes update in updates)
 						{
 							update.CollectionType = new ModelType() { FullName = types[update.ModelTypeID].FullName };
-
 							changelog.Push(update);
+
+							// Increment l and draw the progressbar if it reached the interval
 							if (l++ % interval == 0)
 								Utils.ProgressBar(l, updateCount);
 						}
@@ -395,7 +399,6 @@ namespace Webserver.Replication
 						Utils.ProgressBar(l, updateCount);
 					}
 					transaction.Commit();
-
 					Utils.ClearProgressBar();
 				}
 				catch (Exception)
@@ -405,6 +408,75 @@ namespace Webserver.Replication
 				}
 			}
 		}
+		/// <summary>
+		/// Retrieves a database backup file from master if nescessary.
+		/// </summary>
+		private void SynchronizeBackup()
+		{
+			long backupSize;
+			string backupName;
+			string backupSizeStr;
+
+			// Get the backup filename and size
+			{
+				dynamic data = new ServerMessage(MessageType.DbSyncBackupStart, ChangelogVersion).SendAndWait(Balancer.MasterServer).Data;
+
+				if (data == null)
+					return;
+
+				backupName = data.Name;
+				backupSize = data.Length;
+				backupSizeStr = string.Format(new DataFormatter(), "{0:B1}", backupSize);
+			}
+
+			Program.Log.Config($"Downloading '{backupName}' ({backupSizeStr}) from the master server...");
+
+			// Create a temp file
+			FileStream temp = File.OpenWrite(Path.GetTempFileName());
+
+			// Download the backup from master
+			while (temp.Position < backupSize)
+			{
+				// Get a chunk of data from the parent's backup file
+				byte[] data = new ServerMessage(
+					MessageType.DbSyncBackup,
+					new { FileName = backupName, Offset = temp.Position }
+				).SendAndWait(Balancer.MasterServer).Data;
+				temp.Write(data);
+
+				// Draw progressbar
+				string sizeStr = string.Format(new DataFormatter() { SpaceBeforeUnit = false }, "{0:B1}", temp.Position);;
+				Utils.ProgressBar(temp.Position / (double)backupSize, $"Progress [{sizeStr}/{backupSizeStr}]", prefixColor: (ConsoleColor.White, ConsoleColor.Green));
+			}
+			temp.Dispose();
+			Utils.ClearProgressBar();
+
+			// Replace the current database file
+			string databaseFile = Connection.FileName;
+			
+			// Close all connections
+			Connection.Close();
+			changelog.Close();
+
+			// Replace the database with the temp file
+			if (Path.GetExtension(backupName).ToLower() == ".zip")
+			{
+				ZipArchive archive = ZipFile.OpenRead(temp.Name);
+				archive.Entries.First().ExtractToFile(databaseFile, true);
+				archive.Dispose();
+				File.Delete(temp.Name);
+			}
+			else
+			{
+				File.Delete(databaseFile);
+				File.Move(temp.Name, databaseFile);
+			}
+
+			// Re-open all connections
+			Connection.Open();
+			changelog.Open();
+		}
+
 		/// <summary>
 		/// Pushes the given changes onto this database's changelog and applies the 
 		/// changes specified in the <paramref name="changes"/> object.
@@ -476,11 +548,12 @@ namespace Webserver.Replication
 					backupThread.Interrupt();
 					backupThread.Join();
 					backupThread = null;
+
+					changelog.Dispose();
 				}
 			}
 
 			fileLock = null;
-			changelog.Dispose();
 			base.Dispose();
 		}
 	}

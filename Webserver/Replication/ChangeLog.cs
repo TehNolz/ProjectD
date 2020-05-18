@@ -6,6 +6,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Data;
 using System.Data.SQLite;
 using System.Linq;
 using System.Threading;
@@ -32,7 +33,7 @@ namespace Webserver.Replication
 		public ReadOnlyCollection<ModelType> TypeList => typeList.AsReadOnly();
 
 		private List<ModelType> typeList;
-		private SynchronizingHandle synchronizer;
+		private SynchronizingHandle synchronizer = new SynchronizingHandle();
 
 		private readonly SQLiteAdapter database;
 		private readonly ServerDatabase parentDatabase;
@@ -53,16 +54,36 @@ namespace Webserver.Replication
 				StoreEnumsAsText = false
 			};
 
-			// Add the changelog to the database
-			this.database.CreateTableIfNotExists<ModelType>();
-			this.database.CreateTableIfNotExists<Changes>();
+			Open();
+		}
 
+		/// <summary>
+		/// Opens or reopens this <see cref="ChangeLog"/>s connection to the database.
+		/// </summary>
+		public void Open()
+		{
+			// Open the database if it isn't already open
+			if (database.Connection.State == ConnectionState.Closed)
+				database.Connection.Open();
+
+			// Add the changelog to the database
+			database.CreateTableIfNotExists<ModelType>();
+			database.CreateTableIfNotExists<Changes>();
+			
 			// Build the typeList cache
-			typeList = this.database.Select<ModelType>().ToList();
+			typeList = database.Select<ModelType>().ToList();
 
 			// Set the synchronizer's id to 1 + the id of the last changelog item
-			ChangelogVersion = Peek()?.ID ?? 0;
-			synchronizer = new SynchronizingHandle(ChangelogVersion + 1);
+			ChangelogVersion = Peek()?.ID ?? parentDatabase.UserVersion;
+			synchronizer.SetValue(ChangelogVersion + 1);
+		}
+
+		/// <summary>
+		/// Closes this <see cref="ChangeLog"/>s connection to the database.
+		/// </summary>
+		public void Close()
+		{
+			database.Connection.Close();
 		}
 
 		/// <summary>
@@ -85,6 +106,10 @@ namespace Webserver.Replication
 			// Lock this instance for additional thread safety for changes with no id
 			lock (this)
 			{
+				// Extra check for duplicate changes. This can happen during synchronization and this was the easiest and safest solution
+				if (changes.ID <= ChangelogVersion)
+					return;
+
 				// Assign the foreign key to the changes object
 				ModelType type;
 				lock (typeList)
@@ -223,7 +248,8 @@ namespace Webserver.Replication
 		/// Values less than 0 indicate no limit.</param>
 		public IEnumerable<Changes> GetNewChanges(long id, long limit = -1)
 		{
-			foreach (Changes changes in database.Select<Changes>("1 LIMIT @id,@limit", new { id, limit }))
+			// This select uses where ID > id instead of the OFFSET because it doesn't cause issues if the table becomes larger
+			foreach (Changes changes in database.Select<Changes>("ID>@id LIMIT @limit", new { id, limit }))
 			{
 				changes.CollectionType = typeList.First(x => x.ID == changes.ModelTypeID);
 				yield return changes;
@@ -296,6 +322,24 @@ namespace Webserver.Replication
 					// If the first attempt failed, put the semaphore in the waiting dictionary
 					waiting[id] = sem;
 				}
+			}
+		}
+
+		/// <summary>
+		/// Sets the <see cref="CurrentValue"/> to the given <paramref name="value"/>
+		/// and unlocks any threads whose waiting id is lower or equal to <paramref name="value"/>.
+		/// </summary>
+		public void SetValue(long value)
+		{
+			if (isDisposed)
+				throw new ObjectDisposedException(null, $"Cannot access a disposed {GetType().Name}.");
+
+			lock (this)
+			{
+				CurrentValue = value;
+				// Unlock the semaphores whose id is lower than the current value
+				foreach (SemaphoreSlim sem in waiting.Where(x => x.Key <= CurrentValue).Select(x => x.Value))
+					sem.Release();
 			}
 		}
 

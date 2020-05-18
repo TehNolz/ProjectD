@@ -4,9 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Webserver
 {
@@ -71,6 +73,40 @@ namespace Webserver
 			{
 				stopwatch.Start();
 			}
+		}
+
+		/// <summary>
+		/// Parses the give string into a long. This accepts decimal and binary orders of magnitude.
+		/// </summary>
+		/// <param name="s">The string to parse.</param>
+		public static long ParseDataSize(string s)
+		{
+			// Use a regex to split value from unit  @"(\d+)\s*([A-Za-z]*)"
+			GroupCollection groups = Regex.Match(s, @"([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*)(?:[eE][+-]?\d+)?)\s*([A-Za-z]+)?").Groups;
+
+			// Extract the values
+			decimal value = decimal.Parse(groups[1].Value, NumberStyles.Any);
+			string unit = groups[1].Value.Length == 0 ? "B" : groups[2].Value;
+ 
+			bool isBinaryMagnitude = unit.Length == 3;
+
+			// Calculate the value using switch label "fallthrough"
+			int magnitude = 0;
+			switch (unit.ToUpper()[0])
+			{
+				case 'Y': magnitude++; goto case 'Z';
+				case 'Z': magnitude++; goto case 'E';
+				case 'E': magnitude++; goto case 'P';
+				case 'P': magnitude++; goto case 'T';
+				case 'T': magnitude++; goto case 'G';
+				case 'G': magnitude++; goto case 'M';
+				case 'M': magnitude++; goto case 'K';
+				case 'K': magnitude++; break;
+				default: break;
+			}
+
+			// Multiply the value by the magnitude and return it
+			return (long)(value * (decimal)(isBinaryMagnitude ? Math.Pow(2, 10 * magnitude) : Math.Pow(1000, magnitude)));
 		}
 
 		public static double oldProgress = 0;
@@ -245,6 +281,101 @@ namespace Webserver
 				// Shift the window view downwards
 				Console.WindowTop++;
 			}
+		}
+	}
+
+	/// <summary>
+	/// Custom string formatter for reducing a data size in bytes to a smaller unit.
+	/// </summary>
+	public sealed class DataFormatter : IFormatProvider, ICustomFormatter
+	{
+		/// <summary>
+		/// Gets or sets whether a space is added between the value and the unit.
+		/// </summary>
+		public bool SpaceBeforeUnit { get; set; } = true;
+
+		/// <summary>
+		/// Describes the units that the <see cref="DataFormatter"/> can format to.
+		/// </summary>
+		[Flags]
+		private enum Unit
+		{
+			/// <summary>
+			/// Displays the value as standard decimal unit.
+			/// <para/>
+			/// This can be overridden by <see cref="Binary"/>.
+			/// </summary>
+			Decimal = 1 << 0,
+			/// <summary>
+			/// Displays the value as a binary unit.
+			/// <para/>
+			/// Overrides <see cref="Decimal"/>.
+			/// </summary>
+			Binary = (1 << 1) | Decimal,
+			/// <summary>
+			/// Flag specifying whether to display bits.
+			/// </summary>
+			Bits = 1 << 2
+		}
+
+		public string Format(string formatStr, object arg, IFormatProvider formatProvider)
+		{
+			// Check whether this is an appropriate callback
+			if (!Equals(formatProvider))
+				return null;
+
+			// Set default format specifier
+			if (string.IsNullOrEmpty(formatStr))
+				formatStr = "D";
+
+			Unit format = formatStr[0] switch
+			{
+				'D' => Unit.Decimal,
+				'd' => Unit.Decimal | Unit.Bits,
+				'B' => Unit.Binary,
+				'b' => Unit.Binary | Unit.Bits,
+				_ => throw new FormatException($"The {formatStr} format specifier is invalid.")
+			};
+
+			long value = Convert.ToInt64(arg);
+			int decimals = formatStr.Length > 1 ? int.Parse(formatStr[1..]) : 0;
+
+			// Calculate the magnitude by comparing the value with each magnitude up to yotta
+			sbyte magnitude = 0;
+			for (; magnitude <= 8; magnitude++)
+				if ((format.HasFlag(Unit.Decimal) ? Math.Pow(1000, magnitude + 1) : Math.Pow(2, 10 * (magnitude + 1))) >= value)
+					break;
+
+			string unitPrefix = magnitude switch
+			{
+				0 => "",
+				1 => format.HasFlag(Unit.Binary) ? "K" : "k",
+				2 => "M",
+				3 => "G",
+				4 => "T",
+				5 => "P",
+				6 => "E",
+				7 => "Z",
+				_ => "Y"
+			};
+			string unit = $"{unitPrefix}{(format.HasFlag(Unit.Binary) ? "i" : "")}{(format.HasFlag(Unit.Bits) ? "bit" : "B")}";
+
+			// Divide the value by the magnitude
+			double formatValue = Math.Round(value / (format.HasFlag(Unit.Binary) ? Math.Pow(2, 10 * magnitude) : Math.Pow(1000, magnitude)), decimals);
+			return string.Join(SpaceBeforeUnit ? " " : "",
+				formatValue.ToString($"F{decimals}"),
+				unit
+			);
+		}
+
+		public object GetFormat(Type formatType)
+		{
+			// Yes, this is largely taken from the example on
+			// https://docs.microsoft.com/en-us/dotnet/standard/base-types/how-to-define-and-use-custom-numeric-format-providers
+			if (formatType == typeof(ICustomFormatter))
+				return this;
+			else
+				return null;
 		}
 	}
 
