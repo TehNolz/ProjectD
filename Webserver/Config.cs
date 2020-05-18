@@ -1,5 +1,5 @@
 using Config;
-
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
@@ -73,5 +73,20 @@ namespace Webserver.Config
 		public static string ChatroomNameRegex = @"[A-Za-z0-1 !@#$%^&*()_/+\-=]";
 		[Comment("Allow users to change their username")]
 		public static bool AllowUsernameChange = true;
+	}
+
+	/// <summary>
+	/// Handles database settings such as backup frequency and backup file location.
+	/// </summary>
+	[ConfigSection]
+	internal static class DatabaseConfig
+	{
+		[Comment("Defines the time between database backups.")]
+		public static TimeSpan BackupPeriod = TimeSpan.FromDays(2);
+		[Comment("The path to the directory for database backups. This folder will be created automatically.")]
+		public static string BackupDir = "Backups";
+		[Comment("Defines whether the database backups are shrunk and compressed into a .zip file. " +
+			"Note: This resizes the backup files and may lead to fragmentation on hard drive disks.")]
+		public static bool CompressBackups = true;
 	}
 }

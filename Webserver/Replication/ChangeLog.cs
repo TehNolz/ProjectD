@@ -24,7 +24,7 @@ namespace Webserver.Replication
 		/// <summary>
 		/// Gets the most ID of the most recent <see cref="Changes"/> object.
 		/// </summary>
-		public long Version { get; private set; }
+		public long ChangelogVersion { get; private set; }
 
 		/// <summary>
 		/// Gets the collection of model types listed in the database.
@@ -61,8 +61,8 @@ namespace Webserver.Replication
 			typeList = this.database.Select<ModelType>().ToList();
 
 			// Set the synchronizer's id to 1 + the id of the last changelog item
-			Version = Peek()?.ID ?? 0;
-			synchronizer = new SynchronizingHandle(Version + 1);
+			ChangelogVersion = Peek()?.ID ?? 0;
+			synchronizer = new SynchronizingHandle(ChangelogVersion + 1);
 		}
 
 		/// <summary>
@@ -75,7 +75,7 @@ namespace Webserver.Replication
 		/// <param name="applyChanges"></param>
 		public void Push(Changes changes, bool applyChanges = true)
 		{
-			if (changes.ID <= Version)
+			if (changes.ID <= ChangelogVersion)
 				throw new ArgumentException($"The given {nameof(Changes)} object is already present in the changelog.");
 
 			// Block until it is this id's turn to be applied
@@ -172,7 +172,7 @@ namespace Webserver.Replication
 
 				// Push the changes onto the stack
 				database.Insert(changes);
-				Version = changes.ID.Value;
+				ChangelogVersion = changes.ID.Value;
 
 				synchronizer.Increment();
 			}
@@ -205,8 +205,8 @@ namespace Webserver.Replication
 			synchronizer.Dispose();
 
 			// Reset the version and synchronizer
-			Version = Peek()?.ID ?? 0;
-			synchronizer = new SynchronizingHandle(Version + 1);
+			ChangelogVersion = Peek()?.ID ?? 0;
+			synchronizer = new SynchronizingHandle(ChangelogVersion + 1);
 
 			// Rebuild the typeList cache
 			typeList = database.Select<ModelType>().ToList();
