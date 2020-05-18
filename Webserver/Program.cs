@@ -31,6 +31,8 @@ namespace Webserver
 
 		public static void Main()
 		{
+			AppDomain.CurrentDomain.UnhandledException += (sender, eventArgs) => Cleanup();
+
 			Console.SetOut(new CustomWriter(Console.OutputEncoding, Console.Out));
 
 			Log = new Logger(Level.ALL, Console.Out)
@@ -120,13 +122,20 @@ namespace Webserver
 			var distributor = new Thread(() => Distributor.Run(localAddress, BalancerConfig.HttpRelayPort));
 			distributor.Start();
 
+			if (!Balancer.IsMaster)
+			{
+				// Ready the server
+				Balancer.Ready();
+				Log.Config($"Server is ready to accept connections");
+			}
+
 			foreach (RequestWorker worker in workers)
 				worker.Join();
 
 			//TODO: Implement proper shutdown
 			Distributor.Dispose();
 			distributor.Join();
-
+			Shutdown();
 		}
 
 		/// <summary>
@@ -162,6 +171,21 @@ namespace Webserver
 					Private = false,
 				});
 			}
+		}
+
+		/// <summary>
+		/// Terminates this program with the specified <paramref name="exitCode"/>;
+		/// </summary>
+		/// <param name="exitCode">Optional exitcode to terminate this program with.</param>
+		public static void Shutdown(int exitCode = 0)
+		{
+			Cleanup();
+			Environment.Exit(exitCode);
+		}
+
+		private static void Cleanup()
+		{
+			// Cleanup temporary files
 		}
 	}
 }

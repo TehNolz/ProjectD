@@ -23,7 +23,7 @@ namespace Webserver.Webserver
 			Listener.Prefixes.Add($"http://{address}:{port}/");
 			Listener.Start();
 
-			Log.Config($"Distributor listening on {address}:{port}");
+			Log.Info($"Distributor listening on {address}:{port}");
 			while (true)
 			{
 				try

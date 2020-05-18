@@ -126,9 +126,13 @@ namespace Webserver
 		Register,
 		RegisterResponse,
 		NewServer,
+		StateChange,
 
 		// Database replication message types
 		DbChange,
+		DbSyncBackupStart,
+		DbSyncBackup,
+		DbSyncStart,
 		DbSync,
 
 		//Chat - external

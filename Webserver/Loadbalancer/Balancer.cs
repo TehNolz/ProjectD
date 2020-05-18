@@ -160,6 +160,18 @@ namespace Webserver.LoadBalancer
 
 			return LocalAddress;
 		}
+
+		/// <summary>
+		/// Informs the master server that this server is ready to take requests. Does nothing if this
+		/// is the master server.
+		/// </summary>
+		public static void Ready()
+		{
+			if (IsMaster)
+				return;
+
+			new ServerMessage(MessageType.StateChange, ServerState.Ready).Send(MasterServer);
+		}
 	}
 }
 
