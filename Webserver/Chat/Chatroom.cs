@@ -40,7 +40,7 @@ namespace Webserver.Chat
 		/// </summary>
 		/// <param name="user">The user</param>
 		/// <returns></returns>
-		public bool CanUserAccess(SQLiteAdapter database, User user) => !Private || database.Select<ChatroomMembership>($"ChatroomID = @chatroomid AND UserID = @userid", new { chatroomid = ID, userid = user.ID }).Any();
+		public bool CanUserAccess(SQLiteAdapter database, User user) => user.isAdmin || !Private || database.Select<ChatroomMembership>($"ChatroomID = @chatroomid AND UserID = @userid", new { chatroomid = ID, userid = user.ID }).Any();
 
 		/// <summary>
 		/// Gets all chatrooms that are accessible by the specified user.
@@ -48,18 +48,20 @@ namespace Webserver.Chat
 		/// <param name="database"></param>
 		/// <param name="user"></param>
 		/// <returns></returns>
-		public static IEnumerable<Chatroom> GetAccessableByUser(SQLiteAdapter database, User user)
+		public static List<Chatroom> GetAccessableByUser(SQLiteAdapter database, User user)
 		{
+			//If the user is an admin, just return all rooms
+			if (user.isAdmin)
+				return database.Select<Chatroom>().ToList();
+
 			//Get all public rooms
-			IEnumerable<Chatroom> result = database.Select<Chatroom>("Private = 0");
+			var result = database.Select<Chatroom>("Private = 0").ToList();
 
 			//Get all private rooms this user can access
-			IEnumerable<Guid> IDs = from CM in database.Select<ChatroomMembership>("UserID = @ID", new { user.ID }) select CM.ChatroomID;
+			var IDs = (from CM in database.Select<ChatroomMembership>("UserID = @ID", new { user.ID }) select CM.ChatroomID).ToList();
 			//TODO Optimize to use less Select calls
 			foreach (Guid ID in IDs)
-			{
-				result.Append(database.Select<Chatroom>("ID = @ID", new { ID }).First());
-			}
+				result.Add(database.Select<Chatroom>("ID = @ID", new { ID }).First());
 
 			return result;
 		}

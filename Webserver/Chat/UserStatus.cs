@@ -42,10 +42,10 @@ namespace Webserver.Chat.Commands
 			//If the counter is now 1, announce to all relevant users that this user is now online.
 			if (Chat.UserConnectionCounts[slave][user.ID] == 1)
 			{
-				IEnumerable<Guid> chatrooms = from C in Chatroom.GetAccessableByUser(Chat.Database, user) select C.ID;
+				IEnumerable<Guid> users = (from C in Chatroom.GetAccessableByUser(Chat.Database, user) from U in C.GetUsers() select U).Distinct();
 				JObject userInfo = user.GetJson();
 				userInfo.Add("Status", (int)UserStatuses.Online);
-				ChatCommand.BroadcastChatMessage(TargetType.Chatrooms, chatrooms, new ChatMessage(MessageType.UserStatusChanged, userInfo));
+				ChatCommand.BroadcastChatMessage(TargetType.Users, users, new ChatMessage(MessageType.UserStatusChanged, userInfo));
 			}
 		}
 
@@ -54,8 +54,7 @@ namespace Webserver.Chat.Commands
 		/// </summary>
 		/// <param name="connection"></param>
 		[EventMessageType(MessageType.WebSocketConnect)]
-		public static void UserConnectionHandler(ServerMessage message)
-			=> UserConnect(message.Data, message.Connection.Address);
+		public static void UserConnectionHandler(ServerMessage message) => UserConnect(message.Data, message.Connection.Address);
 
 		/// <summary>
 		/// Decrement the connection counter for this user. If the counter is 0, a notification is sent to all relevant clients that this user has logged out.
@@ -84,16 +83,15 @@ namespace Webserver.Chat.Commands
 			//If the counter is now 0, announce to all relevant users that this user is now offline.
 			if (Chat.UserConnectionCounts[slave][user.ID] == 0)
 			{
-				IEnumerable<Guid> chatrooms = from C in Chatroom.GetAccessableByUser(Chat.Database, user) select C.ID;
+				IEnumerable<Guid> users = (from C in Chatroom.GetAccessableByUser(Chat.Database, user) from U in C.GetUsers() select U).Distinct();
 				JObject userInfo = user.GetJson();
 				userInfo.Add("Status", (int)UserStatuses.Offline);
-				ChatCommand.BroadcastChatMessage(TargetType.Chatrooms, chatrooms, new ChatMessage(MessageType.UserStatusChanged, userInfo));
+				ChatCommand.BroadcastChatMessage(TargetType.Users, users, new ChatMessage(MessageType.UserStatusChanged, userInfo));
 			}
 		}
 
 		[EventMessageType(MessageType.WebSocketDisconnect)]
-		public static void UserDisconnectionHandler(ServerMessage message)
-			=> UserDisconnect(message.Data, message.Connection.Address);
+		public static void UserDisconnectionHandler(ServerMessage message) => UserDisconnect(message.Data, message.Connection.Address);
 	}
 
 	public enum UserStatuses
