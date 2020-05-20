@@ -15,10 +15,10 @@ def on_open(ws):
         "MessageID": str(uuid.uuid1()),
         "Command": "ChatMessage",
         "Data": {
-            #"Name": "yeeeee",
-            #"Private": False,
-            "ChatroomID": "8f77e594-a58b-4a57-ba78-b55b17510ed9",
-            "MessageText": "yeet skeet"
+            "ChatroomID": "6f80a860-2f85-4fb2-b8b4-e3263b56047a",
+            "MessageText": "hello"
+            #"UserID": "32226f1a-789c-44b6-9196-24eff4d8c06e",
+            #"AllowAccess": True
         }
     })
     ws.send(message)
@@ -36,6 +36,6 @@ if __name__ == "__main__":
         on_message = on_message,
         on_close = on_close,
         on_open = on_open,
-        cookie="SessionID="+GetSessionID() #input("Username:"), input("Password:")
+        cookie="SessionID="+GetSessionID( input("Username:"))#, input("Password:")
     )
     ws.run_forever()

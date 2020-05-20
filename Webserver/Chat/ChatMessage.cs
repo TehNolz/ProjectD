@@ -133,10 +133,11 @@ namespace Webserver.Chat
 		BadMessageCommand = 400,
 		BadMessageData = 401,
 		NoSuchChatroom = 402,
-		AlreadyExists = 403,
+		NoSuchUser = 403,
 		NotFound = 404,
-		ChatroomAccessDenied = 405,
-		CommandAccessDenied = 406,
+		AlreadyExists = 405,
+		ChatroomAccessDenied = 406,
+		CommandAccessDenied = 407,
 
 		//We fucked up. (500-599)
 		InternalServerError = 500,

@@ -110,6 +110,7 @@ namespace Webserver.Chat
 			//Open the connection.
 			OpenConnection();
 		}
+
 		/// <summary>
 		/// Starts the chat connection. Not included in the constructor because this must be done async.
 		/// </summary>

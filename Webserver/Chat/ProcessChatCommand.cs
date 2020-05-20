@@ -47,6 +47,7 @@ namespace Webserver.Chat
 				if (message.User.PermissionLevel < attribute.PermissionLevel)
 				{
 					message.Reply(ChatStatusCode.CommandAccessDenied);
+					return;
 				}
 			}
 
