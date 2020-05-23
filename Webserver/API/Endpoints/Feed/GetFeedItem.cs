@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
+
 using Newtonsoft.Json.Linq;
+
 using Webserver.Models;
 
 namespace Webserver.API.Endpoints.Feed
@@ -22,6 +24,9 @@ namespace Webserver.API.Endpoints.Feed
 		/// Feed items by limit and offset:
 		///		api/feedItem/?limit=10&offset=0 (to get last 10 feed items)
 		///		api/feedItem/?limit=15&offset=20 (to get feed items 21 to 30)
+		///		
+		/// Feed items by string:
+		///		api/feedItem/?searchString=[string_to_search_for]
 		/// </summary>
 		public override void GET()
 		{
@@ -76,10 +81,18 @@ namespace Webserver.API.Endpoints.Feed
 					Response.Send("Limit or offset value not valid: they must both be integers.", HttpStatusCode.BadRequest);
 				}
 			}
+			// If a search string is given, the feed items are requested that contain the given search string in their title or description.
+			else if (Params.ContainsKey("searchString"))
+			{
+				List<FeedItem> feedItems = FeedItem.GetFeeditemsBySearchString(Database, Params["searchString"][0]);
+
+				var json = JsonSerializer.Serialize(feedItems);
+				Response.Send(json.ToString(), HttpStatusCode.OK);
+			}
 			// If the request contains no useful information.
 			else
 			{
-				Response.Send("Missing parameters: provide an ID, a category or a limit and offset.", HttpStatusCode.BadRequest);
+				Response.Send("Missing parameters: provide an ID, a category, a limit and offset, or a search string.", HttpStatusCode.BadRequest);
 			}
 		}
 	}
