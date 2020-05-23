@@ -18,7 +18,7 @@ namespace Webserver.Models
 		public string Email { get; set; }
 		public string PasswordHash { get; set; }
 		public PermissionLevel PermissionLevel { get; set; } = PermissionLevel.User;
-		public bool isAdmin { get => PermissionLevel == PermissionLevel.Admin; }
+		public virtual bool isAdmin { get => PermissionLevel == PermissionLevel.Admin; }
 
 		/// <summary>
 		/// Parameterless constructor to make SQLiteAdapter happy.

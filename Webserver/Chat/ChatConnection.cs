@@ -52,7 +52,7 @@ namespace Webserver.Chat
 		/// <summary>
 		/// Cancellation token for async requests.
 		/// </summary>
-		private CancellationTokenSource TokenSource { get; set; } = new CancellationTokenSource();
+		private CancellationTokenSource TokenSource { get; set; }
 
 		#region Delegates
 		/// <summary>
@@ -79,6 +79,8 @@ namespace Webserver.Chat
 			if (!context.Request.IsWebSocketRequest)
 				throw new ArgumentException("Not a websocket request.");
 			Context = context;
+
+			TokenSource = new CancellationTokenSource();
 
 			#region Authentication
 			//Authenticate this user.
@@ -123,10 +125,8 @@ namespace Webserver.Chat
 			//Start receiver and sender threads
 			ReceiverThread = new Thread(() => Receive());
 			SenderThread = new Thread(() => Sender());
-			KeepAliveThread = new Thread(() => KeepAlive());
 			ReceiverThread.Start();
 			SenderThread.Start();
-			KeepAliveThread.Start();
 
 			ActiveConnections.Add(this);
 
@@ -150,30 +150,6 @@ namespace Webserver.Chat
 				{"CurrentUser", User.GetJson() },
 				{"Users", users }
 			}));
-		}
-
-		/// <summary>
-		/// Checks connection status.
-		/// </summary>
-		public Thread KeepAliveThread;
-		/// <inheritdoc cref="KeepAliveThread"/>
-		public void KeepAlive()
-		{
-			while (!Disposed)
-			{
-				if (Client.WebSocket.State == WebSocketState.CloseReceived)
-				{
-					Log.Debug("Websocket connection closed by relay.");
-					Dispose();
-					return;
-				}
-				else if (Client.WebSocket.State == WebSocketState.Aborted)
-				{
-					Log.Debug("Lost websocket connection to relay.");
-					Dispose();
-					return;
-				}
-			}
 		}
 
 		/// <summary>
@@ -219,7 +195,7 @@ namespace Webserver.Chat
 						ChatCommand.ProcessChatCommand(message);
 				}
 			}
-			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
+			catch (Exception e) when (e is WebSocketException || e is OperationCanceledException)
 			{
 				Dispose();
 			}
@@ -239,9 +215,12 @@ namespace Webserver.Chat
 			try
 			{
 				while (!Disposed)
-					await Client.WebSocket.SendAsync(TransmitQueue.Take(TokenSource.Token).GetBytes(), WebSocketMessageType.Text, true, TokenSource.Token);
+				{
+					ChatMessage message = TransmitQueue.Take(TokenSource.Token);
+					await Client.WebSocket.SendAsync(message.GetBytes(), WebSocketMessageType.Text, true, TokenSource.Token);
+				}
 			}
-			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException || e is OperationCanceledException)
+			catch (Exception e) when (e is WebSocketException || e is OperationCanceledException)
 			{
 				Dispose();
 			}
@@ -331,7 +310,7 @@ namespace Webserver.Chat
 		/// <summary>
 		/// Whether this connection was disposed.
 		/// </summary>
-		private bool Disposed = false;
+		private bool Disposed { get; set; } = false;
 		/// <summary>
 		/// Dispose this connection, stopping all threads and informing the relay.
 		/// </summary>
@@ -339,10 +318,15 @@ namespace Webserver.Chat
 		{
 			if (Disposed)
 				return;
-
 			Disposed = true;
-			Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
+
+			Log.Debug($"Relay disposed ({Client.WebSocket.State})");
 			TokenSource.Cancel();
+			try
+			{
+				Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", CancellationToken.None);
+			}
+			catch (WebSocketException) { }
 
 			UserStatus.UserDisconnect(User);
 

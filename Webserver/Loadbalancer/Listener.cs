@@ -143,11 +143,11 @@ namespace Webserver.LoadBalancer
 			response.StatusDescription = workerResponse.StatusDescription;
 
 			using Stream outStream = workerResponse.GetResponseStream();
-			outStream.CopyTo(response.OutputStream);
 
 			//Dispose the response, transmitting it to the client.
 			try
 			{
+				outStream.CopyTo(response.OutputStream);
 				response.OutputStream.Close();
 			}
 			catch (Exception) { }
