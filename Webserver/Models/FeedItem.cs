@@ -71,9 +71,9 @@ namespace Webserver.Models
 		/// <param name="database">The database in which to search for the feed items.</param>
 		/// <param name="category">The category of the desired feed items.</param>
 		/// <returns>A list of feed items with the given category.</returns>
-		public static List<FeedItem> GetFeedItemsByCategory(SQLiteAdapter database, string category)
+		public static List<FeedItem> GetFeedItemsByCategory(SQLiteAdapter database, string category, int limit, int offset)
 		{
-			return database.Select<FeedItem>("Category = @category", new { category }).ToList();
+			return GetFeedItems(database, limit, offset).Where(f => f.Category == category).ToList();
 		}
 
 		/// <summary>
@@ -82,9 +82,9 @@ namespace Webserver.Models
 		/// <param name="database">The database in which to search for the feed items.</param>
 		/// <param name="searchString">The search string to check if the title or description contains.</param>
 		/// <returns>A list of feed items which title or description contains the given search string.</returns>
-		public static List<FeedItem> GetFeeditemsBySearchString(SQLiteAdapter database, string searchString)
+		public static List<FeedItem> GetFeeditemsBySearchString(SQLiteAdapter database, string searchString, int limit, int offset)
 		{
-			return GetAllFeedItems(database).Where(f => f.Title.ToLower().Contains(searchString.ToLower()) ||
+			return GetFeedItems(database, limit, offset).Where(f => f.Title.ToLower().Contains(searchString.ToLower()) ||
 														f.Description.ToLower().Contains(searchString.ToLower())).ToList();
 		}
 
