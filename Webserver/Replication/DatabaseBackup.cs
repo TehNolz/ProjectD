@@ -40,8 +40,7 @@ namespace Webserver.Replication
 		public DatabaseBackup(ServerDatabase source) : base(GetBackupFileName(source.Connection.FileName))
 		{
 			// Create the backup
-			source.Connection.BackupDatabase(Connection, Connection.Database, source.Connection.Database, -1, BackupCallback, -1);
-			Utils.ClearProgressBar();
+			source.Connection.BackupDatabase(Connection, Connection.Database, source.Connection.Database, -1, null, -1);
 
 			// Drop the changelog table
 			DropTableIfExists<Changes>();
@@ -49,24 +48,6 @@ namespace Webserver.Replication
 			// Set the user version to the current changelog version
 			source.UserVersion = source.ChangelogVersion;
 			UserVersion = source.ChangelogVersion;
-		}
-
-		/// <summary>
-		/// Displays a progressbar while a database backup is in progress.
-		/// </summary>
-		private bool BackupCallback(
-			SQLiteConnection source,
-			string sourceName,
-			SQLiteConnection destination,
-			string destinationName,
-			int pages,
-			int remainingPages,
-			int totalPages,
-			bool retry)
-		{
-			Program.Log.Info($"Backing up");
-			Utils.ProgressBar(pages - remainingPages, pages);
-			return true;
 		}
 
 		/// <summary>

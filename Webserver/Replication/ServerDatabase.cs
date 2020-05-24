@@ -40,7 +40,6 @@ namespace Webserver.Replication
 		/// <summary>
 		/// FileLock object used to keep ownership over a specific database.
 		/// </summary>
-		private readonly ServerDatabase parent;
 		private FileLock fileLock;
 		private ChangeLog changelog;
 		/// <summary>
@@ -345,68 +344,20 @@ namespace Webserver.Replication
 		#endregion
 
 		/// <summary>
-		/// Retrieves all new changes from the master server and applies them.
+		/// Syncronizes the entire database with the master server.
 		/// </summary>
 		public void Synchronize()
 		{
 			if (Balancer.IsMaster)
 				throw new InvalidOperationException();
 
+			using var progress = new ProgressBar() { MaxProgress = 3 };
+
+			progress.Draw(1);
 			SynchronizeBackup();
-
-			long updateCount;
-			Dictionary<int?, ModelType> types;
-
-			// Get the amount of new changes and a typelist from the master
-			{
-				dynamic data = new ServerMessage(MessageType.DbSyncStart, null).SendAndWait(Balancer.MasterServer).Data;
-				updateCount = data.Version - changelog.ChangelogVersion;
-				types = ((JArray)data.Types).Select(x => x.ToObject<ModelType>()).ToDictionary(x => x.ID);
-			}
-
-			if (updateCount == 0)
-				return;
-
-			Program.Log.Config($"Retrieving {updateCount} change{(updateCount == 1 ? "" : "s")} from master...");
-			lock (changelog)
-			{
-				// Create transaction to commit the changes only at the end (increases speed)
-				SQLiteTransaction transaction = changelog.BeginTransaction();
-				try
-				{
-					long interval = Math.Max(1, (long)(updateCount / (Console.WindowWidth * 0.8))); // Interval for refreshing the progress bar
-
-					for (long l = 0; l < updateCount;)
-					{
-						// Request another chunk of updates
-						IEnumerable<Changes> updates = (new ServerMessage(MessageType.DbSync, new
-						{
-							Version = changelog.ChangelogVersion,
-							Amount = (int)Math.Min(updateCount - l, SynchronizeChunkSize)
-						}).SendAndWait(Balancer.MasterServer).Data as JArray).Select(x => (Changes)x);
-
-						// Apply all changes from the last request
-						foreach (Changes update in updates)
-						{
-							update.CollectionType = new ModelType() { FullName = types[update.ModelTypeID].FullName };
-							changelog.Push(update);
-
-							// Increment l and draw the progressbar if it reached the interval
-							if (l++ % interval == 0)
-								Utils.ProgressBar(l, updateCount);
-						}
-
-						Utils.ProgressBar(l, updateCount);
-					}
-					transaction.Commit();
-					Utils.ClearProgressBar();
-				}
-				catch (Exception)
-				{
-					transaction.Rollback();
-					throw;
-				}
-			}
+			progress.Draw(2);
+			SynchronizeChanges();
+			progress.Draw(3);
 		}
 		/// <summary>
 		/// Retrieves a database backup file from master if nescessary.
@@ -432,6 +383,7 @@ namespace Webserver.Replication
 			}
 
 			Program.Log.Config($"Downloading '{backupName}' ({backupSizeStr}) from the master server...");
+			using var progress = new ProgressBar() { MaxProgress = backupSize };
 
 			// Create a temp file
 			FileStream temp = File.OpenWrite(Path.GetTempFileName());
@@ -447,11 +399,12 @@ namespace Webserver.Replication
 				temp.Write(data);
 
 				// Draw progressbar
-				string sizeStr = string.Format(new DataFormatter() { SpaceBeforeUnit = false }, "{0:B1}", temp.Position);;
-				Utils.ProgressBar(temp.Position / (double)backupSize, $"Progress [{sizeStr}/{backupSizeStr}]", prefixColor: (ConsoleColor.White, ConsoleColor.Green));
+				string sizeStr = string.Format(new DataFormatter() { SpaceBeforeUnit = false }, "{0:B1}", temp.Position);
+				progress.Prefix = $"Downloading [{sizeStr}/{backupSizeStr}]";
+				progress.Draw(temp.Position);
 			}
+			progress.Draw(backupSize);
 			temp.Dispose();
-			Utils.ClearProgressBar();
 
 			// Replace the current database file
 			string databaseFile = Connection.FileName;
@@ -477,6 +430,71 @@ namespace Webserver.Replication
 			// Re-open all connections
 			Connection.Open();
 			changelog.Open();
+		}
+		/// <summary>
+		/// Retrieves all new changes from the master server and applies them.
+		/// </summary>
+		private void SynchronizeChanges()
+		{
+			long updateCount;
+			Dictionary<int?, ModelType> types;
+
+			// Get the amount of new changes and a typelist from the master
+			{
+				dynamic data = new ServerMessage(MessageType.DbSyncStart, null).SendAndWait(Balancer.MasterServer).Data;
+				updateCount = data.Version - changelog.ChangelogVersion;
+				types = ((JArray)data.Types).Select(x => x.ToObject<ModelType>()).ToDictionary(x => x.ID);
+			}
+
+			if (updateCount == 0)
+				return;
+
+			Program.Log.Config($"Retrieving {updateCount} change{(updateCount == 1 ? "" : "s")} from master...");
+			using var progress = new ProgressBar()
+			{
+				Prefix = $"Changes [{{0,-{updateCount.ToString().Length}}}/{{2}}]",
+				MaxProgress = updateCount
+			};
+
+			lock (changelog)
+			{
+				// Create transaction to commit the changes only at the end (increases speed)
+				SQLiteTransaction transaction = changelog.BeginTransaction();
+				try
+				{
+					long interval = Math.Max(1, updateCount / progress.Size); // Interval for refreshing the progress bar
+
+					for (long l = 0; l < updateCount;)
+					{
+						// Request another chunk of updates
+						IEnumerable<Changes> updates = (new ServerMessage(MessageType.DbSync, new
+						{
+							Version = changelog.ChangelogVersion,
+							Amount = (int)Math.Min(updateCount - l, SynchronizeChunkSize)
+						}).SendAndWait(Balancer.MasterServer).Data as JArray).Select(x => (Changes)x);
+
+						// Apply all changes from the last request
+						foreach (Changes update in updates)
+						{
+							update.CollectionType = new ModelType() { FullName = types[update.ModelTypeID].FullName };
+							changelog.Push(update);
+
+							// Increment l and draw the progressbar if l has reached the interval
+							if (l++ % interval == 0)
+								progress.Draw(l);
+						}
+
+						progress.Draw(l);
+					}
+					progress.Draw(updateCount);
+					transaction.Commit();
+				}
+				catch (Exception)
+				{
+					transaction.Rollback();
+					throw;
+				}
+			}
 		}
 
 		/// <summary>
