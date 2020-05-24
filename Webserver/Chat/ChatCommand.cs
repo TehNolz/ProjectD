@@ -103,9 +103,10 @@ namespace Webserver.Chat
 			var data = (JObject)message.Data;
 
 			//Get target connections
-			IEnumerable<ChatConnection> matchingConnections = Enum.Parse<TargetType>((string)data["TargetType"]) == TargetType.Users ?
-				from AC in ChatConnection.ActiveConnections where data["Targets"].ToObject<List<string>>().Contains(AC.User.ID.ToString()) select AC : //Fucking JTokens, man.
-				from AC in ChatConnection.ActiveConnections where data["Targets"].Intersect(from C in AC.Chatrooms select JToken.FromObject(C.ID)).Any() select AC;
+			List<string> targets = data["Targets"].ToObject<List<string>>();
+			IEnumerable<ChatConnection> matchingConnections = Enum.Parse<TargetType>((string)data["TargetType"]) == TargetType.Users
+				? (from AC in ChatConnection.ActiveConnections where targets.Contains(AC.User.ID.ToString()) select AC)
+				: (from ChatConnection AC in ChatConnection.ActiveConnections from Chatroom C in AC.Chatrooms where targets.Contains(C.ID.ToString()) select AC);
 
 			//Run the appropriate action on each connection
 			if (data.ContainsKey("Message"))
