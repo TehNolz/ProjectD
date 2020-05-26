@@ -8,6 +8,7 @@ namespace Webserver.API.Endpoints.Feed
 	public partial class FeedItemEndpoint : APIEndpoint
 	{
 		[ContentType("application/json")]
+		[Permission(PermissionLevel.User)]
 		public override void POST()
 		{
 			// Check if title and description are in the body
@@ -27,7 +28,7 @@ namespace Webserver.API.Endpoints.Feed
 			}
 
 			// Create a new feed item
-			var feedItem = new FeedItem(title, description, category);
+			var feedItem = new FeedItem(title, description, category, User.Email);
 
 			// Store feed item in the database
 			Database.Insert(feedItem);

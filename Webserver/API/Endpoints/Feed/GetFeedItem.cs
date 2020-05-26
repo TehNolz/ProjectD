@@ -49,23 +49,6 @@ namespace Webserver.API.Endpoints.Feed
 				var json = JObject.FromObject(feedItem);
 				Response.Send(json.ToString(), HttpStatusCode.OK);
 			}
-			// If a limit and an offset are given, the feed items are requested that start at the offset until the limit is reached.
-			else if (Params.ContainsKey("limit") && Params.ContainsKey("offset"))
-			{
-				// Check if the limit and offset values are both non-negative integers.
-				if (int.TryParse(Params["limit"][0], out int limit) && int.TryParse(Params["offset"][0], out int offset) && limit >= 0 && offset >= 0)
-				{
-					// Get the feed items, starting at offset and until the limit is reached, from the database.
-					List<FeedItem> feedItems = FeedItem.GetFeedItems(Database, limit, offset);
-
-					var json = JsonSerializer.Serialize(feedItems);
-					Response.Send(json.ToString(), HttpStatusCode.OK);
-				}
-				else
-				{
-					Response.Send("Limit or offset value not valid: they must both be non-negative integers.", HttpStatusCode.BadRequest);
-				}
-			}
 			// If a category, a limit and an offset are given, the feed items with the given category are requested, and that start at the
 			// offset until the limit is reached.
 			else if (Params.ContainsKey("category") && Params.ContainsKey("limit") && Params.ContainsKey("offset"))
@@ -102,6 +85,23 @@ namespace Webserver.API.Endpoints.Feed
 				{
 					// Get the feed items that contain the given search string from the database.
 					List<FeedItem> feedItems = FeedItem.GetFeeditemsBySearchString(Database, Params["searchString"][0], limit, offset);
+
+					var json = JsonSerializer.Serialize(feedItems);
+					Response.Send(json.ToString(), HttpStatusCode.OK);
+				}
+				else
+				{
+					Response.Send("Limit or offset value not valid: they must both be non-negative integers.", HttpStatusCode.BadRequest);
+				}
+			}
+			// If a limit and an offset are given, the feed items are requested that start at the offset until the limit is reached.
+			else if (Params.ContainsKey("limit") && Params.ContainsKey("offset"))
+			{
+				// Check if the limit and offset values are both non-negative integers.
+				if (int.TryParse(Params["limit"][0], out int limit) && int.TryParse(Params["offset"][0], out int offset) && limit >= 0 && offset >= 0)
+				{
+					// Get the feed items, starting at offset and until the limit is reached, from the database.
+					List<FeedItem> feedItems = FeedItem.GetFeedItems(Database, limit, offset);
 
 					var json = JsonSerializer.Serialize(feedItems);
 					Response.Send(json.ToString(), HttpStatusCode.OK);

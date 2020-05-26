@@ -14,6 +14,7 @@ namespace Webserver.Models
 		public string Title { get; set; }
 		public string Description { get; set; }
 		public string Category { get; set; }
+		public string User { get; set; }
 
 		/// <summary>
 		/// Parameterless constructor to make SQLiteAdapter happy.
@@ -25,11 +26,12 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="title">The feed item's title.</param>
 		/// <param name="description">The feed item's description.</param>
-		public FeedItem(string title, string description, string category)
+		public FeedItem(string title, string description, string category, string user)
 		{
 			Title = title;
 			Description = description;
 			Category = category;
+			User = user;
 		}
 
 		/// <summary>
