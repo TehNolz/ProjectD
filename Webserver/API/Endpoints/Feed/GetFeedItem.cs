@@ -114,7 +114,7 @@ namespace Webserver.API.Endpoints.Feed
 			// If the request contains no useful information.
 			else
 			{
-				Response.Send("Missing parameters: provide an ID, a category, a limit and offset, or a search string.", HttpStatusCode.BadRequest);
+				Response.Send("Missing parameters: provide either of the following: an ID -OR- a limit and offset -OR- a category, limit and offset -OR- a search string, limit and offset.", HttpStatusCode.BadRequest);
 			}
 		}
 	}
