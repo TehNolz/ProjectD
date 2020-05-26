@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Threading;
 
 using Webserver.API;
@@ -185,6 +186,22 @@ namespace Webserver
 
 		private static void Cleanup()
 		{
+
+			int maxWidth = 0;
+			IEnumerable<string> consoleAttribs = typeof(Console).GetProperties(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public)
+				.Select(x => (x.Name, Value: x.GetValue(null)))
+				.Select(x =>
+				{
+					maxWidth = Math.Max(maxWidth, x.Name.Length);
+					return x;
+				})
+				.ToList()
+				.Select(x => $"{x.Name.PadRight(maxWidth)} => {x.Value ?? "null"}");
+
+			File.WriteAllText(Environment.ExpandEnvironmentVariables("%USERPROFILE%\\Desktop\\dump.txt"),
+				string.Join('\n', consoleAttribs),
+				Encoding.ASCII
+			);
 			// Cleanup temporary files
 		}
 	}
