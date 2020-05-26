@@ -221,23 +221,34 @@ namespace Webserver.Replication
 			SQLiteTransaction transaction = database.Connection.BeginTransaction();
 
 			database.Connection.RollBack += OnRollback;
+			database.Connection.Commit += OnCommit;
 
 			return transaction;
 		}
 
+		/// <summary>
+		/// Unsubscribes all transaction event handlers from <see cref="database"/>.
+		/// </summary>
+		private void OnCommit(object sender, CommitEventArgs e)
+		{
+			database.Connection.RollBack -= OnRollback;
+			database.Connection.Commit -= OnCommit;
+		}
+
 		private void OnRollback(object sender, EventArgs e)
 		{
-			synchronizer.Dispose();
-
-			// Reset the version and synchronizer
-			ChangelogVersion = Peek()?.ID ?? 0;
-			synchronizer = new SynchronizingHandle(ChangelogVersion + 1);
-
-			// Rebuild the typeList cache
-			typeList = database.Select<ModelType>().ToList();
-
 			// Remove this handler
-			database.Connection.RollBack -= OnRollback;
+			OnCommit(sender, null);
+
+			lock (synchronizer)
+			{
+				// Reset the version and synchronizer
+				ChangelogVersion = Peek()?.ID ?? 0;
+				synchronizer.SetValue(ChangelogVersion + 1);
+
+				// Rebuild the typeList cache
+				typeList = database.Select<ModelType>().ToList();
+			}
 		}
 
 		/// <summary>
@@ -379,6 +390,8 @@ namespace Webserver.Replication
 						foreach (SemaphoreSlim sem in waiting.Values)
 							sem.Release();
 						waiting.Clear();
+
+						isDisposed = true;
 					}
 				}
 				isDisposed = true;
@@ -386,9 +399,11 @@ namespace Webserver.Replication
 		}
 
 		// This code added to correctly implement the disposable pattern.
-		public void Dispose() =>
+		public void Dispose()
+		{
 			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
 			Dispose(true);
+		}
 		#endregion
 	}
 }
