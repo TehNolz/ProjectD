@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 
 using System;
+using System.Linq;
 using System.Net;
 
 using Webserver.Models;
@@ -33,6 +34,28 @@ namespace Webserver.API.Endpoints
 				Response.Send(HttpStatusCode.Gone);
 			else
 				Response.Send(HttpStatusCode.NoContent);
+		}
+
+		[ContentType("application/json")]
+		public override void PATCH()
+		{
+			int id = Data.ID;
+			string message = Data.Message;
+
+			ExampleModel model = Database.Select<ExampleModel>("ID = @id", new { id }).FirstOrDefault();
+			if (model is null)
+			{
+				Response.Send(HttpStatusCode.Gone);
+				return;
+			}
+
+			model.Message = message;
+			int updated = Database.Update(model);
+
+			if (updated == 0)
+				Response.Send(HttpStatusCode.NoContent);
+			else
+				Response.Send(HttpStatusCode.OK);
 		}
 	}
 }
