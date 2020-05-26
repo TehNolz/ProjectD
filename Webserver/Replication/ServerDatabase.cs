@@ -367,6 +367,7 @@ namespace Webserver.Replication
 			long backupSize;
 			string backupName;
 			string backupSizeStr;
+			long transferChunkSize = Utils.ParseDataSize(BackupTransferChunkSize);
 
 			// Get the backup filename and size
 			{
@@ -394,7 +395,12 @@ namespace Webserver.Replication
 				// Get a chunk of data from the parent's backup file
 				byte[] data = new ServerMessage(
 					MessageType.DbSyncBackup,
-					new { FileName = backupName, Offset = temp.Position }
+					new
+					{
+						FileName = backupName,
+						Offset = temp.Position,
+						Amount = transferChunkSize
+					}
 				).SendAndWait(Balancer.MasterServer).Data;
 				temp.Write(data);
 
