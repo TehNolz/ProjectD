@@ -591,19 +591,22 @@ namespace Webserver
 				{
 					try
 					{
+						// Reposition the progressbars 
 						MoveProgressBars();
 					}
 					catch (Exception e) when (e is ArgumentOutOfRangeException || e is IOException)
 					{
+						try
+						{
 							// Move the cursor back to try to undo the previous attempt at buffer extension
 							if (Console.CursorTop != 0)
 								Console.CursorTop--;
-						try
-						{
 						}
 						catch (Exception e1) when (e1 is ArgumentOutOfRangeException || e1 is IOException)
 						{
-							// Once more!
+							// No idea if this is even nescessary but honestly,
+							// talking to the Console class is kind of taboo around here,
+							// so it's best to keep this a secret, okay?
 						}
 					}
 				}
@@ -625,11 +628,12 @@ namespace Webserver
 					ExtendBuffer(windowTop - (Console.BufferHeight - Console.WindowHeight));
 				Console.WindowTop = windowTop;
 			}
+			
+			int newLines = Console.BufferHeight - ProgressBar.Slots.Count - Console.CursorTop + 1;
 
 			// If the cursor has reached the end of the buffer
 			if (Console.CursorTop >= Console.BufferHeight - ProgressBar.Slots.Count)
 			{
-				int newLines = Console.BufferHeight - ProgressBar.Slots.Count - Console.CursorTop + 1;
 
 				// Cache some console values to reset later
 				(int, int, bool) settingsCache = (
@@ -656,7 +660,7 @@ namespace Webserver
 				int sourceTop = windowTop + Console.WindowHeight - ProgressBar.Slots.Count - 1;
 
 				// Move the progress bars one line down
-				Console.MoveBufferArea(0, sourceTop, ProgressBar.Slots.Max(x => x.Size), ProgressBar.Slots.Count, 0, sourceTop + 1);
+				Console.MoveBufferArea(0, sourceTop, ProgressBar.Slots.Max(x => x.Size), ProgressBar.Slots.Count, 0, sourceTop + newLines);
 			}
 			else if (Console.CursorTop >= Console.WindowHeight - ProgressBar.Slots.Count)
 			{
