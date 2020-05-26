@@ -50,6 +50,7 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += OnDbSyncStart;
 			ServerConnection.MessageReceived += OnDbSync;
 			ServerConnection.MessageReceived += OnDbChange;
+			ServerConnection.MessageReceived += OnServerStateChange;
 			ServerConnection.MessageReceived += Example.TestHandler;
 
 			//Chat system events
@@ -128,7 +129,10 @@ namespace Webserver.LoadBalancer
 				message.Reply(new JObject() { { "error", "Database version is larger than the master database version." } });
 		}
 		/// <summary>
-		/// Accepts an offset value as <see cref="long"/> and filename as string. Responds with the following:
+		/// Accepts an offset value as <see cref="long"/>, a data amount value as <see cref="int"/> and
+		/// filename as string.
+		/// <para/>
+		/// Responds with the following:
 		/// <list type="bullet">
 		/// <item>A chunk of the database backup file with a length of <see cref="BackupTransferChunkSize"/>.</item>
 		/// <item>The string <c>"file not found"</c> if the given filepath is not a backup file.</item>
@@ -140,6 +144,7 @@ namespace Webserver.LoadBalancer
 		{
 			string fileName = message.Data.FileName;
 			long offset = message.Data.Offset;
+			long amount = message.Data.Amount;
 
 			// Get the fileInfo of the backup
 			var backup = new FileInfo(Path.Combine(BackupDir, fileName));
@@ -154,7 +159,7 @@ namespace Webserver.LoadBalancer
 			{
 				// Open, seek and read a chunk from the database backup
 				using FileStream fs = backup.OpenRead();
-				byte[] buffer = new byte[Utils.ParseDataSize(BackupTransferChunkSize)];
+				byte[] buffer = new byte[amount];
 				fs.Seek(offset, default);
 				fs.Read(buffer);
 				// Send the chunk
@@ -227,6 +232,7 @@ namespace Webserver.LoadBalancer
 			try
 			{
 				message.Connection.State = (ServerState)message.Data;
+				Log.Trace($"Server {message.Connection.Address} changed state to {message.Connection.State}");
 			}
 			catch (InvalidCastException e)
 			{
