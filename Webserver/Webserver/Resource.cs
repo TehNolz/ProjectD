@@ -34,7 +34,7 @@ namespace Webserver.Webserver
 			if (!WebPages.Contains(target) || !File.Exists(target))
 			{
 				Program.Log.Warning($"Refused request for {target}: File not found");
-				response.Send(Redirects.GetErrorPage(HttpStatusCode.NotFound), HttpStatusCode.NotFound);
+				response.Send(Redirects.GetErrorPage(HttpStatusCode.NotFound), HttpStatusCode.NotFound, "text/html");
 				return;
 			}
 
@@ -60,7 +60,7 @@ namespace Webserver.Webserver
 				default:
 					//Resources only support the three methods defined above, so send back a 405 Method Not Allowed.
 					Program.Log.Warning("Refused request for resource " + target + ": Method Not Allowed (" + request.HttpMethod + ")");
-					response.Send(Redirects.GetErrorPage(HttpStatusCode.MethodNotAllowed), HttpStatusCode.MethodNotAllowed);
+					response.Send(Redirects.GetErrorPage(HttpStatusCode.MethodNotAllowed), HttpStatusCode.MethodNotAllowed, "text/html");
 					return;
 			}
 		}
