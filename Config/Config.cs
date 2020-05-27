@@ -25,6 +25,8 @@ namespace Config
 				Formatting = Formatting.Indented,
 			};
 
+			string indentation = new string(writer.IndentChar, writer.Indentation * 2);
+
 			writer.WriteStartObject();
 			//Go through all ConfigSection classes
 			foreach (Type T in from T in Assembly.GetCallingAssembly().GetTypes() where T.GetCustomAttribute<ConfigSectionAttribute>() != null select T)
@@ -38,8 +40,8 @@ namespace Config
 					CommentAttribute Attr = F.GetCustomAttribute<CommentAttribute>();
 					if (Attr != null)
 					{
-						writer.WriteWhitespace("\n");
-						writer.WriteComment(Attr.Comment);
+						writer.WriteWhitespace($"\n{indentation}");
+						writer.WriteComment(Attr.Comment.Replace("\n", $"\n{indentation}"));
 					}
 
 					//Write fields
@@ -94,7 +96,7 @@ namespace Config
 			int missing = 0;
 
 			// Loop through all types from the caller's assembly which have the ConfigSectionAttribute
-			foreach (Type configSection in Assembly.GetCallingAssembly().GetTypes().Where(x => x.GetCustomAttribute<ConfigSectionAttribute>() != null))
+			foreach (Type configSection in Assembly.GetEntryAssembly().GetTypes().Where(x => x.GetCustomAttribute<ConfigSectionAttribute>() != null))
 			{
 				if (!configJson.ContainsKey(configSection.Name))
 				{
