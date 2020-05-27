@@ -71,7 +71,7 @@ namespace Webserver.LoadBalancer
 					context.Request.InputStream.CopyTo(requestRelay.GetRequestStream());
 
 				//Wait for a response from the slave.
-				Log.Trace($"Relaying request for '{context.Request.Url.LocalPath}' to {slaveAddress}");
+				Log.Trace($"Relaying {context.Request.HttpMethod.ToUpper()} request for '{context.Request.Url.LocalPath}' to {slaveAddress}");
 				requestRelay.BeginGetResponse(Respond, new RequestState(requestRelay, context));
 			}
 		}

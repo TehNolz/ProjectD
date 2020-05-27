@@ -53,6 +53,26 @@ namespace Webserver.Config
 	}
 
 	/// <summary>
+	/// Describes everything related to the logger.
+	/// </summary>
+	[ConfigSection]
+	internal static class LoggingConfig
+	{
+		[Comment("The path to the folder where the server logs will be stored. This folder will be created automatically.")]
+		public static string LogDir = "Logs";
+		[Comment("Defines the time it takes before a logfile is archived and a new one is created.")]
+		public static TimeSpan LogArchivePeriod = TimeSpan.FromHours(6);
+		[Comment("Enables or disables whether the final log files will be compressed into a zip archive or not.")]
+		public static bool LogfileCompression = true;
+		[Comment("Defines the log level used for the log files written to the log directory. Available log levels are: OFF, DEBUG, FATAL, ERROR, WARN, INFO, CONFIG, FINE, TRACE, ALL.")]
+		public static string LogLevel = "ALL";
+		[Comment("Defines the log level used by the console. Available log levels are: OFF, DEBUG, FATAL, ERROR, WARN, INFO, CONFIG, FINE, TRACE, ALL.")]
+		public static string ConsoleLogLevel = "TRACE";
+		[Comment("Enables or disables the pattern and word highlighting in the console log. Disabling this may slightly increase performance.")]
+		public static bool ConsoleHighlighting = true;
+	}
+
+	/// <summary>
 	/// JSON configuration section for the webserver functionality such as thread count.
 	/// This class' values will be replaced by the values from Config.json on startup.
 	/// </summary>
@@ -89,7 +109,7 @@ namespace Webserver.Config
 			"Note: This resizes the backup files and may lead to fragmentation on hard drive disks.")]
 		public static bool CompressBackups = true;
 		[Comment("Sets the chunk size (in bytes) used to transfer database backups between servers. Accepts decimal and binary byte units. (e.g. 2 KiB, 0.5MB, 2E+2 B, 1024)")]
-		public static string BackupTransferChunkSize = "8 KiB";
+		public static string BackupTransferChunkSize = "32 KiB";
 		[Comment("Sets the amount of database changes that are sent at once when a server is synchronizing it's database with the master server.\n" +
 			"Higher chunk sizes will keep the master server too busy with sending one message, whereas lower chunk sizes will lead to increased I/O time.")]
 		public static uint SynchronizeChunkSize = 800;

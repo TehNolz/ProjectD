@@ -41,7 +41,7 @@ namespace Webserver.Webserver
 						continue;
 					}
 
-					Log.Trace($"Received request from {context.Request.RemoteEndPoint}");
+					Log.Trace($"Received {context.Request.HttpMethod} request from {context.Request.RemoteEndPoint}");
 					RequestWorker.Queue.Add(context);
 				}
 				catch (HttpListenerException e)

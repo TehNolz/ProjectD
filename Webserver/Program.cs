@@ -3,14 +3,14 @@ using Config;
 using Database.SQLite;
 
 using Logging;
-
+using Logging.Highlighting;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 using Webserver.API;
@@ -33,13 +33,17 @@ namespace Webserver
 		public static void Main()
 		{
 			AppDomain.CurrentDomain.UnhandledException += (sender, eventArgs) => Cleanup();
-
+			AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) => Cleanup();
+			
 			Console.SetOut(new CustomWriter(Console.OutputEncoding, Console.Out));
 
-			Log = new Logger(Level.ALL, Console.Out)
+			Log = new Logger(Level.ALL)
 			{
-				Format = "{asctime:HH:mm:ss} {classname,-15} {levelname,6}: {message}"
+				Format = "{asctime:HH:mm:ss} {classname,-15} {levelname,6}: {message}",
+				Name = "Global Logger"
 			};
+			// Add new child logger that only writes to the console.
+			Log.Attach(new Logger(Level.ALL, Console.Out) { Name = "Logger (Console)", Format = Log.Format });
 
 			//Load config file
 			if (!File.Exists("Config.json"))
@@ -51,6 +55,8 @@ namespace Webserver
 				Log.Error($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
 			}
 
+			// Initialize the remaining components of the logger. (Stuff about the logger that uses the config)
+			InitLogger();
 
 			//Check for duplicate network ports. Each port setting needs to be unique as we can't bind to one port multiple times.
 			var ports = new List<int>() { BalancerConfig.BalancerPort, BalancerConfig.DiscoveryPort, BalancerConfig.HttpRelayPort, BalancerConfig.HttpPort };
@@ -130,6 +136,21 @@ namespace Webserver
 				Log.Config($"Server is ready to accept connections");
 			}
 
+			// Exiter thread. Responds to KeyboardInterrupt
+			new Thread(() =>
+			{
+				Console.TreatControlCAsInput = true;
+				while (true)
+				{
+					// Wait for ctrl+c and then shutdown the program
+					ConsoleKeyInfo key = Console.ReadKey(true);
+					if (key.Modifiers.HasFlag(ConsoleModifiers.Control) &&
+						key.Key == ConsoleKey.C)
+						break;
+				}
+				Shutdown();
+			}) { Name = "Program Exiter" }.Start();
+
 			foreach (RequestWorker worker in workers)
 				worker.Join();
 
@@ -137,6 +158,56 @@ namespace Webserver
 			Distributor.Dispose();
 			distributor.Join();
 			Shutdown();
+		}
+
+		/// <summary>
+		/// Sets up the log file and advancing writer for said log files.
+		/// </summary>
+		private static void InitLogger()
+		{
+			// Setup some extra colors
+			Logger.Highlighters.Add(new Highlighter(
+				// HTTP methods
+				new[] { "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "TRACE", "PATCH", "OPTIONS" },
+				new[] { ConsoleColor.Yellow }
+			));
+			Logger.Highlighters.Add(new Highlighter(
+				// Master and Slave keywords (the (?<!\x00\s) prevents the class names from being colored aswell)
+				new Regex(@"(?:\W|^)(?<!\x00\s)(master|slave)(?:\W|$)", RegexOptions.IgnoreCase),
+				ConsoleColor.DarkYellow
+			));
+
+			// Update the log level of the console logger with the loglevel in the config
+			Log.Children.ElementAt(0).LogLevel = Level.GetLevel(LoggingConfig.ConsoleLogLevel);
+			Log.Children.ElementAt(0).UseConsoleHighlighting = LoggingConfig.ConsoleHighlighting;
+
+#if RELEASE
+			// Create the log directory and any parent folders
+			Directory.CreateDirectory(LoggingConfig.LogDir);
+
+			// This writer will dispose and compress the log files every day at midnight.
+			var logWriter = new AdvancingWriter(Path.Combine(LoggingConfig.LogDir, "server_{2}.log"), LoggingConfig.LogArchivePeriod)
+			{
+				Compression = LoggingConfig.LogfileCompression,
+				Archive = Path.Combine(LoggingConfig.LogDir, "{0:D} ({2}).zip"),
+			};
+
+			// Adds a line at the end of the current log mentioning which file continues the log.
+			static void OnNextLogFile(object sender, AdvancingWriter.FileAdvancingEventArgs e)
+			{
+				var writer = sender as AdvancingWriter;
+
+				File.AppendAllText(e.OldFile, $"{writer.NewLine}Continued in another log file");
+			}
+			logWriter.Advancing += OnNextLogFile;
+
+			// Create new child logger that only writes to the log file
+			Log.Attach(new Logger(Level.GetLevel(LoggingConfig.LogLevel), logWriter)
+			{
+				Name = "Logger (File)",
+				Format = Log.Format
+			});
+#endif
 		}
 
 		/// <summary>
@@ -184,25 +255,17 @@ namespace Webserver
 			Environment.Exit(exitCode);
 		}
 
+		private static ProgressBar.Color InitialConsoleColor = new ProgressBar.Color();
 		private static void Cleanup()
 		{
+			Log?.Dispose();
+			Database?.Dispose();
 
-			int maxWidth = 0;
-			IEnumerable<string> consoleAttribs = typeof(Console).GetProperties(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public)
-				.Select(x => (x.Name, Value: x.GetValue(null)))
-				.Select(x =>
-				{
-					maxWidth = Math.Max(maxWidth, x.Name.Length);
-					return x;
-				})
-				.ToList()
-				.Select(x => $"{x.Name.PadRight(maxWidth)} => {x.Value ?? "null"}");
+			Log = null;
+			Database = null;
 
-			File.WriteAllText(Environment.ExpandEnvironmentVariables("%USERPROFILE%\\Desktop\\dump.txt"),
-				string.Join('\n', consoleAttribs),
-				Encoding.ASCII
-			);
-			// Cleanup temporary files
+			// Prevents the console from changing color indefinitely because of a crash
+			InitialConsoleColor.Apply();
 		}
 	}
 }
