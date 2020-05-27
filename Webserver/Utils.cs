@@ -278,8 +278,8 @@ namespace Webserver
 		private string? _suffix;
 		private string _fillCharacters = "-=≡■";
 		private Color _prefixColor = new Color() { Foreground = ConsoleColor.White, Background = ConsoleColor.Green };
-		private Color _barColor = new Color();
-		private Color _suffixColor = new Color();
+		private Color _barColor = Program.InitialConsoleColor;
+		private Color _suffixColor = Program.InitialConsoleColor;
 		private double _progress;
 
 		/// <summary>
@@ -363,74 +363,87 @@ namespace Webserver
 		/// </summary>
 		protected virtual void Draw()
 		{
-			lock (Console.Out)
+			try
 			{
-				// Add this progress bar to the slots if it isn't already there
-				if (!Slots.Contains(this))
-					Add();
-
-				int windowTop = Console.WindowTop;
-				if (Console.CursorTop > Console.WindowHeight - Slots.Count)
+				lock (Console.Out)
 				{
-					// "Re-focus" to the end of the stream by adjusting the WindowTop position
-					windowTop = Console.CursorTop - (Console.WindowHeight - Slots.Count - 1);
-					Console.WindowTop = windowTop;
+					// Add this progress bar to the slots if it isn't already there
+					if (!Slots.Contains(this))
+						Add();
+
+					int windowTop = Console.WindowTop;
+					if (Console.CursorTop > Console.WindowHeight - Slots.Count && Console.WindowHeight != Console.BufferHeight)
+					{
+						// "Re-focus" to the end of the stream by adjusting the WindowTop position
+						windowTop = Console.CursorTop - (Console.WindowHeight - Slots.Count - 1);
+						if (windowTop > Console.BufferHeight - Console.WindowHeight)
+							CustomWriter.ExtendBuffer(windowTop - (Console.BufferHeight - Console.WindowHeight));
+						Console.WindowTop = windowTop;
+					}
+
+					// Cache some console values to reset later
+					(int, int, bool, Color) settingsCache = (
+						Console.CursorLeft,
+						Console.CursorTop,
+						Console.CursorVisible,
+						new Color() // Color initializes with the current console colors by default
+					);
+
+					// Hide the cursor
+					Console.CursorVisible = false;
+
+					// Get the position of this progress bar within the slots
+					int slotPos = Slots.IndexOf(this) + 1;
+
+					// Move the cursor to the bottom left of the console
+					Console.SetCursorPosition(0, windowTop + Console.WindowHeight - slotPos);
+
+					if (!(prefix_cache is null))
+					{
+						PrefixColor.Apply();
+						Console.Write(prefix_cache);
+						settingsCache.Item4.Apply();
+						Console.Write(' ');
+					}
+
+					int fill = fill_cache / FillCharacters.Length;
+					int charIndex = (fill_cache % FillCharacters.Length) - 1;
+					int empty = (maxFill_cache - fill_cache) / FillCharacters.Length;
+
+					BarColor.Apply();
+					Console.Write('[');
+					Console.Write(new string(FillCharacters[^1], fill));
+					if (charIndex >= 0)
+						Console.Write(FillCharacters[charIndex]);
+					Console.Write(new string(EmptyCharacter, empty));
+					Console.Write(']');
+
+					if (!(suffix_cache is null))
+					{
+						Console.Write(' ');
+						SuffixColor.Apply();
+						Console.Write(suffix_cache);
+					}
+
+					// Reset the cached console values
+					(
+						Console.CursorLeft,
+						Console.CursorTop,
+						Console.CursorVisible,
+						(Console.ForegroundColor, Console.BackgroundColor)
+					) = settingsCache;
+
+					// Undoes any scrolling that may have happened while writing the progress bar (cmd.exe likes to do this)
+					if (Console.WindowTop > windowTop)
+						Console.WindowTop = windowTop;
 				}
-
-				// Cache some console values to reset later
-				(int, int, bool, Color) settingsCache = (
-					Console.CursorLeft,
-					Console.CursorTop,
-					Console.CursorVisible,
-					new Color() // Color initializes with the current console colors by default
-				);
-
-				// Hide the cursor
-				Console.CursorVisible = false;
-
-				// Get the position of this progress bar within the slots
-				int slotPos = Slots.IndexOf(this) + 1;
-
-				// Move the cursor to the bottom left of the console
-				Console.SetCursorPosition(0, windowTop + Console.WindowHeight - slotPos);
-
-				if (!(prefix_cache is null))
-				{
-					PrefixColor.Apply();
-					Console.Write(prefix_cache);
-					settingsCache.Item4.Apply();
-					Console.Write(' ');
-				}
-
-				int fill = fill_cache / FillCharacters.Length;
-				int charIndex = (fill_cache % FillCharacters.Length) - 1;
-				int empty = (maxFill_cache - fill_cache) / FillCharacters.Length;
-
-				BarColor.Apply();
-				Console.Write('[');
-				Console.Write(new string(FillCharacters[^1], fill));
-				if (charIndex >= 0)
-					Console.Write(FillCharacters[charIndex]);
-				Console.Write(new string(EmptyCharacter, empty));
-				Console.Write(']');
-
-				if (!(suffix_cache is null))
-				{
-					Console.Write(' ');
-					SuffixColor.Apply();
-					Console.Write(suffix_cache);
-				}
-
-				// Reset the cached console values
-				(
-					Console.CursorLeft,
-					Console.CursorTop,
-					Console.CursorVisible,
-					(Console.ForegroundColor, Console.BackgroundColor)
-				) = settingsCache;
-
-				// Undoes any scrolling that may have happened while writing the progress bar (cmd.exe likes to do this)
-				Console.WindowTop = windowTop;
+			}
+			catch (Exception e) when (e is ArgumentOutOfRangeException || e is IOException)
+			{
+				// These happen during resizing and what not
+				// i literally cannot be bothered to fix this because the console seems
+				// to be able to change its size and values at virtually any moment
+				// so writing code to prevent issues is not really possible.
 			}
 		}
 
@@ -440,49 +453,56 @@ namespace Webserver
 		/// </summary>
 		private void Add()
 		{
-			lock (Console.Out)
+			try
 			{
-				// Calculate the position of the topmost progress bar
-				int sourceTop = Console.WindowTop + Console.WindowHeight - Slots.Count;
-
-				if (sourceTop - 1 <= Console.CursorTop)
+				lock (Console.Out)
 				{
-					// If the console has reached the end of the buffer
-					if (Console.WindowTop + Console.WindowHeight == Console.BufferHeight)
+					// Calculate the position of the topmost progress bar
+					int sourceTop = Console.WindowTop + Console.WindowHeight - Slots.Count;
+
+					if (sourceTop - 1 <= Console.CursorTop)
 					{
-						// Cache some console values to reset later
-						(int, int, bool) settingsCache = (
-							Console.CursorLeft,
-							Console.CursorTop - 1, // -1 to account for the newly created line
-							Console.CursorVisible
-						);
+						// If the console has reached the end of the buffer
+						if (Console.WindowTop + Console.WindowHeight == Console.BufferHeight)
+						{
+							// Cache some console values to reset later
+							(int, int, bool) settingsCache = (
+								Console.CursorTop - 1, // -1 to account for the newly created line
+								Console.CursorLeft,
+								Console.CursorVisible
+							);
 
-						// Hide the cursor
-						Console.CursorVisible = false;
+							// Hide the cursor
+							Console.CursorVisible = false;
 
-						// Move to the end of the buffer
-						Console.SetCursorPosition(0, Console.BufferHeight - 1);
-						// Open default output and write a newline (bypasses the CustomWriter instance)
-						using (var sw = new StreamWriter(Console.OpenStandardOutput()))
-							sw.WriteLine();
+							// Move to the end of the buffer
+							Console.SetCursorPosition(0, Console.BufferHeight - 1);
+							// Open default output and write a newline (bypasses the CustomWriter instance)
+							using (var sw = new StreamWriter(Console.OpenStandardOutput()))
+								sw.WriteLine();
 
-						// Reset the cached console values
-						(
-							Console.CursorLeft,
-							Console.CursorTop,
-							Console.CursorVisible
-						) = settingsCache;
+							// Reset the cached console values
+							(
+								Console.CursorTop,
+								Console.CursorLeft,
+								Console.CursorVisible
+							) = settingsCache;
+						}
+						// Otherwise simply move the window downwards
+						else
+							Console.WindowTop++;
 					}
-					// Otherwise simply move the window downwards
-					else
-						Console.WindowTop++;
+					else if (Slots.Count > 0)
+					{
+						// Shift the other bars up
+						Console.MoveBufferArea(0, sourceTop, Slots.Max(x => x.Size), Slots.Count, 0, sourceTop - 1);
+					}
+					Slots.Insert(0, this);
 				}
-				else if (Slots.Count > 0)
-				{
-					// Shift the other bars up
-					Console.MoveBufferArea(0, sourceTop, Console.BufferWidth, Slots.Count, 0, sourceTop - 1);
-				}
-				Slots.Insert(0, this);
+			}
+			catch (Exception e) when (e is ArgumentOutOfRangeException || e is IOException)
+			{
+				// Ignore
 			}
 		}
 		/// <summary>
@@ -491,42 +511,52 @@ namespace Webserver
 		/// </summary>
 		private void Remove()
 		{
-			int slotPos = Slots.IndexOf(this) + 1;
-
-			// If this is the last element in the slots, simply clear the line
-			if (slotPos == Slots.Count)
+			try
 			{
-				// Cache some console values to reset later
-				(int, int, bool) settingsCache = (
-					Console.CursorLeft,
-					Console.CursorTop,
-					Console.CursorVisible
-				);
 
-				// Hide the cursor
-				Console.CursorVisible = false;
+				int slotPos = Slots.IndexOf(this) + 1;
 
-				// Write a full line of whitespaces at this progress bar's position
-				Console.SetCursorPosition(0, Console.WindowTop + Console.WindowHeight - slotPos);
-				Console.Write(new string(' ', Size));
+				// If this is the last element in the slots, simply clear the line
+				if (slotPos == Slots.Count)
+				{
+					// Cache some console values to reset later
+					(int, int, bool) settingsCache = (
+						Console.CursorLeft,
+						Console.CursorTop,
+						Console.CursorVisible
+					);
 
-				// Reset the cached console values
-				(
-					Console.CursorLeft,
-					Console.CursorTop,
-					Console.CursorVisible
-				) = settingsCache;
+					// Hide the cursor
+					Console.CursorVisible = false;
+
+					// Write a full line of whitespaces at this progress bar's position
+					Console.SetCursorPosition(0, Console.WindowTop + Console.WindowHeight - slotPos);
+					Console.Write(new string(' ', Size));
+
+					// Reset the cached console values
+					(
+						Console.CursorLeft,
+						Console.CursorTop,
+						Console.CursorVisible
+					) = settingsCache;
+				}
+				// If this is not the last element in the slots, shift the other bars downwards
+				else
+				{
+					int sourceTop = Console.WindowTop + Console.WindowHeight - Slots.Count;
+					Console.MoveBufferArea(0, sourceTop, Slots.Max(x => x.Size), Slots.Count - slotPos, 0, sourceTop + 1);
+				}
+				Slots.Remove(this);
+
+				// Reset progress cache for potential reuse of this instance
+				progress_cache = -1;
 			}
-			// If this is not the last element in the slots, shift the other bars downwards
-			else
+			catch (Exception e) when (e is ArgumentOutOfRangeException || e is IOException)
 			{
-				int sourceTop = Console.WindowTop + Console.WindowHeight - Slots.Count;
-				Console.MoveBufferArea(0, sourceTop, Console.BufferWidth, Slots.Count - slotPos, 0, sourceTop + 1);
+				// Ignore these exceptions
+				// I have no idea if this code can throw these exceptions but given the unpredictable
+				// nature of the console, I'd say yes.
 			}
-			Slots.Remove(this);
-
-			// Reset progress cache for potential reuse of this instance
-			progress_cache = -1;
 		}
 
 		/// <summary>
@@ -558,7 +588,28 @@ namespace Webserver
 			{
 				writer.Write(value);
 				if (value == '\n')
-					MoveProgressBars();
+				{
+					try
+					{
+						// Reposition the progressbars 
+						MoveProgressBars();
+					}
+					catch (Exception e) when (e is ArgumentOutOfRangeException || e is IOException)
+					{
+						try
+						{
+							// Move the cursor back to try to undo the previous attempt at buffer extension
+							if (Console.CursorTop != 0)
+								Console.CursorTop--;
+						}
+						catch (Exception e1) when (e1 is ArgumentOutOfRangeException || e1 is IOException)
+						{
+							// No idea if this is even nescessary but honestly,
+							// talking to the Console class is kind of taboo around here,
+							// so it's best to keep this a secret, okay?
+						}
+					}
+				}
 			}
 		}
 
@@ -573,16 +624,21 @@ namespace Webserver
 			{
 				// "Re-focus" to the end of the stream by adjusting the WindowTop position
 				windowTop = Console.CursorTop - (Console.WindowHeight - ProgressBar.Slots.Count);
+				if (windowTop > Console.BufferHeight - Console.WindowHeight)
+					ExtendBuffer(windowTop - (Console.BufferHeight - Console.WindowHeight));
 				Console.WindowTop = windowTop;
 			}
+			
+			int newLines = Console.BufferHeight - ProgressBar.Slots.Count - Console.CursorTop + 1;
 
 			// If the cursor has reached the end of the buffer
 			if (Console.CursorTop >= Console.BufferHeight - ProgressBar.Slots.Count)
 			{
+
 				// Cache some console values to reset later
 				(int, int, bool) settingsCache = (
-					Console.CursorLeft,
 					Console.CursorTop - 1, // -1 to account for the newly created line
+					Console.CursorLeft,
 					Console.CursorVisible
 				);
 
@@ -591,12 +647,12 @@ namespace Webserver
 
 				// Move to the end of the buffer and create a new line (creates extra space where the progress bars can be copied to)
 				Console.SetCursorPosition(0, Console.BufferHeight - 1);
-				writer.WriteLine();
+				ExtendBuffer(newLines);
 
 				// Reset the cached console values
 				(
-					Console.CursorLeft,
 					Console.CursorTop,
+					Console.CursorLeft,
 					Console.CursorVisible
 				) = settingsCache;
 
@@ -604,7 +660,7 @@ namespace Webserver
 				int sourceTop = windowTop + Console.WindowHeight - ProgressBar.Slots.Count - 1;
 
 				// Move the progress bars one line down
-				Console.MoveBufferArea(0, sourceTop, Console.BufferWidth, ProgressBar.Slots.Count, 0, sourceTop + 1);
+				Console.MoveBufferArea(0, sourceTop, ProgressBar.Slots.Max(x => x.Size), ProgressBar.Slots.Count, 0, sourceTop + newLines);
 			}
 			else if (Console.CursorTop >= Console.WindowHeight - ProgressBar.Slots.Count)
 			{
@@ -612,11 +668,39 @@ namespace Webserver
 				int sourceTop = windowTop + Console.WindowHeight - ProgressBar.Slots.Count;
 
 				// Move the progress bar line one down
-				Console.MoveBufferArea(0, sourceTop, Console.BufferWidth, ProgressBar.Slots.Count, 0, sourceTop + 1);
+				Console.MoveBufferArea(0, sourceTop, ProgressBar.Slots.Max(x => x.Size), ProgressBar.Slots.Count, 0, sourceTop + 1);
 
 				// Shift the window view downwards
 				Console.WindowTop = windowTop + 1;
 			}
+		}
+
+		public static void ExtendBuffer(int lines)
+		{
+			if (lines < 0)
+				throw new ArgumentException("Value may not be less than 0. Actual value was " + lines, nameof(lines));
+
+			// Cache some console values to reset later
+			(int, int, int, bool) settingsCache = (
+				Console.CursorTop - lines, // -lines to account for the newly created line
+				Console.CursorLeft,
+				Console.WindowTop,
+				Console.CursorVisible
+			);
+
+			// Move to the end of the buffer
+			Console.SetCursorPosition(0, Console.BufferHeight - 1);
+			using (var sw = new StreamWriter(Console.OpenStandardOutput()))
+				for (int i = 0; i < lines; i++)
+					sw.WriteLine();
+
+			// Reset the cached console values
+			(
+				Console.CursorTop,
+				Console.CursorLeft,
+				Console.WindowTop,
+				Console.CursorVisible
+			) = settingsCache;
 		}
 	}
 
@@ -778,6 +862,85 @@ namespace Webserver
 			catch (OverflowException) { return false; }
 			catch (InvalidCastException) { return false; }
 			return true;
+		}
+	}
+
+	/// <summary>
+	/// Structure for describing the differences between 2 <see cref="JObject"/>s.
+	/// </summary>
+	public struct JsonDiff
+	{
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all new items.
+		/// </summary>
+		public JObject Added { get; }
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all changes made to
+		/// existing items.
+		/// </summary>
+		public JObject Changed { get; }
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all removed items.
+		/// </summary>
+		public JObject Removed { get; }
+
+		/// <summary>
+		/// Initializes a new instance of the <see cref="JsonDiff"/> structure that describes
+		/// all changes made to <paramref name="j2"/> compared to <paramref name="j1"/>.
+		/// </summary>
+		public JsonDiff(JObject j1, JObject j2)
+		{
+			// Get all properties of both JObjects
+			IEnumerable<JProperty> j1props = j1.Properties();
+			IEnumerable<JProperty> j2props = j2.Properties();
+
+			// Initialize all members
+			Added = new JObject();
+			Changed = new JObject();
+			Removed = new JObject();
+
+			// Fill the `Added` JObject with all properties unique to j2
+			foreach (JProperty prop in j2props.Where(x => !j1props.Any(y => x.Name == y.Name)))
+				Added.Add(prop.Name, prop.Value);
+
+			// Fill the `Removed` JObject with all properties unique to j1
+			foreach (JProperty prop in j1props.Where(x => j2props.Where(y => x.Name == y.Name).Count() == 0))
+				Removed.Add(prop.Name, prop.Value);
+
+			// Recursively find all changes between j1 and j2
+			foreach (JProperty prop in j1props)
+			{
+				// Find the equivalent property in j2
+				JProperty other = j2props.FirstOrDefault(x => x.Name == prop.Name);
+				if (other == null)
+					continue;
+
+				// If the type of the other property is different, just use the new value
+				if (other.Value.Type != prop.Value.Type)
+				{
+					Changed.Add(prop.Name, other.Value);
+				}
+				// If they are different, add the other one to this diff
+				else if (!JToken.DeepEquals(prop, other))
+				{
+					// If they are both JObjects, use their diff
+					if (other.Value.Type == JTokenType.Object && prop.Value.Type == JTokenType.Object)
+					{
+						var diff = new JsonDiff(prop.Value as JObject, other.Value as JObject);
+
+						// Add the other diff to this if they contain anything
+						if (diff.Added.Count != 0)
+							Added.Add(prop.Name, diff.Added);
+						if (diff.Changed.Count != 0)
+							Changed.Add(prop.Name, diff.Changed);
+						if (diff.Removed.Count != 0)
+							Removed.Add(prop.Name, diff.Removed);
+					}
+					// If they aren't both JObjects, simply add the other to this diff
+					else
+						Changed.Add(prop.Name, other.Value);
+				}
+			}
 		}
 	}
 }

@@ -351,7 +351,7 @@ namespace Webserver.Replication
 			if (Balancer.IsMaster)
 				throw new InvalidOperationException();
 
-			using var progress = new ProgressBar() { MaxProgress = 3 };
+			using var progress = new ProgressBar() { Prefix = "Synchronizing [{3,-4:P0}]", MaxProgress = 3 };
 
 			progress.Draw(1);
 			SynchronizeBackup();

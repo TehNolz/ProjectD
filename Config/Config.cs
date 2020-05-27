@@ -72,31 +72,41 @@ namespace Config
 		/// </summary>
 		/// <param name="Path">The path of the configuration file to load.</param>
 		/// <returns>The amount of missing values.</returns>
+		/// <exception cref="FileNotFoundException">No file found at the given <paramref name="Path"/>.</exception>
+		/// <exception cref="JsonReaderException">The file at the given <paramref name="Path"/> is not a valid JSON file.</exception>
 		public static int Load(string Path)
 		{
-			int Missing = 0;
+			int missing = 0;
 
-			var ConfigFile = JObject.Parse(File.ReadAllText(Path));
-			foreach (Type T in from T in Assembly.GetCallingAssembly().GetTypes() where T.GetCustomAttribute<ConfigSectionAttribute>() != null select T)
+			// Load the given config json
+			var configJson = JObject.Parse(File.ReadAllText(Path));
+
+			// Loop through all types from the caller's assembly which have the ConfigSectionAttribute
+			foreach (Type configSection in Assembly.GetCallingAssembly().GetTypes().Where(x => x.GetCustomAttribute<ConfigSectionAttribute>() != null))
 			{
-				if (!ConfigFile.ContainsKey(T.Name))
+				if (!configJson.ContainsKey(configSection.Name))
 				{
-					Missing += T.GetFields().Length;
+					// If a section is missing, add the sections amount of fields to `missing`
+					missing += configSection.GetFields().Length;
 					continue;
 				}
-				var Fields = (JObject)ConfigFile[T.Name];
-				foreach (FieldInfo F in T.GetFields())
+
+				// Get the config section and look for missing keys in said section
+				var section = (JObject)configJson[configSection.Name];
+				foreach (FieldInfo field in configSection.GetFields())
 				{
-					if (!Fields.ContainsKey(F.Name))
+					// Increment `missing` if a field is missing
+					if (!section.ContainsKey(field.Name))
 					{
-						Missing++;
+						missing++;
 						continue;
 					}
-					F.SetValue(null, Fields[F.Name].ToObject(F.FieldType));
+					// Convert the JValue to the field's type and set the field. This also serves as a typecheck.
+					field.SetValue(null, section[field.Name].ToObject(field.FieldType));
 				}
 			}
 
-			return Missing;
+			return missing;
 		}
 	}
 
