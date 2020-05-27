@@ -864,4 +864,83 @@ namespace Webserver
 			return true;
 		}
 	}
+
+	/// <summary>
+	/// Structure for describing the differences between 2 <see cref="JObject"/>s.
+	/// </summary>
+	public struct JsonDiff
+	{
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all new items.
+		/// </summary>
+		public JObject Added { get; }
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all changes made to
+		/// existing items.
+		/// </summary>
+		public JObject Changed { get; }
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all removed items.
+		/// </summary>
+		public JObject Removed { get; }
+
+		/// <summary>
+		/// Initializes a new instance of the <see cref="JsonDiff"/> structure that describes
+		/// all changes made to <paramref name="j2"/> compared to <paramref name="j1"/>.
+		/// </summary>
+		public JsonDiff(JObject j1, JObject j2)
+		{
+			// Get all properties of both JObjects
+			IEnumerable<JProperty> j1props = j1.Properties();
+			IEnumerable<JProperty> j2props = j2.Properties();
+
+			// Initialize all members
+			Added = new JObject();
+			Changed = new JObject();
+			Removed = new JObject();
+
+			// Fill the `Added` JObject with all properties unique to j2
+			foreach (JProperty prop in j2props.Where(x => !j1props.Any(y => x.Name == y.Name)))
+				Added.Add(prop.Name, prop.Value);
+
+			// Fill the `Removed` JObject with all properties unique to j1
+			foreach (JProperty prop in j1props.Where(x => j2props.Where(y => x.Name == y.Name).Count() == 0))
+				Removed.Add(prop.Name, prop.Value);
+
+			// Recursively find all changes between j1 and j2
+			foreach (JProperty prop in j1props)
+			{
+				// Find the equivalent property in j2
+				JProperty other = j2props.FirstOrDefault(x => x.Name == prop.Name);
+				if (other == null)
+					continue;
+
+				// If the type of the other property is different, just use the new value
+				if (other.Value.Type != prop.Value.Type)
+				{
+					Changed.Add(prop.Name, other.Value);
+				}
+				// If they are different, add the other one to this diff
+				else if (!JToken.DeepEquals(prop, other))
+				{
+					// If they are both JObjects, use their diff
+					if (other.Value.Type == JTokenType.Object && prop.Value.Type == JTokenType.Object)
+					{
+						var diff = new JsonDiff(prop.Value as JObject, other.Value as JObject);
+
+						// Add the other diff to this if they contain anything
+						if (diff.Added.Count != 0)
+							Added.Add(prop.Name, diff.Added);
+						if (diff.Changed.Count != 0)
+							Changed.Add(prop.Name, diff.Changed);
+						if (diff.Removed.Count != 0)
+							Removed.Add(prop.Name, diff.Removed);
+					}
+					// If they aren't both JObjects, simply add the other to this diff
+					else
+						Changed.Add(prop.Name, other.Value);
+				}
+			}
+		}
+	}
 }

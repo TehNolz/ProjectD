@@ -4,6 +4,8 @@ using Database.SQLite;
 
 using Logging;
 using Logging.Highlighting;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -25,10 +27,14 @@ namespace Webserver
 {
 	public class Program
 	{
+		public const string ConfigName = "Config.json";
 		public const string DatabaseName = "Database.db";
 		public static ServerDatabase Database;
 
 		public static Logger Log { get; private set; }
+
+		private static FileSystemWatcher configWatcher;
+		private static JObject prevConfig;
 
 		public static void Main()
 		{
@@ -46,12 +52,12 @@ namespace Webserver
 			Log.Attach(new Logger(Level.ALL, Console.Out) { Name = "Logger (Console)", Format = Log.Format });
 
 			//Load config file
-			if (!File.Exists("Config.json"))
-				ConfigFile.Write("Config.json");
+			if (!File.Exists(ConfigName))
+				ConfigFile.Write(ConfigName);
 
-			if (ConfigFile.Load("Config.json") is int missing && missing > 0)
+			if (ConfigFile.Load(ConfigName) is int missing && missing > 0)
 			{
-				ConfigFile.Write("Config.json");
+				ConfigFile.Write(ConfigName);
 				Log.Error($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
 			}
 
@@ -64,11 +70,13 @@ namespace Webserver
 				Prefix = "Configuring   [{3,-4:P0}]",
 				MaxProgress = 13
 			};
+			progress.Draw(progress.MinProgress);
 
 			//Check for duplicate network ports. Each port setting needs to be unique as we can't bind to one port multiple times.
 			var ports = new List<int>() { BalancerConfig.BalancerPort, BalancerConfig.DiscoveryPort, BalancerConfig.HttpRelayPort, BalancerConfig.HttpPort };
 			if (ports.Distinct().Count() != ports.Count)
 			{
+				progress.Clear();
 				Log.Error("One or more duplicate network port settings have been detected. The server cannot start.");
 				Log.Error("Press any key to exit.");
 				Console.ReadKey();
@@ -85,6 +93,7 @@ namespace Webserver
 				progress.Draw(1.5);
 				if (Diff > 0)
 				{
+					progress.Clear();
 					Log.Error($"Integrity check failed. Validation failed for {Diff} file(s).");
 					Log.Error("Some files may be corrupted. If you continue, all checksums will be recalculated.");
 					Log.Error("Press enter to continue.");
@@ -157,6 +166,9 @@ namespace Webserver
 			}
 			progress.Draw(13);
 
+			// Add file watcher to the config file to allow for live config updates.
+			InitConfigWatcher();
+
 			// Exiter thread. Responds to KeyboardInterrupt
 			new Thread(() =>
 			{
@@ -181,6 +193,71 @@ namespace Webserver
 			Distributor.Dispose();
 			distributor.Join();
 			Shutdown();
+		}
+
+		/// <summary>
+		/// Sets up the <see cref="FileSystemWatcher"/> that watches the config file for any updates.
+		/// </summary>
+		private static void InitConfigWatcher()
+		{
+			// Create a backup of the config in order to create the JsonDiffs later
+			using (StreamReader reader = File.OpenText(ConfigName))
+				prevConfig = (JObject)JsonConvert.DeserializeObject(reader.ReadToEnd());
+
+			// Initialize the file watcher and subscribe the event handler
+			configWatcher = new FileSystemWatcher(Path.GetDirectoryName(Path.GetFullPath(ConfigName)), Path.GetFileName(ConfigName))
+			{
+				EnableRaisingEvents = true
+			};
+			configWatcher.Changed += fileChanged;
+
+			/// Creates JsonDiffs and passes them to OnConfigChange
+			static void fileChanged(object sender, FileSystemEventArgs e)
+			{
+				// Only continue if the changed file is actually the config file (may always be true due to the filter but whatever)
+				if (e.FullPath != Path.GetFullPath(ConfigName))
+					return;
+
+				JObject newConfig;
+				try
+				{
+					// Try to read the file to also test if if it is no longer in use.
+					using (var reader = new StreamReader(File.Open(e.FullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
+						newConfig = (JObject)JsonConvert.DeserializeObject(reader.ReadToEnd());
+					
+					// If the file is empty it is probably still being written, so return and hope for another invocation.
+					if (newConfig == null)
+						return;
+
+					// Validate the new file
+					if (ConfigFile.Load(ConfigName) is int missing && missing > 0)
+					{
+						ConfigFile.Write(ConfigName);
+						Log.Error($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
+
+						// Read the file again
+						using StreamReader reader = File.OpenText(e.FullPath);
+						newConfig = (JObject)JsonConvert.DeserializeObject(reader.ReadToEnd());
+					}
+				}
+				catch (IOException)
+				{
+					// Stop if the file can't be read (and hope for another invocation)
+					return;
+				}
+
+				// Apply changes
+				var diff = new JsonDiff(prevConfig, newConfig);
+
+				// Skipp applying the diff if it is empty
+				if (diff.Added.Count == 0 && diff.Changed.Count == 0 && diff.Removed.Count == 0)
+					return;
+
+				OnConfigChange(diff);
+				
+				Log.Info($"Reloaded configuration file. (some changes may require a restart)");
+				prevConfig = newConfig;
+			}
 		}
 
 		/// <summary>
@@ -278,12 +355,36 @@ namespace Webserver
 			Environment.Exit(exitCode);
 		}
 
+		/// <summary>
+		/// Handles changes made in the config file.
+		/// </summary>
+		/// <param name="_">The changes between the old and new config files.</param>
+		private static void OnConfigChange(JsonDiff _)
+		{
+			// Always re-apply the logger settings
+			if (Log.Children.ElementAtOrDefault(0) is Logger consoleLogger)
+			{
+				consoleLogger.UseConsoleHighlighting = LoggingConfig.ConsoleHighlighting;
+				consoleLogger.LogLevel = Level.GetLevel(LoggingConfig.ConsoleLogLevel);
+			}
+			if (Log.Children.ElementAtOrDefault(1) is Logger fileLogger)
+			{
+				fileLogger.LogLevel = Level.GetLevel(LoggingConfig.LogLevel);
+				(fileLogger.OutputStreams.First() as AdvancingWriter).Compression = LoggingConfig.LogfileCompression;
+			}
+		}
+
 		public static ProgressBar.Color InitialConsoleColor = new ProgressBar.Color();
+		/// <summary>
+		/// Cleans up various resources before the application exits.
+		/// </summary>
 		private static void Cleanup()
 		{
+			configWatcher?.Dispose();
 			Log?.Dispose();
 			Database?.Dispose();
 
+			configWatcher = null;
 			Log = null;
 			Database = null;
 
