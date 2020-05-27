@@ -58,6 +58,13 @@ namespace Webserver
 			// Initialize the remaining components of the logger. (Stuff about the logger that uses the config)
 			InitLogger();
 
+			// Create progressbar for server config
+			var progress = new ProgressBar()
+			{
+				Prefix = "Configuring   [{3,-4:P0}]",
+				MaxProgress = 13
+			};
+
 			//Check for duplicate network ports. Each port setting needs to be unique as we can't bind to one port multiple times.
 			var ports = new List<int>() { BalancerConfig.BalancerPort, BalancerConfig.DiscoveryPort, BalancerConfig.HttpRelayPort, BalancerConfig.HttpPort };
 			if (ports.Distinct().Count() != ports.Count)
@@ -67,6 +74,7 @@ namespace Webserver
 				Console.ReadKey();
 				return;
 			}
+			progress.Draw(1);
 
 			//If the VerifyIntegrity config option is enabled, check all files in wwwroot for corruption.
 			//If at least one checksum mismatch is found, pause startup and show a warning.
@@ -74,6 +82,7 @@ namespace Webserver
 			{
 				Log.Config("Checking file integrity...");
 				int Diff = Integrity.VerifyIntegrity(WebserverConfig.WWWRoot);
+				progress.Draw(1.5);
 				if (Diff > 0)
 				{
 					Log.Error($"Integrity check failed. Validation failed for {Diff} file(s).");
@@ -84,22 +93,29 @@ namespace Webserver
 				}
 				Log.Config("No integrity issues found.");
 			}
+			progress.Draw(2);
 
 			//Crawl through the wwwroot folder to find all resources.
 			Resource.Crawl(WebserverConfig.WWWRoot);
+			progress.Draw(4);
 
 			//Parse Redirects.config to register all HTTP redirections.
 			Redirects.LoadRedirects("Redirects.config");
 			Log.Config($"Registered {Redirects.RedirectDict.Count} redirections");
+			progress.Draw(5);
 
 			// Initialize database
 			Database = ServerDatabase.CreateConnection(DatabaseName);
 			Database.BroadcastChanges = false;
+			progress.Draw(6);
 			InitDatabase(Database);
+			progress.Draw(7);
 
 			//Register all API endpoints, chat commands
 			APIEndpoint.DiscoverEndpoints();
+			progress.Draw(7.5);
 			ChatCommand.DiscoverCommands();
+			progress.Draw(8);
 
 			//Start load balancer
 			IPAddress localAddress;
@@ -107,6 +123,7 @@ namespace Webserver
 			{
 				localAddress = Balancer.Init();
 				Log.Config("Started load balancer.");
+				progress.Draw(9);
 			}
 			catch (Exception e)
 			{
@@ -124,10 +141,13 @@ namespace Webserver
 				var worker = new RequestWorker(Database.NewConnection());
 				workers.Add(worker);
 				worker.Start();
+				progress.Draw(10 + (1 / (i + 1)));
 			}
+			progress.Draw(11);
 
 			var distributor = new Thread(() => Distributor.Run(localAddress, BalancerConfig.HttpRelayPort));
 			distributor.Start();
+			progress.Draw(12);
 
 			if (!Balancer.IsMaster)
 			{
@@ -135,6 +155,7 @@ namespace Webserver
 				Balancer.Ready();
 				Log.Config($"Server is ready to accept connections");
 			}
+			progress.Draw(13);
 
 			// Exiter thread. Responds to KeyboardInterrupt
 			new Thread(() =>
@@ -150,6 +171,8 @@ namespace Webserver
 				}
 				Shutdown();
 			}) { Name = "Program Exiter" }.Start();
+
+			progress.Clear();
 
 			foreach (RequestWorker worker in workers)
 				worker.Join();
