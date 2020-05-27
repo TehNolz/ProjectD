@@ -76,10 +76,22 @@ namespace Config
 		/// <exception cref="JsonReaderException">The file at the given <paramref name="Path"/> is not a valid JSON file.</exception>
 		public static int Load(string Path)
 		{
-			int missing = 0;
-
 			// Load the given config json
 			var configJson = JObject.Parse(File.ReadAllText(Path));
+			return Load(configJson);
+		}
+		/// <summary>
+		/// Load the given <paramref name="configJson"/> into the <see cref="ConfigSectionAttribute"/> classes.
+		/// </summary>
+		/// <param name="configJson">The <see cref="JObject"/> to load.</param>
+		/// <returns>The amount of missing values.</returns>
+		/// <exception cref="ArgumentNullException"><paramref name="configJson"/> is <see langword="null"/>.</exception>
+		public static int Load(JObject configJson)
+		{
+			if (configJson is null)
+				throw new ArgumentNullException(nameof(configJson));
+
+			int missing = 0;
 
 			// Loop through all types from the caller's assembly which have the ConfigSectionAttribute
 			foreach (Type configSection in Assembly.GetCallingAssembly().GetTypes().Where(x => x.GetCustomAttribute<ConfigSectionAttribute>() != null))
