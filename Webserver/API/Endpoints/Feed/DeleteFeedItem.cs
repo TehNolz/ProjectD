@@ -7,6 +7,7 @@ namespace Webserver.API.Endpoints.Feed
 {
 	public partial class FeedItemEndpoint : APIEndpoint
 	{
+		[Permission(PermissionLevel.User)]
 		public override void DELETE()
 		{
 			// Check if ID is in the parameters
@@ -23,6 +24,13 @@ namespace Webserver.API.Endpoints.Feed
 			if (feedItem == null)
 			{
 				Response.Send("Feed item not found", HttpStatusCode.NotFound);
+				return;
+			}
+
+			// Check if the user's email is the logged in user's email
+			if (feedItem.UserEmail != User.Email)
+			{
+				Response.Send("Feed item does not belong to logged in user.", HttpStatusCode.Forbidden);
 				return;
 			}
 

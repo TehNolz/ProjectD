@@ -31,6 +31,7 @@ namespace Webserver.API.Endpoints.Feed
 		/// Feed items by search string, limit and offset:
 		///		api/feedItem?searchString=[string_to_search_for]&limit=[x]&offset=[y]
 		/// </summary>
+		[Permission(PermissionLevel.User)]
 		public override void GET()
 		{
 			// If an ID is given, one feed item with that ID is requested.
