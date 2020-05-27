@@ -278,7 +278,7 @@ namespace Webserver
 			Environment.Exit(exitCode);
 		}
 
-		private static ProgressBar.Color InitialConsoleColor = new ProgressBar.Color();
+		public static ProgressBar.Color InitialConsoleColor = new ProgressBar.Color();
 		private static void Cleanup()
 		{
 			Log?.Dispose();

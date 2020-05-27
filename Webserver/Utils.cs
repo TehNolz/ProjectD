@@ -278,8 +278,8 @@ namespace Webserver
 		private string? _suffix;
 		private string _fillCharacters = "-=≡■";
 		private Color _prefixColor = new Color() { Foreground = ConsoleColor.White, Background = ConsoleColor.Green };
-		private Color _barColor = new Color();
-		private Color _suffixColor = new Color();
+		private Color _barColor = Program.InitialConsoleColor;
+		private Color _suffixColor = Program.InitialConsoleColor;
 		private double _progress;
 
 		/// <summary>
