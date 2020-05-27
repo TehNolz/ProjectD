@@ -55,10 +55,21 @@ namespace Webserver
 			if (!File.Exists(ConfigName))
 				ConfigFile.Write(ConfigName);
 
-			if (ConfigFile.Load(ConfigName) is int missing && missing > 0)
+			try
 			{
-				ConfigFile.Write(ConfigName);
-				Log.Error($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
+				if (ConfigFile.Load(ConfigName) is int missing && missing > 0)
+				{
+					ConfigFile.Write(ConfigName);
+					Log.Warning($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
+				}
+			}
+			catch (JsonReaderException e)
+			{
+				// Exit if the config file could not be read
+				Log.Error(string.Concat($"Could not load configuration file", ": ", e.Message), e);
+				Log.Error($"Please check '{ConfigName}' for problems or delete it to generate a new configuration file.");
+				Console.ReadLine();
+				return;
 			}
 
 			// Initialize the remaining components of the logger. (Stuff about the logger that uses the config)
@@ -209,20 +220,25 @@ namespace Webserver
 			{
 				EnableRaisingEvents = true
 			};
-			configWatcher.Changed += fileChanged;
+			configWatcher.Changed += (sender, eventArgs) =>
+			{
+				configWatcher.EnableRaisingEvents = false;
+				fileChanged(sender, eventArgs);
+				configWatcher.EnableRaisingEvents = true;
+			};
 
 			/// Creates JsonDiffs and passes them to OnConfigChange
-			static void fileChanged(object sender, FileSystemEventArgs e)
+			static void fileChanged(object sender, FileSystemEventArgs eventArgs)
 			{
 				// Only continue if the changed file is actually the config file (may always be true due to the filter but whatever)
-				if (e.FullPath != Path.GetFullPath(ConfigName))
+				if (eventArgs.FullPath != Path.GetFullPath(ConfigName))
 					return;
 
 				JObject newConfig;
 				try
 				{
 					// Try to read the file to also test if if it is no longer in use.
-					using (var reader = new StreamReader(File.Open(e.FullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
+					using (var reader = new StreamReader(File.Open(ConfigName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
 						newConfig = (JObject)JsonConvert.DeserializeObject(reader.ReadToEnd());
 					
 					// If the file is empty it is probably still being written, so return and hope for another invocation.
@@ -230,15 +246,26 @@ namespace Webserver
 						return;
 
 					// Validate the new file
-					if (ConfigFile.Load(ConfigName) is int missing && missing > 0)
+					if (ConfigFile.Load(newConfig) is int missing && missing > 0)
 					{
 						ConfigFile.Write(ConfigName);
-						Log.Error($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
+						Log.Warning($"{missing} configuration setting(s) are missing. The missing settings have been inserted.");
 
 						// Read the file again
-						using StreamReader reader = File.OpenText(e.FullPath);
-						newConfig = (JObject)JsonConvert.DeserializeObject(reader.ReadToEnd());
+						using (var reader = new StreamReader(File.Open(ConfigName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
+							newConfig = (JObject)JsonConvert.DeserializeObject(reader.ReadToEnd());
+
+						// Additional null check since each read may return an empty file
+						if (newConfig == null)
+							return;
 					}
+				}
+				catch (JsonReaderException)
+				{
+					// If the config could not be loaded, rebuild it and return
+					Log.Error($"Could not load configuration file. Repairing '{ConfigName}'...");
+					ConfigFile.Write(ConfigName);
+					return;
 				}
 				catch (IOException)
 				{
