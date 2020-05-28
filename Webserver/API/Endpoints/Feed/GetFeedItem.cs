@@ -29,7 +29,7 @@ namespace Webserver.API.Endpoints.Feed
 		///		api/feedItem?category=[category]&limit=[x]&offset=[y]
 		///		
 		/// Feed items by search string, limit and offset:
-		///		api/feedItem?searchString=[string_to_search_for]&limit=[x]&offset=[y]
+		///		api/feedItem?search_string=[string_to_search_for]&limit=[x]&offset=[y]
 		/// </summary>
 		[Permission(PermissionLevel.User)]
 		public override void GET()
@@ -79,13 +79,13 @@ namespace Webserver.API.Endpoints.Feed
 			}
 			// If a category, a limit and an offset are given, the feed items that contain the given search string are requested, and that start
 			// at the offset until the limit is reached.
-			else if (Params.ContainsKey("searchString") && Params.ContainsKey("limit") && Params.ContainsKey("offset"))
+			else if (Params.ContainsKey("search_string") && Params.ContainsKey("limit") && Params.ContainsKey("offset"))
 			{
 				// Check if the limit and offset values are both non-negative integers.
 				if (int.TryParse(Params["limit"][0], out int limit) && int.TryParse(Params["offset"][0], out int offset) && limit >= 0 && offset >= 0)
 				{
 					// Get the feed items that contain the given search string from the database.
-					List<FeedItem> feedItems = FeedItem.GetFeeditemsBySearchString(Database, Params["searchString"][0], limit, offset);
+					List<FeedItem> feedItems = FeedItem.GetFeeditemsBySearchString(Database, Params["search_string"][0], limit, offset);
 
 					var json = JsonSerializer.Serialize(feedItems);
 					Response.Send(json.ToString(), HttpStatusCode.OK);
