@@ -78,7 +78,7 @@ namespace Webserver
 
 			//Deserialize data if necessary
 			if (dataValue.Type != JTokenType.Null)
-				result.Data = JsonConvert.DeserializeObject(dataValue.ToString(), NetworkUtils.JsonSettings);
+				result.Data = dataValue.Type == JTokenType.String? dataValue.ToString() : JsonConvert.DeserializeObject(dataValue.ToString(), NetworkUtils.JsonSettings);
 
 			return result;
 		}
