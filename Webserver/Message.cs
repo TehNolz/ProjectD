@@ -91,7 +91,7 @@ namespace Webserver
 				{ "MessageID", ID },
 				{ "Flags", (int)Flags },
 				{ "Type", Type.ToString() },
-				{ "Data", Data == null? null : (Data is JObject || Data is JArray? Data : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings)) }
+				{"Data", Data == null? null : Data is JObject || Data is JArray || Data is string ? Data : (object)Newtonsoft.Json.JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings)}
 			};
 
 		/// <summary>
