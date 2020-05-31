@@ -61,48 +61,57 @@ namespace Webserver.Webserver
 				RequestProvider request = context.Request;
 				ResponseProvider response = context.Response;
 
-				//Block requests that weren't sent through the load balancer.
-				//TODO: Actually make this work lol. RemoteEndPoint is incorrect somehow
-				/* if (Request.RemoteEndPoint.Address.ToString() != Balancer.MasterEndpoint.Address.ToString()){
-					Console.WriteLine("Refused request: Direct access attempt blocked.");
-					Response.Send(HttpStatusCode.Forbidden);
-					continue;
-				}*/
+				try
+				{
+					//Block requests that weren't sent through the load balancer.
+					//TODO: Actually make this work lol. RemoteEndPoint is incorrect somehow
+					/* if (Request.RemoteEndPoint.Address.ToString() != Balancer.MasterEndpoint.Address.ToString()){
+						Console.WriteLine("Refused request: Direct access attempt blocked.");
+						Response.Send(HttpStatusCode.Forbidden);
+						continue;
+					}*/
 
-				//Parse redirects
-				string url = Redirects.Resolve(request.Url.LocalPath.ToLower());
-				if (url == null)
-				{
-					Log.Error("Couldn't resolve URL; infinite redirection loop. URL: " + request.Url.LocalPath.ToLower());
-					continue;
-				}
+					//Parse redirects
+					string url = Redirects.Resolve(request.Url.LocalPath.ToLower());
+					if (url == null)
+					{
+						Log.Error("Couldn't resolve URL; infinite redirection loop. URL: " + request.Url.LocalPath.ToLower());
+						continue;
+					}
 
-				//Remove trailing /
-				if (url.EndsWith('/') && url.Length > 1)
-					url = url.Remove(url.Length - 1);
+					//Remove trailing /
+					if (url.EndsWith('/') && url.Length > 1)
+						url = url.Remove(url.Length - 1);
 
-				//Redirect if necessary
-				if (url != request.Url.LocalPath.ToLower())
-				{
-					Log.Trace("Request redirected to " + url);
-					response.Redirect = url;
-					response.Send(HttpStatusCode.PermanentRedirect);
-					continue;
-				}
+					//Redirect if necessary
+					if (url != request.Url.LocalPath.ToLower())
+					{
+						Log.Trace("Request redirected to " + url);
+						response.Redirect = url;
+						response.Send(HttpStatusCode.PermanentRedirect);
+						continue;
+					}
 
-				// If the url starts with /api, pass the request to the API Endpoints
-				// If the url starts with /chat, create a new chat connection
-				if (url.StartsWith("/chat"))
-				{
-					//ChatConnection.ProcessChatConnection(context, Database);
+					// If the url starts with /api, pass the request to the API Endpoints
+					// If the url starts with /chat, create a new chat connection
+					if (url.StartsWith("/chat"))
+					{
+						//ChatConnection.ProcessChatConnection(context, Database);
+					}
+					else if (url.StartsWith("/api/"))
+					{
+						APIEndpoint.ProcessEndpoint(context, Database);
+					}
+					else
+					{
+						Resource.ProcessResource(context);
+					}
 				}
-				else if (url.StartsWith("/api/"))
+				// Catch any unexpected error and respond with 500 Internal Server Error
+				catch (Exception e)
 				{
-					APIEndpoint.ProcessEndpoint(context, Database);
-				}
-				else
-				{
-					Resource.ProcessResource(context);
+					Log.Error(string.Concat($"Unhandled exception while processing request", ": ", e.Message), e);
+					response.Send(HttpStatusCode.InternalServerError);
 				}
 
 				//If Debug mode is enabled and the queue is empty, stop the worker.
