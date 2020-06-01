@@ -79,7 +79,8 @@ namespace Webserver.Config
 	[ConfigSection]
 	internal static class WebserverConfig
 	{
-		[Comment("The path to the folder that contains the webpages and other resources. Any file in this folder will be accessible through the webserver.")]
+		[Comment("The path to the folder that contains the webpages and other resources. Any file in this folder will be accessible through the webserver.\n" +
+			"Changing this path while the server is running can cause some errors until this configuration file has been fully reloaded.")]
 		public static string WWWRoot = "./wwwroot";
 
 		[Comment("The amount of worker threads the server will use. More threads means that more simultaneous requests can be processed, but increases hardware usage.")]

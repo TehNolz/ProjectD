@@ -79,7 +79,7 @@ namespace Webserver
 			var progress = new ProgressBar()
 			{
 				Prefix = "Configuring   [{3,-4:P0}]",
-				MaxProgress = 13
+				MaxProgress = 14
 			};
 			progress.Draw(progress.MinProgress);
 
@@ -93,7 +93,7 @@ namespace Webserver
 				Console.ReadKey();
 				return;
 			}
-			progress.Draw(1);
+			progress.Increment(1);
 
 			//If the VerifyIntegrity config option is enabled, check all files in wwwroot for corruption.
 			//If at least one checksum mismatch is found, pause startup and show a warning.
@@ -101,7 +101,7 @@ namespace Webserver
 			{
 				Log.Config("Checking file integrity...");
 				int Diff = Integrity.VerifyIntegrity(WebserverConfig.WWWRoot);
-				progress.Draw(1.5);
+				progress.Increment(0.5);
 				if (Diff > 0)
 				{
 					progress.Clear();
@@ -111,31 +111,34 @@ namespace Webserver
 					Console.ReadLine();
 					Integrity.VerifyIntegrity(WebserverConfig.WWWRoot, true);
 				}
-				Log.Config("No integrity issues found.");
+				else
+					Log.Config("No integrity issues found.");
+				progress.Increment(0.5);
 			}
-			progress.Draw(2);
+			else
+				progress.Increment(1);
 
 			//Crawl through the wwwroot folder to find all resources.
 			Resource.Crawl(WebserverConfig.WWWRoot);
-			progress.Draw(4);
+			progress.Increment(2);
 
 			//Parse Redirects.config to register all HTTP redirections.
 			Redirects.LoadRedirects("Redirects.config");
 			Log.Config($"Registered {Redirects.RedirectDict.Count} redirections");
-			progress.Draw(5);
+			progress.Increment(1);
 
 			// Initialize database
 			Database = ServerDatabase.CreateConnection(DatabaseName);
 			Database.BroadcastChanges = false;
-			progress.Draw(6);
+			progress.Increment(1);
 			InitDatabase(Database);
-			progress.Draw(7);
+			progress.Increment(1);
 
 			//Register all API endpoints, chat commands
 			APIEndpoint.DiscoverEndpoints();
-			progress.Draw(7.5);
+			progress.Increment(0.5);
 			ChatCommand.DiscoverCommands();
-			progress.Draw(8);
+			progress.Increment(0.5);
 
 			//Start load balancer
 			IPAddress localAddress;
@@ -143,15 +146,19 @@ namespace Webserver
 			{
 				localAddress = Balancer.Init();
 				Log.Config("Started load balancer.");
-				progress.Draw(9);
+				progress.Increment(1);
 			}
 			catch (Exception e)
 			{
+				progress.Clear();
 				e = e.InnerException ?? e;
 				Log.Error("The server could not start: " + e.Message, e);
 				Console.ReadLine();
 				return;
 			}
+
+			InitDatabaseContents(Database);
+			progress.Increment(1);
 
 			//Start distributor and worker threads
 			RequestWorker.Queue = new BlockingCollection<ContextProvider>();
@@ -161,13 +168,13 @@ namespace Webserver
 				var worker = new RequestWorker(Database.NewConnection());
 				workers.Add(worker);
 				worker.Start();
-				progress.Draw(10 + (1 / (i + 1)));
+				progress.Increment(1 / (double)WebserverConfig.WorkerThreadCount);
 			}
-			progress.Draw(11);
+			progress.Increment(1 / (double)WebserverConfig.WorkerThreadCount);
 
 			var distributor = new Thread(() => Distributor.Run(localAddress, BalancerConfig.HttpRelayPort));
 			distributor.Start();
-			progress.Draw(12);
+			progress.Increment(1);
 
 			if (!Balancer.IsMaster)
 			{
@@ -175,7 +182,7 @@ namespace Webserver
 				Balancer.Ready();
 				Log.Config($"Server is ready to accept connections");
 			}
-			progress.Draw(13);
+			progress.Increment(1);
 
 			// Add file watcher to the config file to allow for live config updates.
 			InitConfigWatcher();
@@ -260,10 +267,11 @@ namespace Webserver
 							return;
 					}
 				}
-				catch (JsonReaderException)
+				catch (JsonReaderException e)
 				{
 					// If the config could not be loaded, rebuild it and return
-					Log.Error($"Could not load configuration file. Repairing '{ConfigName}'...");
+					Log.Error($"Could not load configuration file: {e.Message}");
+					Log.Error($"Repairing '{ConfigName}'...");
 					ConfigFile.Write(ConfigName);
 					return;
 				}
@@ -350,7 +358,18 @@ namespace Webserver
 			database.CreateTableIfNotExists<Chatroom>();
 			database.CreateTableIfNotExists<Chatlog>();
 			database.CreateTableIfNotExists<ChatroomMembership>();
+		}
 
+		/// <summary>
+		/// Inserts the default data into the database.
+		/// </summary>
+		/// <remarks>
+		/// If <paramref name="database"/> is a <see cref="ServerDatabase"/>, then this should be called
+		/// after <paramref name="database"/> has synchronized.
+		/// </remarks>
+		/// <param name="database">The database to fill with default data.</param>
+		public static void InitDatabaseContents(SQLiteAdapter database)
+		{
 			//Create Admin account if it doesn't exist already;
 			if (database.Select<User>("Email = 'Administrator'").FirstOrDefault() == null)
 			{
@@ -385,8 +404,8 @@ namespace Webserver
 		/// <summary>
 		/// Handles changes made in the config file.
 		/// </summary>
-		/// <param name="_">The changes between the old and new config files.</param>
-		private static void OnConfigChange(JsonDiff _)
+		/// <param name="diff">The changes between the old and new config files.</param>
+		private static void OnConfigChange(JsonDiff diff)
 		{
 			// Always re-apply the logger settings
 			if (Log.Children.ElementAtOrDefault(0) is Logger consoleLogger)
@@ -398,6 +417,27 @@ namespace Webserver
 			{
 				fileLogger.LogLevel = Level.GetLevel(LoggingConfig.LogLevel);
 				(fileLogger.OutputStreams.First() as AdvancingWriter).Compression = LoggingConfig.LogfileCompression;
+			}
+
+			// If the webserver config was changed
+			if (diff.Changed.TryGetValue(nameof(WebserverConfig), out JObject webserverConfig))
+			{
+				// Recalculate checksums if WWWRoot was changed
+				if (webserverConfig.ContainsKey(nameof(WebserverConfig.WWWRoot)))
+				{
+					// Lock to prevent issues like InvalidOperationExceptions when the collection was changed
+					lock (Resource.WebPages)
+					{
+						Log.Fine($"WWWRoot changed, recalculating checksums and rebuilding the page list...");
+						Log.Debug(WebserverConfig.WWWRoot);
+						Log.Debug(webserverConfig["WWWRoot"].ToString());
+
+						Integrity.VerifyIntegrity(WebserverConfig.WWWRoot, true);
+						// Crawl creates the directory if it doesn't exist already
+						Resource.WebPages.Clear();
+						Resource.WebPages.AddRange(Resource.Crawl(WebserverConfig.WWWRoot));
+					}
+				}
 			}
 		}
 

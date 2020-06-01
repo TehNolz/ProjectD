@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -238,6 +239,23 @@ namespace Webserver
 			catch (InvalidCastException) { return false; }
 			return true;
 		}
+
+#nullable enable
+		/// <summary>
+		/// Returns the first file whose path equals <paramref name="path"/>, or <see langword="null"/>
+		/// if none were found.
+		/// </summary>
+		/// <param name="directory">The directory to search the <paramref name="path"/> for.</param>
+		/// <param name="path">The of the <see cref="FileInfo"/> to return. This path must point to a file that exists
+		/// within <paramref name="directory"/>, be it absolute or relative.</param>
+		/// <param name="caseSensitive">Sets whether the search is case sensitive or insensitive.</param>
+		public static FileInfo? FindFile(this DirectoryInfo directory, string path, bool caseSensitive = false)
+			=> (from FileInfo file in directory.EnumerateFiles("*", SearchOption.AllDirectories)
+				where caseSensitive
+					? file.FullName == Path.GetFullPath(path)
+					: file.FullName.ToLower() == Path.GetFullPath(path).ToLower()
+				select file).FirstOrDefault();
+#nullable restore
 	}
 
 	/// <summary>

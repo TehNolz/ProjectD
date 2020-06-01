@@ -208,7 +208,8 @@ namespace Webserver
 		private double _progress;
 
 		/// <summary>
-		/// Draws this progress bar to the console.
+		/// Draws this progress bar to the console. This also sets the <see cref="Progress"/> value
+		/// to the given <paramref name="progress"/>.
 		/// <para/>
 		/// This class' progress bars are always stacked at the bottom of the console window.
 		/// </summary>
@@ -221,6 +222,13 @@ namespace Webserver
 			if (ShouldDraw())
 				Draw();
 		}
+
+		/// <summary>
+		/// Increment this progress bar's <see cref="Progress"/> by the given <paramref name="amount"/>
+		/// and then draws this progress bar.
+		/// </summary>
+		/// <param name="amount"></param>
+		public void Increment(double amount) => Draw(Progress + amount);
 
 		/// <summary>
 		/// Clears this progress bar from the console.

@@ -58,6 +58,7 @@ namespace Webserver.Chat
 			}
 			catch (Exception e)
 			{
+				e = e.InnerException ?? e;
 				Log.Error($"{e.GetType().Name}: {e.Message}", e);
 				message.Reply(ChatStatusCode.InternalServerError);
 			}

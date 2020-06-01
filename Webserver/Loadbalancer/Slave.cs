@@ -68,14 +68,11 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server who sent the response</param>
 		/// <param name="message">The response</param>
+		[EventMessageType(MessageType.RegisterResponse)]
 		public static void RegistrationResponse(ServerMessage message)
 		{
-			//If this message isn't a registration response, ignore it.
-			if (message.Type != MessageType.RegisterResponse)
-				return;
-
 			//Register all servers the Master has informed us about.
-			var receivedAddresses = (List<IPAddress>)message.Data;
+			List<IPAddress> receivedAddresses = message.Data;
 			foreach (IPAddress address in receivedAddresses)
 			{
 				if (address.ToString() == Balancer.MasterServer.Address.ToString())
