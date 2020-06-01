@@ -31,8 +31,8 @@ namespace Config.Tests
 			var json = JObject.Parse(string.Join('\n', fileContents));
 
 			//Check if both comments were written properly.
-			Assert.IsTrue(fileContents[2] == "/*Hello World*/");
-			Assert.IsTrue(fileContents[11] == "/*Comment1*/");
+			Assert.AreEqual(fileContents[2], "    /*Hello World*/");
+			Assert.AreEqual(fileContents[11], "    /*Comment1*/");
 
 			//Check if all keys are present
 			Assert.IsTrue(json.ContainsKey("Section1"));
