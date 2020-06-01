@@ -80,7 +80,7 @@ namespace Config
 		{
 			// Load the given config json
 			var configJson = JObject.Parse(File.ReadAllText(Path));
-			return Load(configJson);
+			return Load(configJson, Assembly.GetCallingAssembly());
 		}
 		/// <summary>
 		/// Load the given <paramref name="configJson"/> into the <see cref="ConfigSectionAttribute"/> classes.
@@ -88,7 +88,16 @@ namespace Config
 		/// <param name="configJson">The <see cref="JObject"/> to load.</param>
 		/// <returns>The amount of missing values.</returns>
 		/// <exception cref="ArgumentNullException"><paramref name="configJson"/> is <see langword="null"/>.</exception>
-		public static int Load(JObject configJson)
+		public static int Load(JObject configJson) => Load(configJson, Assembly.GetCallingAssembly());
+		/// <summary>
+		/// <inheritdoc cref="Load(JObject)"/>
+		/// <para/>
+		/// Accepts a reference to an <see cref="Assembly"/> to search config sections for.
+		/// </summary>
+		/// <param name="configJson"><inheritdoc cref="Load(JObject)"/></param>
+		/// <param name="callingAssembly">The <see cref="Assembly"/> to search for classes with the
+		/// <see cref="ConfigSectionAttribute"/>.</param>
+		private static int Load(JObject configJson, Assembly callingAssembly)
 		{
 			if (configJson is null)
 				throw new ArgumentNullException(nameof(configJson));
@@ -96,7 +105,7 @@ namespace Config
 			int missing = 0;
 
 			// Loop through all types from the caller's assembly which have the ConfigSectionAttribute
-			foreach (Type configSection in Assembly.GetEntryAssembly().GetTypes().Where(x => x.GetCustomAttribute<ConfigSectionAttribute>() != null))
+			foreach (Type configSection in callingAssembly.GetTypes().Where(x => x.GetCustomAttribute<ConfigSectionAttribute>() != null))
 			{
 				if (!configJson.ContainsKey(configSection.Name))
 				{
@@ -119,7 +128,6 @@ namespace Config
 					field.SetValue(null, section[field.Name].ToObject(field.FieldType));
 				}
 			}
-
 			return missing;
 		}
 	}
