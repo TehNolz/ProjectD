@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
-
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -19,24 +20,25 @@ namespace Webserver.API.Endpoints.Account
 			var json = (JObject)Data;
 
 			//Get required fields
-			if (!Params.ContainsKey("email"))
+			if (!((JObject)Data).TryGetValue("ID", out Guid ID))
 			{
 				Response.Send("Missing fields", HttpStatusCode.BadRequest);
 				return;
 			}
 
-			//Administrator account can't be modified;
-			if (Params["email"][0] == "Administrator")
+			var account = Database.Select<User>("ID = @ID", new { ID }).FirstOrDefault();
+
+			//Check if the specified user exists. If it doesn't, send a 404 Not Found
+			if (account == null)
 			{
-				Response.Send(HttpStatusCode.Forbidden);
+				Response.Send("No such user", HttpStatusCode.NotFound);
 				return;
 			}
 
-			//Check if the specified user exists. If it doesn't, send a 404 Not Found
-			var Acc = User.GetByEmail(Database, Params["email"][0]);
-			if (Acc == null)
+			//Cancel if Email is "Administrator", because the built-in Admin shouldn't ever be deleted.
+			if (account.Email == "Administrator")
 			{
-				Response.Send("No such user", HttpStatusCode.NotFound);
+				Response.Send("Can't delete built-in administrator", HttpStatusCode.Forbidden);
 				return;
 			}
 
@@ -57,7 +59,7 @@ namespace Webserver.API.Endpoints.Account
 					Response.Send("New Email already in use", HttpStatusCode.BadRequest);
 					return;
 				}
-				Acc.Email = NewEmail;
+				account.Email = NewEmail;
 			}
 
 			//Change password if necessary
@@ -68,7 +70,7 @@ namespace Webserver.API.Endpoints.Account
 					Response.Send("Password does not meet requirements", HttpStatusCode.BadRequest);
 					return;
 				}
-				Acc.ChangePassword(Database, Password);
+				account.ChangePassword(Database, Password);
 			}
 
 			//Set optional fields
@@ -78,17 +80,17 @@ namespace Webserver.API.Endpoints.Account
 				{
 					continue;
 				}
-				PropertyInfo prop = Acc.GetType().GetProperty(x.Key);
+				PropertyInfo prop = account.GetType().GetProperty(x.Key);
 				if (prop == null)
 				{
 					continue;
 				}
 				dynamic Value = x.Value.ToObject(prop.PropertyType);
-				prop.SetValue(Acc, Value);
+				prop.SetValue(account, Value);
 			}
 
 			//Update DB row
-			Database.Update(Acc);
+			Database.Update(account);
 			Response.Send(HttpStatusCode.OK);
 		}
 	}
