@@ -55,7 +55,8 @@ namespace Webserver.Chat.Commands
 					//User doesn't have access yet, so give it.
 					membership = new ChatroomMembership() { UserID = userID, ChatroomID = chatroomID };
 					Chat.Database.Insert(membership);
-					BroadcastChatMessage(TargetType.Users, new List<Guid>() { userID }, (new ChatMessage(MessageType.ChatroomUpdated, chatroom.GetJson())));
+
+					BroadcastChatMessage(TargetType.Chatrooms, new List<Guid>() { chatroom.ID }, (new ChatMessage(MessageType.ChatroomUpdated, chatroom.GetJson())));
 				} else
 				{
 					//User already has access, so do nothing.
@@ -73,7 +74,8 @@ namespace Webserver.Chat.Commands
 				{
 					//User has access, so take it away.
 					Chat.Database.Delete(membership);
-					BroadcastChatMessage(TargetType.Users, new List<Guid>() { userID }, (new ChatMessage(MessageType.ChatroomDeleted, chatroomID)));
+					BroadcastChatMessage(TargetType.Chatrooms, new List<Guid>() { chatroom.ID }, (new ChatMessage(MessageType.ChatroomUpdated, chatroom.GetJson())));
+					BroadcastChatMessage(TargetType.Users, new List<Guid>() { user.ID }, new ChatMessage(MessageType.ChatroomDeleted, new JObject() { { "ChatroomID", chatroom.ID } }));
 				}
 			}
 		}
