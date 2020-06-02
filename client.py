@@ -1,14 +1,17 @@
 import requests
 import json
 
-# Cookies = dict(SessionID="E29VtNKW8EiQ67pRzcm0qA==")
+Cookies = dict(SessionID="pzS/vN7nzk2pArY7BHx89g==")
 
-# address = "http://localhost/api/login"
-# JSON = {
+address = "http://localhost/api/account"
+JSON = {
+    "Email": "TestUser@example.com",
+    "Password": "W@chtw00rd",
+    "RememberMe": True
+}
+response = requests.post(address, json=JSON, cookies=Cookies)
+print(response.status_code)
+print(response.content)
+print(response)
 
-# }
-# response = requests.get(address, json=JSON, cookies=Cookies)
-# print(response.headers)
-# print(response.content)
-# print(response)
-# print("---")
+print(response.cookies)

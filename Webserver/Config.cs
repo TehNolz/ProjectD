@@ -53,13 +53,34 @@ namespace Webserver.Config
 	}
 
 	/// <summary>
+	/// Describes everything related to the logger.
+	/// </summary>
+	[ConfigSection]
+	internal static class LoggingConfig
+	{
+		[Comment("The path to the folder where the server logs will be stored. This folder will be created automatically.")]
+		public static string LogDir = "Logs";
+		[Comment("Defines the time it takes before a logfile is archived and a new one is created.")]
+		public static TimeSpan LogArchivePeriod = TimeSpan.FromHours(6);
+		[Comment("Enables or disables whether the final log files will be compressed into a zip archive or not.")]
+		public static bool LogfileCompression = true;
+		[Comment("Defines the log level used for the log files written to the log directory. Available log levels are: OFF, DEBUG, FATAL, ERROR, WARN, INFO, CONFIG, FINE, TRACE, ALL.")]
+		public static string LogLevel = "ALL";
+		[Comment("Defines the log level used by the console. Available log levels are: OFF, DEBUG, FATAL, ERROR, WARN, INFO, CONFIG, FINE, TRACE, ALL.")]
+		public static string ConsoleLogLevel = "TRACE";
+		[Comment("Enables or disables the pattern and word highlighting in the console log. Disabling this may slightly increase performance.")]
+		public static bool ConsoleHighlighting = true;
+	}
+
+	/// <summary>
 	/// JSON configuration section for the webserver functionality such as thread count.
 	/// This class' values will be replaced by the values from Config.json on startup.
 	/// </summary>
 	[ConfigSection]
 	internal static class WebserverConfig
 	{
-		[Comment("The path to the folder that contains the webpages and other resources. Any file in this folder will be accessible through the webserver.")]
+		[Comment("The path to the folder that contains the webpages and other resources. Any file in this folder will be accessible through the webserver.\n" +
+			"Changing this path while the server is running can cause some errors until this configuration file has been fully reloaded.")]
 		public static string WWWRoot = "./wwwroot";
 
 		[Comment("The amount of worker threads the server will use. More threads means that more simultaneous requests can be processed, but increases hardware usage.")]
@@ -82,11 +103,16 @@ namespace Webserver.Config
 	internal static class DatabaseConfig
 	{
 		[Comment("Defines the time between database backups.")]
-		public static TimeSpan BackupPeriod = TimeSpan.FromDays(2);
+		public static TimeSpan BackupPeriod = TimeSpan.FromHours(6);
 		[Comment("The path to the directory for database backups. This folder will be created automatically.")]
 		public static string BackupDir = "Backups";
-		[Comment("Defines whether the database backups are shrunk and compressed into a .zip file. " +
+		[Comment("Defines whether the database backups are shrunk and compressed into a .zip file.\n" +
 			"Note: This resizes the backup files and may lead to fragmentation on hard drive disks.")]
 		public static bool CompressBackups = true;
+		[Comment("Sets the chunk size (in bytes) used to transfer database backups between servers. Accepts decimal and binary byte units. (e.g. 2 KiB, 0.5MB, 2E+2 B, 1024)")]
+		public static string BackupTransferChunkSize = "32 KiB";
+		[Comment("Sets the amount of database changes that are sent at once when a server is synchronizing it's database with the master server.\n" +
+			"Higher chunk sizes will keep the master server too busy with sending one message, whereas lower chunk sizes will lead to increased I/O time.")]
+		public static uint SynchronizeChunkSize = 800;
 	}
 }

@@ -10,11 +10,12 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
-
+using Webserver.Chat.Commands;
 using Webserver.LoadBalancer;
 using Webserver.Models;
 using Webserver.Webserver;
 
+using static Webserver.Chat.Chat;
 using static Webserver.Program;
 
 namespace Webserver.Chat
@@ -41,7 +42,7 @@ namespace Webserver.Chat
 		/// <summary>
 		/// The chatrooms this user has joined.
 		/// </summary>
-		public IEnumerable<Chatroom> Chatrooms { get => Chatroom.GetAccessableByUser(ChatManagement.Database, User); }
+		public IEnumerable<Chatroom> Chatrooms => Chatroom.GetAccessableByUser(Chat.Database, User);
 
 		/// <summary>
 		/// The user this connection belongs to.
@@ -51,7 +52,7 @@ namespace Webserver.Chat
 		/// <summary>
 		/// Cancellation token for async requests.
 		/// </summary>
-		private CancellationTokenSource TokenSource { get; set; } = new CancellationTokenSource();
+		private CancellationTokenSource TokenSource { get; set; }
 
 		#region Delegates
 		/// <summary>
@@ -79,6 +80,8 @@ namespace Webserver.Chat
 				throw new ArgumentException("Not a websocket request.");
 			Context = context;
 
+			TokenSource = new CancellationTokenSource();
+
 			#region Authentication
 			//Authenticate this user.
 			//TODO: Move this + API authentication to a function?
@@ -93,7 +96,7 @@ namespace Webserver.Chat
 			}
 
 			//Check if a valid session still exists
-			var session = Session.GetSession(ChatManagement.Database, cookie.Value);
+			var session = Session.GetSession(Chat.Database, cookie.Value);
 			if (session == null)
 			{
 				Log.Trace("Rejected websocket request; no session.");
@@ -102,13 +105,14 @@ namespace Webserver.Chat
 			}
 
 			//The session is valid. Renew the session and retrieve user info.
-			session.Renew(ChatManagement.Database);
-			User = ChatManagement.Database.Select<User>("Email = @email", new { email = session.UserEmail }).FirstOrDefault();
+			session.Renew(Chat.Database);
+			User = Chat.Database.Select<User>("Email = @email", new { email = session.UserEmail }).FirstOrDefault();
 			#endregion
 
 			//Open the connection.
 			OpenConnection();
 		}
+
 		/// <summary>
 		/// Starts the chat connection. Not included in the constructor because this must be done async.
 		/// </summary>
@@ -121,37 +125,31 @@ namespace Webserver.Chat
 			//Start receiver and sender threads
 			ReceiverThread = new Thread(() => Receive());
 			SenderThread = new Thread(() => Sender());
-			KeepAliveThread = new Thread(() => KeepAlive());
 			ReceiverThread.Start();
 			SenderThread.Start();
-			KeepAliveThread.Start();
 
 			ActiveConnections.Add(this);
 
-			//Send channel info to the client.
-			Send(new ChatMessage(MessageType.ChatroomUpdate, Chatroom.GetJsonBulk(Chatrooms)));
-		}
+			UserStatus.UserConnect(User);
 
-		/// <summary>
-		/// Checks connection status.
-		/// </summary>
-		public Thread KeepAliveThread;
-		/// <inheritdoc cref="KeepAliveThread"/>
-		public void KeepAlive()
-		{
-			while (!Disposed)
+			//Get user info
+			//TODO Reduce database + master server calls
+			var users = new JArray();
+			foreach (Guid ID in (from C in Chatrooms from U in C.GetUsers() select U).Distinct())
 			{
-				if (Client.WebSocket.State == WebSocketState.CloseReceived)
-				{
-					Log.Debug("Websocket connection closed by relay.");
-					return;
-				}
-				else if (Client.WebSocket.State == WebSocketState.Aborted)
-				{
-					Log.Debug("Lost websocket connection to relay.");
-					return;
-				}
+				User user = Chat.Database.Select<User>("ID = @ID", new { ID }).First();
+				JObject json = user.GetJson();
+				json.Add("Status", (int)(GetConnectionCount(user) >= 1 ? UserStatuses.Online : UserStatuses.Offline));
+				users.Add(json);
 			}
+
+			//Send info to the client.
+			Send(new ChatMessage(MessageType.ChatInfo, new JObject()
+			{
+				{"Chatrooms",  Chatroom.GetJsonBulk(Chatrooms)},
+				{"CurrentUser", User.GetJson() },
+				{"Users", users }
+			}));
 		}
 
 		/// <summary>
@@ -165,15 +163,22 @@ namespace Webserver.Chat
 			{
 				while (!Disposed)
 				{
-					byte[] receiveBuffer = new byte[1024];
-					await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
+					WebSocketReceiveResult receiveResult = null;
+					var buffer = new List<byte>();
+					while (receiveResult == null || receiveResult.EndOfMessage == false)
+					{
+						byte[] receiveBuffer = new byte[1024];
+						receiveResult = await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
+						Array.Resize(ref receiveBuffer, receiveResult.Count);
+						buffer.AddRange(receiveBuffer);
+					}
 					if (Client.WebSocket.State != WebSocketState.Open)
 						return;
 
 					ChatMessage message;
 					try
 					{
-						message = ChatMessage.FromBytes(receiveBuffer);
+						message = ChatMessage.FromBytes(buffer.ToArray());
 					}
 					catch (JsonReaderException e)
 					{
@@ -190,7 +195,7 @@ namespace Webserver.Chat
 						ChatCommand.ProcessChatCommand(message);
 				}
 			}
-			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
+			catch (Exception e) when (e is WebSocketException || e is OperationCanceledException)
 			{
 				Dispose();
 			}
@@ -207,19 +212,30 @@ namespace Webserver.Chat
 		/// <inheritdoc cref="SenderThread"/>
 		private async void Sender()
 		{
-			while (!Disposed)
-				await Client.WebSocket.SendAsync(TransmitQueue.Take().GetBytes(), WebSocketMessageType.Text, true, TokenSource.Token);
+			try
+			{
+				while (!Disposed)
+				{
+					ChatMessage message = TransmitQueue.Take(TokenSource.Token);
+					await Client.WebSocket.SendAsync(message.GetBytes(), WebSocketMessageType.Text, true, TokenSource.Token);
+				}
+			}
+			catch (Exception e) when (e is WebSocketException || e is OperationCanceledException)
+			{
+				Dispose();
+			}
 		}
 
 		/// <summary>
 		/// Sends data to the client on the other side of this relay connection.
+		/// Does nothing if this connection has been closed.
 		/// </summary>
 		/// <param name="message">The message to send.</param>
 		public void Send(ChatMessage message)
 		{
 			// Throw an exception if this connection is no longer active.
 			if (Disposed)
-				throw new ObjectDisposedException(GetType().Name);
+				return;
 
 			// Add message to the queue
 			TransmitQueue.Add(message);
@@ -294,18 +310,25 @@ namespace Webserver.Chat
 		/// <summary>
 		/// Whether this connection was disposed.
 		/// </summary>
-		private bool Disposed = false;
+		private bool Disposed { get; set; } = false;
 		/// <summary>
 		/// Dispose this connection, stopping all threads and informing the relay.
 		/// </summary>
 		public void Dispose()
 		{
 			if (Disposed)
-				throw new ObjectDisposedException("Already disposed.");
-
+				return;
 			Disposed = true;
-			Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
+
+			Log.Debug($"Relay disposed ({Client.WebSocket.State})");
 			TokenSource.Cancel();
+			try
+			{
+				Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", CancellationToken.None);
+			}
+			catch (WebSocketException) { }
+
+			UserStatus.UserDisconnect(User);
 
 			ActiveConnections.Remove(this);
 		}

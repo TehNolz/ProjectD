@@ -1,4 +1,6 @@
 
+using Newtonsoft.Json;
+
 using System;
 using System.Collections.Generic;
 
@@ -13,6 +15,7 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// The <see cref="ServerConnection"/> that received this message. Null if this message was constructed locally.
 		/// </summary>
+		[JsonIgnore]
 		public ServerConnection Connection { get; set; }
 
 		/// <summary>

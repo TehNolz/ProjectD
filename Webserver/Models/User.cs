@@ -1,6 +1,8 @@
 using Database.SQLite;
 using Database.SQLite.Modeling;
 
+using Newtonsoft.Json.Linq;
+
 using System;
 using System.Linq;
 using System.Security.Cryptography;
@@ -16,6 +18,7 @@ namespace Webserver.Models
 		public string Email { get; set; }
 		public string PasswordHash { get; set; }
 		public PermissionLevel PermissionLevel { get; set; } = PermissionLevel.User;
+		public virtual bool isAdmin { get => PermissionLevel == PermissionLevel.Admin; }
 
 		/// <summary>
 		/// Parameterless constructor to make SQLiteAdapter happy.
@@ -27,12 +30,11 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="email">The user's email address</param>
 		/// <param name="password">The user's password. This will be converted into a salted hash and stored in the PasswordHash field.</param>
-		public User(SQLiteAdapter database, string email, string password)
+		public User(string email, string password)
 		{
 			Email = email;
 			Username = email.Split('@').First();
 			PasswordHash = CreateHash(password, email);
-			database.Insert(this);
 		}
 
 		/// <summary>
@@ -73,6 +75,17 @@ namespace Webserver.Models
 		/// <param name="email">The email to search for</param>
 		/// <returns>The user with the specified email address. Null if the user doesn't exist.</returns>
 		public static User GetByEmail(SQLiteAdapter database, string email) => database.Select<User>("Email = @email", new { email }).FirstOrDefault();
+
+		/// <summary>
+		/// Get a JSON object representing this user. Possibly sensitive data is stripped out.
+		/// </summary>
+		/// <returns></returns>
+		public JObject GetJson() => new JObject()
+		{
+			{"ID", ID },
+			{"Username", Username },
+			{"PermissionLevel", (int)PermissionLevel }
+		};
 	}
 
 	public enum PermissionLevel

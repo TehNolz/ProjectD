@@ -15,19 +15,9 @@ namespace Webserver.Chat
 	public class ChatMessage : Message
 	{
 		/// <summary>
-		/// Internal constructor. Do not use.
+		/// Create a new chat message.
 		/// </summary>
 		public ChatMessage(MessageType type, object data) : base(type, data) { }
-
-		/// <summary>
-		/// Create a new chat message
-		/// </summary>
-		/// <param name="command">The command this message will call</param>
-		/// <param name="data">The data attached to this message</param>
-		public ChatMessage(string command, object data) : base(MessageType.ChatMessage, data)
-		{
-			Command = command;
-		}
 
 		/// <summary>
 		/// The command this message will call.
@@ -102,7 +92,10 @@ namespace Webserver.Chat
 		/// <returns></returns>
 		public static ChatMessage FromJson(JObject json)
 		{
-			json["Type"] = MessageType.ChatMessage.ToString();
+			if (!json.ContainsKey("Type"))
+				json["Type"] = MessageType.ChatMessage.ToString();
+			if (!json.ContainsKey("Flags"))
+				json["Flags"] = 0;
 			if (!json.TryGetValue("Command", out string command))
 				throw new JsonReaderException("Invalid JSON: missing Command");
 			ChatMessage result = FromJson<ChatMessage>(json);
@@ -136,15 +129,15 @@ namespace Webserver.Chat
 		//The client was a good boy. (200-299)
 		OK = 200,
 
-		//The client tried to access something it doesn't have permission for (300-399)
-		ChatroomAccessDenied = 300,
-		CommandAccessDenied = 301,
-
 		//The client fucked up. (400-499)
-		BadMessageType = 400,
+		BadMessageCommand = 400,
 		BadMessageData = 401,
 		NoSuchChatroom = 402,
-		AlreadyExists = 403,
+		NoSuchUser = 403,
+		NotFound = 404,
+		AlreadyExists = 405,
+		ChatroomAccessDenied = 406,
+		CommandAccessDenied = 407,
 
 		//We fucked up. (500-599)
 		InternalServerError = 500,

@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+
+using Webserver.API.Endpoints;
 using Webserver.Chat;
-using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
 
@@ -32,10 +33,10 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += RegistrationResponse;
 			ServerConnection.MessageReceived += NewServer;
 			ServerConnection.MessageReceived += OnDbChange;
+			ServerConnection.MessageReceived += Example.TestHandler;
 
 			//Chat system events
-			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
-			ServerConnection.MessageReceived += Chatroom.ChatroomUpdateHandler;
+			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;
 
 			//Create a TcpClient.
 			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
@@ -67,14 +68,11 @@ namespace Webserver.LoadBalancer
 		/// </summary>
 		/// <param name="server">The master server who sent the response</param>
 		/// <param name="message">The response</param>
+		[EventMessageType(MessageType.RegisterResponse)]
 		public static void RegistrationResponse(ServerMessage message)
 		{
-			//If this message isn't a registration response, ignore it.
-			if (message.Type != MessageType.RegisterResponse)
-				return;
-
 			//Register all servers the Master has informed us about.
-			var receivedAddresses = (List<IPAddress>)message.Data;
+			List<IPAddress> receivedAddresses = message.Data;
 			foreach (IPAddress address in receivedAddresses)
 			{
 				if (address.ToString() == Balancer.MasterServer.Address.ToString())
@@ -111,6 +109,8 @@ namespace Webserver.LoadBalancer
 		/// <param name="message"></param>
 		public static void TimeoutMessage(ServerMessage message)
 		{
+			if (message is null)
+				throw new ArgumentNullException(nameof(message));
 			if (message.Type != MessageType.Timeout)
 				return;
 

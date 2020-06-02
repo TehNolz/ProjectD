@@ -4,17 +4,21 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+
+using Webserver.API.Endpoints;
 using Webserver.Chat;
 using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
 
 using static Webserver.Program;
+using static Webserver.Config.DatabaseConfig;
 
 namespace Webserver.LoadBalancer
 {
@@ -23,29 +27,36 @@ namespace Webserver.LoadBalancer
 		/// <summary>
 		/// Server registration thread. Waits for incoming registration requests from new slaves.
 		/// </summary>
-		public static Thread RegistryThread;
+		private static Thread RegistryThread;
 		/// <summary>
 		/// Discovery response thread. Waits for- and responds to incoming discovery requests.
 		/// </summary>
-		public static Thread DiscoveryThread;
+		private static Thread DiscoveryThread;
 
 		/// <summary>
 		/// Promotes this server to master.
 		/// </summary>
 		public static void Init()
 		{
-			Log.Config("Server is running as master");
+			Log.Info("Server is running as master");
 			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
 			ServerProfile.KnownServers.TryAdd(Balancer.LocalAddress, new ServerProfile(Balancer.LocalAddress));
+			Balancer.MasterServer = null;
 
 			//Bind events
 			ServerConnection.ServerTimeout += OnServerTimeout;
+			ServerConnection.MessageReceived += OnDbSyncBackupStart;
+			ServerConnection.MessageReceived += OnDbSyncBackup;
+			ServerConnection.MessageReceived += OnDbSyncStart;
+			ServerConnection.MessageReceived += OnDbSync;
 			ServerConnection.MessageReceived += OnDbChange;
-			ServerConnection.MessageReceived += OnDbSynchronize;
+			ServerConnection.MessageReceived += OnServerStateChange;
+			ServerConnection.MessageReceived += Example.TestHandler;
 
 			//Chat system events
-			ServerConnection.MessageReceived += UserMessage.UserMessageHandler;
-			ServerConnection.MessageReceived += Chatroom.ChatroomUpdateHandler;
+			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;
+			ServerConnection.MessageReceived += UserStatus.UserConnectionHandler;
+			ServerConnection.MessageReceived += UserStatus.UserDisconnectionHandler;
 
 			//Create TcpListener using either the first available IP address in the config, or the address that was supplied.
 			var listener = new TcpListener(Balancer.LocalAddress, BalancerConfig.BalancerPort);
@@ -57,7 +68,7 @@ namespace Webserver.LoadBalancer
 			RegistryThread.Start();
 			Listener.ListenerThread = new Thread(() => Listener.Listen(((IPEndPoint)listener.LocalEndpoint).Address, BalancerConfig.HttpPort));
 			Listener.ListenerThread.Start();
-
+			
 			Log.Config("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
 		}
 
@@ -68,32 +79,136 @@ namespace Webserver.LoadBalancer
 		private static void BroadcastHandler(ServerMessage message)
 		{
 			// If this message is a broadcast, send it to all servers except the one it came from.
-			if (message.isBroadcast && message.ID == null)
+			if (message.isBroadcast)
 			{
 				var destinations = new List<ServerConnection>(ServerProfile.ConnectedServers);
 				destinations.Remove(message.Connection);
-				message.Send(destinations);
+				if (message.ID == null)
+				{
+					message.Send(destinations);
+				}
+				else
+				{
+					message.Reply(ServerConnection.BroadcastAndWait(message, destinations));
+				}
 			}
 		}
 
-		private static void OnDbSynchronize(ServerMessage message)
+		#region Database Events
+		/// <summary>
+		/// Accepts a single <see cref="long"/> as version number and replies with any of the following:
+		/// <list type="bullet">
+		/// <item>The filename of the <see cref="DatabaseBackup.LastBackup"/> if the given version is less than the master database version.</item>
+		/// <item><see langword="null"/> if the version matches that of the master database.</item>
+		/// <item>A error JSON describing that the version is invalid (larger than the master database).</item>
+		/// </list>
+		/// <para/>
+		/// This also sets the <see cref="ServerConnection.State"/> of the <paramref name="message"/>
+		/// connection to <see cref="ServerState.Synchronizing"/>.
+		/// </summary>
+		[EventMessageType(MessageType.DbSyncBackupStart)]
+		private static void OnDbSyncBackupStart(ServerMessage message)
 		{
-			// Check if the type is QueryInsert
-			if (message.Type != MessageType.DbSync)
-				return;
+			long slaveVersion = message.Data;
+			long minVersion = Program.Database.UserVersion;
+			long maxVersion = Program.Database.ChangelogVersion;
 
-			if (message.Data is null)
+			if (slaveVersion < minVersion)
 			{
-				// Send the current database version and typelist to begin the chunked synchronization
-				message.Reply(new { Types = JArray.FromObject(Program.Database.TypeList), Program.Database.ChangelogVersion });
+				// Send the name and length of the last backup file
+				FileInfo backup = DatabaseBackup.LastBackup;
+				message.Reply(new
+				{
+					backup.Name,
+					backup.Length
+				});
+			}
+			else if (slaveVersion >= minVersion && slaveVersion <= maxVersion)
+				message.Reply(null);
+			else
+				message.Reply(new JObject() { { "error", "Database version is larger than the master database version." } });
+		}
+		/// <summary>
+		/// Accepts an offset value as <see cref="long"/>, a data amount value as <see cref="int"/> and
+		/// filename as string.
+		/// <para/>
+		/// Responds with the following:
+		/// <list type="bullet">
+		/// <item>A chunk of the database backup file with a length of <see cref="BackupTransferChunkSize"/>.</item>
+		/// <item>The string <c>"file not found"</c> if the given filepath is not a backup file.</item>
+		/// <item>The string <c>"error"</c> if an error ocurred while trying to read the backup file.</item>
+		/// </list>
+		/// </summary>
+		[EventMessageType(MessageType.DbSyncBackup)]
+		private static void OnDbSyncBackup(ServerMessage message)
+		{
+			string fileName = message.Data.FileName;
+			long offset = message.Data.Offset;
+			long amount = message.Data.Amount;
+
+			// Get the fileInfo of the backup
+			var backup = new FileInfo(Path.Combine(BackupDir, fileName));
+
+			if (!backup.Exists)
+			{
+				message.Reply("file not found");
 				return;
 			}
+
+			try
+			{
+				// Open, seek and read a chunk from the database backup
+				using FileStream fs = backup.OpenRead();
+				byte[] buffer = new byte[amount];
+				fs.Seek(offset, default);
+				fs.Read(buffer);
+				// Send the chunk
+				message.Reply(buffer);
+			}
+			catch (IOException e)
+			{
+				Log.Error(string.Concat(e.GetType().Name, ": ", e.Message), e);
+				message.Reply("error");
+			}
+		}
+
+		/// <summary>
+		/// Always replies with an array of <see cref="ModelType"/>s and the current
+		/// <see cref="ServerDatabase.ChangelogVersion"/>.
+		/// <para/>
+		/// This also sets the <see cref="ServerConnection.State"/> of the <paramref name="message"/>
+		/// connection to <see cref="ServerState.Synchronizing"/>.
+		/// </summary>
+		[EventMessageType(MessageType.DbSyncStart)]
+		private static void OnDbSyncStart(ServerMessage message)
+		{
+			message.Reply(new
+			{
+				Types = JArray.FromObject(Program.Database.TypeList),
+				Version = Program.Database.ChangelogVersion
+			});
+			message.Connection.State = ServerState.Synchronizing;
+		}
+		/// <summary>
+		/// Accepts a version as <see cref="long"/> and amount as <see cref="int"/>.
+		/// Always responds with a range of <see cref="Changes"/> objects with an amount
+		/// equal or less than the amount parameter.
+		/// </summary>
+		[EventMessageType(MessageType.DbSync)]
+		private static void OnDbSync(ServerMessage message)
+		{
+			long version = message.Data.Version;
+			int amount = message.Data.Amount;
 
 			// Get `amount` of changes and send them in the reply
 			IEnumerable<JObject> changes = Program.Database.GetNewChanges((long)message.Data.Version, (int)message.Data.Amount).Select(x => (JObject)x);
 			message.Reply(JArray.FromObject(changes));
 		}
 
+		/// <summary>
+		/// Accepts a <see cref="Changes"/> object from a slave, inserts it and returns it with a new id.
+		/// </summary>
+		[EventMessageType(MessageType.DbChange)]
 		private static void OnDbChange(ServerMessage message)
 		{
 			// Check if the type is DbChange
@@ -104,6 +219,25 @@ namespace Webserver.LoadBalancer
 			Program.Database.Apply(changes);
 
 			changes.Broadcast();
+		}
+		#endregion
+
+		/// <summary>
+		/// Accepts a state as <see cref="ServerState"/> and updates the state of the
+		/// <see cref="ServerMessage.Connection"/> to the given state.
+		/// </summary>
+		[EventMessageType(MessageType.StateChange)]
+		private static void OnServerStateChange(ServerMessage message)
+		{
+			try
+			{
+				message.Connection.State = (ServerState)message.Data;
+				Log.Trace($"Server {message.Connection.Address} changed state to {message.Connection.State}");
+			}
+			catch (InvalidCastException e)
+			{
+				Log.Error(string.Concat($"OnServerStateChange received an invalid state value from server {message.Connection.Address}", ": ", e.Message), e);
+			}
 		}
 
 		/// <summary>

@@ -24,7 +24,7 @@ namespace Webserver.Chat.Commands
 			}
 
 			//Check if the specified chatroom exists
-			Chatroom chatroom = ChatManagement.Database.Select<Chatroom>("ID = @id", new { id = chatroomID }).FirstOrDefault();
+			Chatroom chatroom = Chat.Database.Select<Chatroom>("ID = @id", new { id = chatroomID }).FirstOrDefault();
 			if (chatroom == null)
 			{
 				Message.Reply(ChatStatusCode.NoSuchChatroom);
@@ -33,12 +33,18 @@ namespace Webserver.Chat.Commands
 
 			//Check if the Amount and Start fields are correct
 			if (amount < 0 || amount > 150)
+			{
 				Message.Reply(ChatStatusCode.BadMessageData, "Amount out of range");
+				return;
+			}
 			if (start < 1)
+			{
 				Message.Reply(ChatStatusCode.BadMessageData, "Start out of range");
+				return;
+			}
 
 			//Check if the user is allowed to access this chatroom
-			if (!chatroom.CanUserAccess(ChatManagement.Database, Message.User))
+			if (!chatroom.CanUserAccess(Chat.Database, Message.User))
 			{
 				Message.Reply(ChatStatusCode.ChatroomAccessDenied);
 				return;

@@ -16,10 +16,10 @@ namespace Webserver.API.Endpoints.Account
 		{
 			//Get required fields
 			var users = new List<User>();
-			if (Params.ContainsKey("email"))
+			if (Params.ContainsKey("Email"))
 			{
 				//Get all user objects
-				foreach (string email in Params["email"])
+				foreach (string email in Params["Email"])
 				{
 					if (email == "CurrentUser")
 					{

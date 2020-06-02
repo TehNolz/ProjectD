@@ -4,26 +4,24 @@ import uuid
 import json
 
 def on_message(ws, message):
-    print("text: "+message)
+    print(message)
+    print(len(message))
 
 def on_close(ws):
     print("### closed ###")
 
 def on_open(ws):
-    while(True):
-        message = json.dumps({
-            "MessageID": str(uuid.uuid1()),
-            "Flags": 000,
-            "Type": "Chat",
-            "Command": "EditChatroom",
-            "Data": {
-                "ChatroomID": "36b573d8-ea19-4f08-9ddb-a8606af20951",
-                "Setting": "Name",
-                "NewValue": "MemeChannel",
-            }
-        })
-        ws.send(message)
-        break
+    message = json.dumps({
+        "MessageID": str(uuid.uuid1()),
+        "Command": "ChatMessage",
+        "Data": {
+            "ChatroomID": "6f80a860-2f85-4fb2-b8b4-e3263b56047a",
+            "MessageText": "hello"
+            #"UserID": "32226f1a-789c-44b6-9196-24eff4d8c06e",
+            #"AllowAccess": True
+        }
+    })
+    ws.send(message)
 
 def GetSessionID(email = "Administrator", password = "W@chtw00rd"):
     address = "http://localhost/api/login"
@@ -38,6 +36,6 @@ if __name__ == "__main__":
         on_message = on_message,
         on_close = on_close,
         on_open = on_open,
-        cookie="SessionID="+GetSessionID(input("Username:"), input("Password:"))
+        cookie="SessionID="+GetSessionID( input("Username:"))#, input("Password:")
     )
     ws.run_forever()

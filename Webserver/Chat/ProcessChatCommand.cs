@@ -29,7 +29,7 @@ namespace Webserver.Chat
 			).FirstOrDefault();
 			if (commandType == null)
 			{
-				message.Reply(ChatStatusCode.BadMessageType);
+				message.Reply(ChatStatusCode.BadMessageCommand);
 				return;
 			}
 
@@ -47,6 +47,7 @@ namespace Webserver.Chat
 				if (message.User.PermissionLevel < attribute.PermissionLevel)
 				{
 					message.Reply(ChatStatusCode.CommandAccessDenied);
+					return;
 				}
 			}
 
@@ -57,6 +58,7 @@ namespace Webserver.Chat
 			}
 			catch (Exception e)
 			{
+				e = e.InnerException ?? e;
 				Log.Error($"{e.GetType().Name}: {e.Message}", e);
 				message.Reply(ChatStatusCode.InternalServerError);
 			}

@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using Newtonsoft.Json.Linq;
-
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
@@ -19,9 +19,10 @@ namespace WebserverTests.API_Endpoints.Tests
 		[TestMethod]
 		public void DELETE_ValidArguments()
 		{
-			new User(Database, "user@example.com", "SomePassword");
+			var account = new User("user@example.com", "SomePassword");
+			Database.Insert(account);
 			ResponseProvider Response = ExecuteSimpleRequest("/api/account", HttpMethod.DELETE, new JObject() {
-				{"Email", "user@example.com"},
+				{"ID", account.ID},
 			}, contentType: "application/json");
 
 			Assert.IsTrue(Response.StatusCode == HttpStatusCode.OK);
@@ -32,14 +33,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		private static IEnumerable<object[]> InvalidDeleteTestData => new[]{
 			new object[] {
 				new JObject() {
-					{"Email", "Administrator"},
-				},
-				HttpStatusCode.Forbidden,
-				"Can't delete built-in administrator"
-			},
-			new object[] {
-				new JObject() {
-					{"Email", "user@example.com"},
+					{"ID", Guid.Empty},
 				},
 				HttpStatusCode.NotFound,
 				"No such user"

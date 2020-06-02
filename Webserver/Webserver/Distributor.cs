@@ -23,7 +23,7 @@ namespace Webserver.Webserver
 			Listener.Prefixes.Add($"http://{address}:{port}/");
 			Listener.Start();
 
-			Log.Config($"Distributor listening on {address}:{port}");
+			Log.Info($"Distributor listening on {address}:{port}");
 			while (true)
 			{
 				try
@@ -41,7 +41,7 @@ namespace Webserver.Webserver
 						continue;
 					}
 
-					Log.Trace($"Received request from {context.Request.RemoteEndPoint}");
+					Log.Trace($"Received {context.Request.HttpMethod} request from {context.Request.RemoteEndPoint}");
 					RequestWorker.Queue.Add(context);
 				}
 				catch (HttpListenerException e)

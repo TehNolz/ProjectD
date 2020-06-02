@@ -64,9 +64,7 @@ namespace Webserver.Chat
 			//TODO: Replace with single linq query? ¯\_(ツ)_/¯
 			var connectionCounts = ServerProfile.KnownServers.Values.ToDictionary(t => t, t => 0);
 			foreach (WebSocketRelay relay in activeRelays)
-			{
 				connectionCounts[relay.Slave]++;
-			}
 			Slave = connectionCounts.First((x) => x.Value == connectionCounts.Values.Min()).Key;
 
 
@@ -100,34 +98,10 @@ namespace Webserver.Chat
 			Client = await Context.AcceptWebSocketAsync(null);
 			SenderThread = new Thread(() => Send());
 			ReceiverThread = new Thread(() => Receive());
-			KeepAliveThread = new Thread(() => KeepAlive());
 			SenderThread.Start();
 			ReceiverThread.Start();
-			KeepAliveThread.Start();
 
 			activeRelays.Add(this);
-		}
-
-		/// <summary>
-		/// Checks connection status.
-		/// </summary>
-		public Thread KeepAliveThread;
-		/// <inheritdoc cref="KeepAliveThread"/>
-		public void KeepAlive()
-		{
-			while (!Disposed)
-			{
-				if (Client.WebSocket.State != WebSocketState.Open)
-				{
-					Program.Log.Debug("Lost websocket connection to client.");
-					return;
-				}
-				else if (SlaveConnection.State != WebSocketState.Open)
-				{
-					Program.Log.Debug("Lost websocket connection to slave.");
-					return;
-				}
-			}
 		}
 
 		/// <summary>
@@ -141,12 +115,19 @@ namespace Webserver.Chat
 			{
 				while (!Disposed)
 				{
-					byte[] receiveBuffer = new byte[1024];
-					WebSocketReceiveResult receivedData = await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
-					await SlaveConnection.SendAsync(receiveBuffer, WebSocketMessageType.Text, true, TokenSource.Token);
+					WebSocketReceiveResult receiveResult = null;
+					var buffer = new List<byte>();
+					while (receiveResult == null || receiveResult.EndOfMessage == false)
+					{
+						byte[] receiveBuffer = new byte[1024];
+						receiveResult = await Client.WebSocket.ReceiveAsync(receiveBuffer, TokenSource.Token);
+						Array.Resize(ref receiveBuffer, receiveResult.Count);
+						buffer.AddRange(receiveBuffer);
+					}
+					await SlaveConnection.SendAsync(buffer.ToArray(), WebSocketMessageType.Text, true, TokenSource.Token);
 				}
 			}
-			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
+			catch (Exception e) when (e is WebSocketException || e is OperationCanceledException)
 			{
 				Dispose();
 			}
@@ -163,12 +144,19 @@ namespace Webserver.Chat
 			{
 				while (!Disposed)
 				{
-					byte[] receiveBuffer = new byte[1024];
-					WebSocketReceiveResult receivedData = await SlaveConnection.ReceiveAsync(receiveBuffer, TokenSource.Token);
-					await Client.WebSocket.SendAsync(receiveBuffer, WebSocketMessageType.Text, true, TokenSource.Token);
+					WebSocketReceiveResult receiveResult = null;
+					var buffer = new List<byte>();
+					while (receiveResult == null || receiveResult.EndOfMessage == false)
+					{
+						byte[] receiveBuffer = new byte[1024];
+						receiveResult = await SlaveConnection.ReceiveAsync(receiveBuffer, TokenSource.Token);
+						Array.Resize(ref receiveBuffer, receiveResult.Count);
+						buffer.AddRange(receiveBuffer);
+					}
+					await Client.WebSocket.SendAsync(buffer.ToArray(), WebSocketMessageType.Text, true, TokenSource.Token);
 				}
 			}
-			catch (Exception e) when (e is WebSocketException || e is TaskCanceledException)
+			catch (Exception e) when (e is WebSocketException || e is OperationCanceledException)
 			{
 				Dispose();
 			}
@@ -188,14 +176,22 @@ namespace Webserver.Chat
 				return;
 
 			Disposed = true;
+			TokenSource.Cancel();
+
+			Program.Log.Debug($"Relay disposed (Client: {Client.WebSocket.State} | Slave: {SlaveConnection.State})");
+
 			try
 			{
-				await Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
-				await SlaveConnection.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", TokenSource.Token);
+				await SlaveConnection.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", CancellationToken.None);
+				SlaveConnection.Dispose();
 			}
 			catch (WebSocketException) { }
-
-			TokenSource.Cancel();
+			try
+			{
+				await Client.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Bye!", CancellationToken.None);
+				Client.WebSocket.Dispose();
+			}
+			catch (WebSocketException) { }
 
 			activeRelays.Remove(this);
 		}

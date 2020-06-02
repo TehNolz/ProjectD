@@ -25,43 +25,57 @@ namespace Webserver.Webserver
 			RequestProvider request = context.Request;
 			ResponseProvider response = context.Response;
 
-			//If target is '/', send index.html if it exists
-			string target = WebserverConfig.WWWRoot + request.Url.LocalPath.ToLower();
-			if (target == WebserverConfig.WWWRoot + "/" && File.Exists(WebserverConfig.WWWRoot + "/index.html"))
-				target += "index.html";
-
-			//Check if the file exists. If it doesn't, send a 404.
-			if (!WebPages.Contains(target) || !File.Exists(target))
+			// Lock in case some other thread decides to change the WebPages list
+			lock (WebPages)
 			{
-				Program.Log.Warning($"Refused request for {target}: File not found");
-				response.Send(Redirects.GetErrorPage(HttpStatusCode.NotFound), HttpStatusCode.NotFound);
-				return;
-			}
+				// Get the directory info object of WWWRoot to use a specific extension method later
+				var wwwroot = new DirectoryInfo(WebserverConfig.WWWRoot);
 
-			//Switch to the request's HTTP method
-			switch (request.HttpMethod)
-			{
-				case HttpMethod.GET:
-					//Send the resource to the client. Content type will be set according to the resource's file extension.
-					string contentType = MimeTypes.GetMimeType(Path.GetExtension(target));
-					response.Send(File.ReadAllBytes(target), HttpStatusCode.OK, contentType);
-					return;
+				//If target is '/', send index.html if it exists (also replace the seperator chars with the standard char)
+				string target = request.Url.LocalPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar) switch
+				{
+					// Append index.html only when the resulting path points to an existing file
+					string path when Path.EndsInDirectorySeparator(path) &&
+									 Path.Combine(wwwroot.FullName, Path.TrimEndingDirectorySeparator(path[1..]), "index.html") is string indexHTML &&
+									 File.Exists(indexHTML)
+									 => indexHTML,
+					// By default, return the switch variable
+					string @default => Path.Combine(wwwroot.FullName, @default[1..])
+				};
 
-				case HttpMethod.HEAD:
-					//A HEAD request is the same as GET, except without the body. Since the resource exists, we can just send back a 200 OK and call it a day.
-					response.Send(HttpStatusCode.OK);
+				//Check if the file exists. If it doesn't, send a 404.
+				if (!WebPages.Contains(target.ToLower()) || wwwroot.FindFile(target) is null)
+				{
+					Program.Log.Warning($"Refused request for '{request.Url.LocalPath}': File not found");
+					response.Send(Redirects.GetErrorPage(HttpStatusCode.NotFound), HttpStatusCode.NotFound, "text/html");
 					return;
+				}
 
-				case HttpMethod.OPTIONS:
-					//TODO: CORS support
-					response.Send(HttpStatusCode.OK);
-					return;
+				//Switch to the request's HTTP method
+				switch (request.HttpMethod)
+				{
+					case HttpMethod.GET:
+						//Send the resource to the client. Content type will be set according to the resource's file extension.
+						string contentType = MimeTypes.GetMimeType(Path.GetExtension(target));
+						response.Send(File.ReadAllBytes(target), HttpStatusCode.OK, contentType);
+						return;
 
-				default:
-					//Resources only support the three methods defined above, so send back a 405 Method Not Allowed.
-					Program.Log.Warning("Refused request for resource " + target + ": Method Not Allowed (" + request.HttpMethod + ")");
-					response.Send(Redirects.GetErrorPage(HttpStatusCode.MethodNotAllowed), HttpStatusCode.MethodNotAllowed);
-					return;
+					case HttpMethod.HEAD:
+						//A HEAD request is the same as GET, except without the body. Since the resource exists, we can just send back a 200 OK and call it a day.
+						response.Send(HttpStatusCode.OK);
+						return;
+
+					case HttpMethod.OPTIONS:
+						//TODO: CORS support
+						response.Send(HttpStatusCode.OK);
+						return;
+
+					default:
+						//Resources only support the three methods defined above, so send back a 405 Method Not Allowed.
+						Program.Log.Warning($"Refused request for resource '{request.Url.LocalPath}': Method Not Allowed ({request.HttpMethod})");
+						response.Send(Redirects.GetErrorPage(HttpStatusCode.MethodNotAllowed), HttpStatusCode.MethodNotAllowed, "text/html");
+						return;
+				}
 			}
 		}
 
@@ -82,7 +96,7 @@ namespace Webserver.Webserver
 
 			//Add files to list
 			result.AddRange(from string item in Directory.GetFiles(path)
-							select item.Replace('\\', '/').ToLower());
+							select Path.GetFullPath(item).Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar).ToLower());
 
 			//Crawl subfolders
 			foreach (string dir in Directory.GetDirectories(path))

@@ -26,7 +26,7 @@ namespace Webserver.LoadBalancer
 			listener.Prefixes.Add($"http://{address}:{port}/");
 			listener.Prefixes.Add($"http://localhost:{port}/");
 			listener.Start();
-			Log.Config($"Load Balancer Listener now listening on {address}:{port}");
+			Log.Info($"Load Balancer Listener now listening on {address}:{port}");
 
 			//Main loop
 			while (true)
@@ -47,6 +47,7 @@ namespace Webserver.LoadBalancer
 					{
 						context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
 						context.Response.OutputStream.Dispose();
+						continue;
 					}
 				}
 				IPAddress slaveAddress = GetBestSlave();
@@ -70,7 +71,7 @@ namespace Webserver.LoadBalancer
 					context.Request.InputStream.CopyTo(requestRelay.GetRequestStream());
 
 				//Wait for a response from the slave.
-				Log.Trace($"Relaying request for {context.Request.Url.LocalPath} to {slaveAddress}");
+				Log.Trace($"Relaying {context.Request.HttpMethod.ToUpper()} request for '{context.Request.Url.LocalPath}' to {slaveAddress}");
 				requestRelay.BeginGetResponse(Respond, new RequestState(requestRelay, context));
 			}
 		}
@@ -82,16 +83,24 @@ namespace Webserver.LoadBalancer
 		/// <returns>The URL of the chosen slave</returns>
 		public static IPAddress GetBestSlave()
 		{
-			ICollection<ServerProfile> servers = ServerProfile.KnownServers.Values;
-
 			//If the server list is empty, we're still starting up. Wait until startup finishes.
 			while (ServerProfile.KnownServers.Count == 0)
 				Thread.Sleep(10);
 
-			// Increment the server index and wrap back to 0 when the index reaches servers.Count
-			serverIndex = (serverIndex + 1) % servers.Count;
+			while (true)
+			{
+				// Increment the server index and wrap back to 0 when the index reaches servers.Count
+				serverIndex = (serverIndex + 1) % ServerProfile.KnownServers.Count;
 
-			return servers.ElementAt(serverIndex).Address;
+				ServerProfile server = ServerProfile.KnownServers.Values.ElementAt(serverIndex);
+				if (server is ServerConnection connection)
+				{
+					if (connection.State == ServerState.Ready)
+						return connection.Address;
+				}
+				else
+					return server.Address;
+			}
 		}
 
 		/// <summary>
@@ -106,7 +115,6 @@ namespace Webserver.LoadBalancer
 			HttpWebResponse workerResponse;
 			try
 			{
-				Log.Trace("Received websocket request.");
 				workerResponse = (HttpWebResponse)data.WebRequest.EndGetResponse(result);
 			}
 			catch (WebException e)
@@ -135,11 +143,11 @@ namespace Webserver.LoadBalancer
 			response.StatusDescription = workerResponse.StatusDescription;
 
 			using Stream outStream = workerResponse.GetResponseStream();
-			outStream.CopyTo(response.OutputStream);
 
 			//Dispose the response, transmitting it to the client.
 			try
 			{
+				outStream.CopyTo(response.OutputStream);
 				response.OutputStream.Close();
 			}
 			catch (Exception) { }

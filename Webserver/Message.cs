@@ -13,7 +13,7 @@ namespace Webserver
 		/// <summary>
 		/// The unique ID associated with this message. Used for replying to messages that require an answer. Null if no answer is required.
 		/// </summary>
-		public Guid ID { get; set; }
+		public Guid ID { get; set; } = Guid.Empty;
 		/// <summary>
 		/// Gets or sets the flags for this message. These must be set with bitwise operations.
 		/// </summary>
@@ -56,6 +56,8 @@ namespace Webserver
 		/// <returns></returns>
 		protected static T FromJson<T>(JObject json) where T : Message
 		{
+			if (json is null)
+				throw new ArgumentNullException(nameof(json));
 			//Check if all necessary keys are present.
 			if (!json.TryGetValue("MessageID", out string rawID))
 				throw new JsonReaderException("Invalid JSON: missing MessageID");
@@ -89,7 +91,7 @@ namespace Webserver
 				{ "MessageID", ID },
 				{ "Flags", (int)Flags },
 				{ "Type", Type.ToString() },
-				{ "Data", Data == null? null : (Data is JObject || Data is JArray? Data : JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings)) }
+				{"Data", Data == null? null : Data is JObject || Data is JArray || Data is string ? Data : (object)Newtonsoft.Json.JsonConvert.SerializeObject(Data, NetworkUtils.JsonSettings)}
 			};
 
 		/// <summary>
@@ -115,6 +117,7 @@ namespace Webserver
 	{
 		//General
 		InvalidMessage,
+		DebugType, //Test type please ignore.
 
 		// Load balancer message types
 		Timeout,
@@ -123,14 +126,28 @@ namespace Webserver
 		Register,
 		RegisterResponse,
 		NewServer,
+		StateChange,
 
 		// Database replication message types
 		DbChange,
+		DbSyncBackupStart,
+		DbSyncBackup,
+		DbSyncStart,
 		DbSync,
 
-		//Chat
-		Chat,
+		//Chat - external
+		ChatInfo,
+		ChatroomCreated,
+		ChatroomUpdated,
+		ChatroomDeleted,
 		ChatMessage,
-		ChatroomUpdate,
+		UserStatusChanged,
+		UserInfo,
+
+		//Chat - internal
+		Chat,
+		WebSocketConnect,
+		WebSocketDisconnect,
+		WebSocketCount,
 	}
 }

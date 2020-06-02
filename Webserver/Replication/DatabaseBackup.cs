@@ -4,6 +4,7 @@ using System;
 using System.Data.SQLite;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using static Webserver.Config.DatabaseConfig;
 
 namespace Webserver.Replication
@@ -22,6 +23,14 @@ namespace Webserver.Replication
 		public const string TimeStampFormat = "yyyy-MM-dd_HH-mm-ss";
 
 		/// <summary>
+		/// Gets the <see cref="FileInfo"/> object of the most recent backup file, or null if none were found.
+		/// </summary>
+		public static FileInfo LastBackup => (from f in new DirectoryInfo(BackupDir).GetFiles()
+											  where f.Extension.ToLower() == ".db" || f.Extension.ToLower() == ".zip"
+											  orderby f.LastWriteTimeUtc descending
+											  select f).FirstOrDefault();
+
+		/// <summary>
 		/// Initializes a new instance of <see cref="DatabaseBackup"/> and creates a new database backup file
 		/// from the given <paramref name="source"/> database.
 		/// <para/>
@@ -31,32 +40,14 @@ namespace Webserver.Replication
 		public DatabaseBackup(ServerDatabase source) : base(GetBackupFileName(source.Connection.FileName))
 		{
 			// Create the backup
-			source.Connection.BackupDatabase(Connection, Connection.Database, source.Connection.Database, -1, BackupCallback, -1);
-			Utils.ClearProgressBar();
+			source.Connection.BackupDatabase(Connection, Connection.Database, source.Connection.Database, -1, null, -1);
 
-			// Drop the __changes and __types tables
+			// Drop the changelog table
 			DropTableIfExists<Changes>();
-			DropTableIfExists<ModelType>();
 
-			// Increment the user_version pragma
-			UserVersion = source.UserVersion + 1;
-		}
-
-		/// <summary>
-		/// Displays a progressbar while a database backup is in progress.
-		/// </summary>
-		private bool BackupCallback(
-			SQLiteConnection source,
-			string sourceName,
-			SQLiteConnection destination,
-			string destinationName,
-			int pages,
-			int remainingPages,
-			int totalPages,
-			bool retry)
-		{
-			Utils.ProgressBar(pages - remainingPages, pages);
-			return true;
+			// Set the user version to the current changelog version
+			source.UserVersion = source.ChangelogVersion;
+			UserVersion = source.ChangelogVersion;
 		}
 
 		/// <summary>
@@ -102,15 +93,30 @@ namespace Webserver.Replication
 
 						// Delete the backup
 						File.Delete(backup);
-						Program.Log.Info($"Successfully created backup '{Path.GetFileName(archiveName)}'");
+
+						// Get file sizes
+						long backupSize = new FileInfo(archiveName).Length;
+						long backupDirSize = new DirectoryInfo(BackupDir).GetFiles().Sum(x => x.Length);
+
+						Program.Log.Info(string.Concat(
+							$"Successfully created backup '{Path.GetFileName(archiveName)}' ",
+							string.Format(new DataFormatter(), "({0:B2}/{1:B1})", backupSize, backupDirSize)
+						));
 					}
 					else
 					{
 						string fileName = Connection.FileName;
 						base.Dispose();
-						Program.Log.Info($"Successfully created backup '{fileName}'");
-					}
 
+						// Get file sizes
+						long backupSize = new FileInfo(fileName).Length;
+						long backupDirSize = new DirectoryInfo(BackupDir).GetFiles().Sum(x => x.Length);
+
+						Program.Log.Info(string.Concat(
+							$"Successfully created backup '{Path.GetFileName(fileName)}' ",
+							string.Format(new DataFormatter(), "({0:B2}/{1:B1})", backupSize, backupDirSize)
+						));
+					}
 				}
 				isDisposed = true;
 			}

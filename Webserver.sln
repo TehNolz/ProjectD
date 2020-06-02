@@ -21,6 +21,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Webserver.Tests", "Webserve
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Logger", "Logger\Logger\Logger.csproj", "{0A69FE8A-2067-4B8A-8A56-390297F26B28}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Config.Tests", "ConfigTests\Config.Tests.csproj", "{7B5E2FB7-4E3A-46B6-AD8C-82B8F10E1245}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +53,10 @@ Global
 		{0A69FE8A-2067-4B8A-8A56-390297F26B28}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0A69FE8A-2067-4B8A-8A56-390297F26B28}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0A69FE8A-2067-4B8A-8A56-390297F26B28}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B5E2FB7-4E3A-46B6-AD8C-82B8F10E1245}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B5E2FB7-4E3A-46B6-AD8C-82B8F10E1245}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B5E2FB7-4E3A-46B6-AD8C-82B8F10E1245}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B5E2FB7-4E3A-46B6-AD8C-82B8F10E1245}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

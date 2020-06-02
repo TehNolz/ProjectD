@@ -4,9 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Webserver
 {
@@ -44,12 +45,147 @@ namespace Webserver
 			return (T)concreteMethod.Invoke(func.Target, args);
 		}
 
+		/// <summary>
+		/// Parses the give string into a long. This accepts decimal and binary orders of magnitude.
+		/// </summary>
+		/// <param name="s">The string to parse.</param>
+		public static long ParseDataSize(string s)
+		{
+			// Use a regex to split value from unit  @"(\d+)\s*([A-Za-z]*)"
+			GroupCollection groups = Regex.Match(s, @"([+-]?(?=\.\d|\d)(?:\d+)?(?:\.?\d*)(?:[eE][+-]?\d+)?)\s*([A-Za-z]+)?").Groups;
+
+			// Extract the values
+			decimal value = decimal.Parse(groups[1].Value, NumberStyles.Any);
+			string unit = groups[1].Value.Length == 0 ? "B" : groups[2].Value;
+
+			bool isBinaryMagnitude = unit.Length == 3;
+
+			// Calculate the value using switch label "fallthrough"
+			int magnitude = 0;
+			switch (unit.ToUpper()[0])
+			{
+				case 'Y': magnitude++; goto case 'Z';
+				case 'Z': magnitude++; goto case 'E';
+				case 'E': magnitude++; goto case 'P';
+				case 'P': magnitude++; goto case 'T';
+				case 'T': magnitude++; goto case 'G';
+				case 'G': magnitude++; goto case 'M';
+				case 'M': magnitude++; goto case 'K';
+				case 'K': magnitude++; break;
+				default: break;
+			}
+
+			// Multiply the value by the magnitude and return it
+			return (long)(value * (decimal)(isBinaryMagnitude ? Math.Pow(2, 10 * magnitude) : Math.Pow(1000, magnitude)));
+		}
+	}
+
+	/// <summary>
+	/// Custom string formatter for reducing a data size in bytes to a smaller unit.
+	/// </summary>
+	public sealed class DataFormatter : IFormatProvider, ICustomFormatter
+	{
+		/// <summary>
+		/// Gets or sets whether a space is added between the value and the unit.
+		/// </summary>
+		public bool SpaceBeforeUnit { get; set; } = true;
+
+		/// <summary>
+		/// Describes the units that the <see cref="DataFormatter"/> can format to.
+		/// </summary>
+		[Flags]
+		private enum Unit
+		{
+			/// <summary>
+			/// Displays the value as standard decimal unit.
+			/// <para/>
+			/// This can be overridden by <see cref="Binary"/>.
+			/// </summary>
+			Decimal = 1 << 0,
+			/// <summary>
+			/// Displays the value as a binary unit.
+			/// <para/>
+			/// Overrides <see cref="Decimal"/>.
+			/// </summary>
+			Binary = (1 << 1) | Decimal,
+			/// <summary>
+			/// Flag specifying whether to display bits.
+			/// </summary>
+			Bits = 1 << 2
+		}
+
+		public string Format(string formatStr, object arg, IFormatProvider formatProvider)
+		{
+			// Check whether this is an appropriate callback
+			if (!Equals(formatProvider))
+				return null;
+
+			// Set default format specifier
+			if (string.IsNullOrEmpty(formatStr))
+				formatStr = "D";
+
+			Unit format = formatStr[0] switch
+			{
+				'D' => Unit.Decimal,
+				'd' => Unit.Decimal | Unit.Bits,
+				'B' => Unit.Binary,
+				'b' => Unit.Binary | Unit.Bits,
+				_ => throw new FormatException($"The {formatStr} format specifier is invalid.")
+			};
+
+			long value = Convert.ToInt64(arg);
+			int decimals = formatStr.Length > 1 ? int.Parse(formatStr[1..]) : 0;
+
+			// Calculate the magnitude by comparing the value with each magnitude up to yotta
+			sbyte magnitude = 0;
+			for (; magnitude <= 8; magnitude++)
+				if ((format.HasFlag(Unit.Decimal) ? Math.Pow(1000, magnitude + 1) : Math.Pow(2, 10 * (magnitude + 1))) >= value)
+					break;
+
+			string unitPrefix = magnitude switch
+			{
+				0 => "",
+				1 => format.HasFlag(Unit.Binary) ? "Ki" : "k",
+				2 => format.HasFlag(Unit.Binary) ? "Mi" : "M",
+				3 => format.HasFlag(Unit.Binary) ? "Gi" : "G",
+				4 => format.HasFlag(Unit.Binary) ? "Ti" : "T",
+				5 => format.HasFlag(Unit.Binary) ? "Pi" : "P",
+				6 => format.HasFlag(Unit.Binary) ? "Ei" : "E",
+				7 => format.HasFlag(Unit.Binary) ? "Zi" : "Z",
+				_ => format.HasFlag(Unit.Binary) ? "Yi" : "Y"
+			};
+			string unit = $"{unitPrefix}{(format.HasFlag(Unit.Bits) ? "bit" : "B")}";
+
+			// Divide the value by the magnitude
+			double formatValue = Math.Round(value / (format.HasFlag(Unit.Binary) ? Math.Pow(2, 10 * magnitude) : Math.Pow(1000, magnitude)), decimals);
+			return string.Join(SpaceBeforeUnit ? " " : "",
+				formatValue.ToString($"F{decimals}"),
+				unit
+			);
+		}
+
+		public object GetFormat(Type formatType)
+		{
+			// Yes, this is largely taken from the example on
+			// https://docs.microsoft.com/en-us/dotnet/standard/base-types/how-to-define-and-use-custom-numeric-format-providers
+			if (formatType == typeof(ICustomFormatter))
+				return this;
+			else
+				return null;
+		}
+	}
+
+	/// <summary>
+	/// Class containing extension methods.
+	/// </summary>
+	internal static class ExtensionMethods
+	{
 		private static IEnumerable<A> Cast<A>(IEnumerable<dynamic> yeet) => yeet.Cast<A>().ToArray();
 		/// <summary>
 		/// Performs black magic.
 		/// </summary>
 		public static dynamic[] Cast<T>(this IEnumerable<T> obj, Type type)
-			=> InvokeGenericMethod<dynamic[]>((Func<IEnumerable<dynamic>, object>)Cast<object>, type, new[] { obj });
+			=> Utils.InvokeGenericMethod<dynamic[]>((Func<IEnumerable<dynamic>, object>)Cast<object>, type, new[] { obj });
 
 		/// <summary>
 		/// Returns a formatted string depicting the elapsed time in either nanoseconds, microseconds or milliseconds
@@ -73,186 +209,6 @@ namespace Webserver
 			}
 		}
 
-		public static double oldProgress = 0;
-		public static int previousBar = -1;
-		public static void ProgressBar(
-			double progress,
-			string prefix = null,
-			string suffix = null,
-			int width = -1,
-			string fillChars = "-=≡■",
-			char emptyChar = '.',
-			(ConsoleColor foreground, ConsoleColor background)? prefixColor = null,
-			(ConsoleColor foreground, ConsoleColor background)? barColor = null,
-			(ConsoleColor foreground, ConsoleColor background)? suffixColor = null)
-		{
-			progress = Math.Clamp(progress, 0, 1);
-			oldProgress = progress;
-
-			width = width < 0 ? Console.BufferWidth - 3 : width;
-			width -= suffix is null ? 0 : suffix.Length + 1;
-			width -= prefix is null ? 0 : prefix.Length + 1;
-			width = Math.Min(width, Console.BufferWidth - 3);
-
-			int totalFill = (int)Math.Round(width * progress * fillChars.Length); // Total fill, used for calculating the trailing char.
-			int fill = totalFill / fillChars.Length; // Leading character fill. Filled with the last fillChar.
-			int charIndex = (totalFill % fillChars.Length) - 1; // Index of the trailing char. -1 is ignored and 4 is never reached here.
-
-			// Cache console values
-			(
-				int left,
-				int top,
-				bool showCursor,
-				(ConsoleColor, ConsoleColor) color
-			) = (
-				Console.CursorLeft,
-				Console.CursorTop,
-				Console.CursorVisible,
-				(Console.ForegroundColor, Console.BackgroundColor)
-			);
-			Console.CursorVisible = false;
-
-			// Move the cursor value back to the end of the stream
-			Console.Write((string)null);
-
-			int wtop = Console.WindowTop;
-			if (Console.CursorTop > Console.WindowHeight - 1)
-			{
-				// "Re-focus" to the end of the stream by adjusting the WindowTop position
-				Console.WindowTop = Console.CursorTop - (Console.WindowHeight - 1);
-				wtop = Console.WindowTop;
-			}
-			else
-			{
-				// Fixes strange issue where WindowTop is 1 despite not having moved the window
-				Console.WindowTop = 0;
-				wtop -= 1;
-			}
-
-			try
-			{
-				// Remove the previous bar
-				if (CustomWriter.ProgressBarPos != wtop + Console.WindowHeight)
-					ClearProgressBar();
-				Console.SetCursorPosition(0, wtop + Console.WindowHeight);
-				CustomWriter.ProgressBarPos = Console.CursorTop;
-
-				// Write the progress bar
-				(Console.ForegroundColor, Console.BackgroundColor) = prefixColor ?? color; // Sets the prefix color or defaults to the cached console color
-				Console.Write(prefix);
-
-				(Console.ForegroundColor, Console.BackgroundColor) = barColor ?? color;
-				Console.Write(prefix is null ? "[" : " [");
-				// Add leading chars
-				Console.Write(new string(fillChars[^1], fill));
-				if (charIndex >= 0)
-				{
-					Console.Write(fillChars[charIndex]);
-					// Add 1 to fill to shorten the trailing spaces
-					fill++;
-				}
-				// Add trailing spaces
-				Console.Write(new string(emptyChar, Math.Max(0, width - fill)));
-				Console.Write(suffix is null ? "]" : "] ");
-
-				(Console.ForegroundColor, Console.BackgroundColor) = suffixColor ?? color;
-				Console.Write(suffix is null ? null : ' ' + suffix);
-			}
-			catch (IOException) { } // Can happen while resizing. Can be ignored
-			finally
-			{
-				// Reset console values
-				Console.SetCursorPosition(left, top);
-				Console.CursorVisible = showCursor;
-			}
-		}
-		/// <summary>
-		/// Displays a simple progress bar with a predefined style.
-		/// </summary>
-		/// <param name="progress">The progress value ranging from 0 to 1.</param>
-		public static void ProgressBar(double progress)
-			=> ProgressBar(progress, $"Progress [{progress,-4:P0}]", prefixColor: (ConsoleColor.White, ConsoleColor.Green));
-		/// <summary>
-		/// Displays a simple progress bar with a predefined style.
-		/// </summary>
-		/// <param name="value">The current value.</param>
-		/// <param name="max">The maximum value.</param>
-		public static void ProgressBar(long value, long max)
-		{
-			int maxLen = max.ToString().Length;
-			double progress = (double)value / max;
-#pragma warning disable IDE0071, IDE0071WithoutSuggestion // Simplify interpolation
-			ProgressBar(progress, $"Progress [{value.ToString().PadLeft(maxLen)}/{max}]", prefixColor: (ConsoleColor.White, ConsoleColor.Green));
-#pragma warning restore IDE0071, IDE0071WithoutSuggestion // Simplify interpolation
-		}
-
-		public static void ClearProgressBar()
-		{
-			if (CustomWriter.ProgressBarPos == -1)
-				return;
-
-			// Prepare console for writing
-			(int left, int top, bool showCursor, int wtop) = (Console.CursorLeft, Console.CursorTop, Console.CursorVisible, Console.WindowTop);
-			Console.CursorVisible = false;
-			Console.SetCursorPosition(0, CustomWriter.ProgressBarPos);
-
-			// Clear the progress bar
-			Console.Write(new string(' ', Console.BufferWidth));
-
-			// Reset console values
-			Console.SetCursorPosition(left, top);
-			Console.CursorVisible = showCursor;
-			Console.WindowTop = wtop;
-
-			CustomWriter.ProgressBarPos = -1;
-		}
-	}
-
-	/// <summary>
-	/// Custom console output stream handler that manages the progressbar position.
-	/// </summary>
-	public class CustomWriter : TextWriter
-	{
-		public static int ProgressBarPos { get; set; } = -1;
-		public override Encoding Encoding { get; }
-		private TextWriter writer;
-
-		public CustomWriter(Encoding encoding, TextWriter writer)
-		{
-			Encoding = encoding;
-			this.writer = writer;
-		}
-
-		public override void Write(char value)
-		{
-			lock (this)
-			{
-				writer.Write(value);
-				if (value == '\n')
-					MoveProgressBar();
-			}
-		}
-
-		private void MoveProgressBar()
-		{
-			if (ProgressBarPos == -1)
-				return;
-
-			if (Console.CursorTop >= Console.WindowHeight - 1)
-			{
-				// Move the progress bar line one down
-				Console.MoveBufferArea(0, ProgressBarPos, Console.BufferWidth, 1, 0, ++ProgressBarPos);
-				// Shift the window view downwards
-				Console.WindowTop++;
-			}
-		}
-	}
-
-	/// <summary>
-	/// Extension method class.
-	/// </summary>
-	public static class JObjectExtension
-	{
 		/// <summary>
 		/// Tries to get the JToken with the specified property name.
 		/// </summary>
@@ -282,6 +238,102 @@ namespace Webserver
 			catch (OverflowException) { return false; }
 			catch (InvalidCastException) { return false; }
 			return true;
+		}
+
+#nullable enable
+		/// <summary>
+		/// Returns the first file whose path equals <paramref name="path"/>, or <see langword="null"/>
+		/// if none were found.
+		/// </summary>
+		/// <param name="directory">The directory to search the <paramref name="path"/> for.</param>
+		/// <param name="path">The of the <see cref="FileInfo"/> to return. This path must point to a file that exists
+		/// within <paramref name="directory"/>, be it absolute or relative.</param>
+		/// <param name="caseSensitive">Sets whether the search is case sensitive or insensitive.</param>
+		public static FileInfo? FindFile(this DirectoryInfo directory, string path, bool caseSensitive = false)
+			=> (from FileInfo file in directory.EnumerateFiles("*", SearchOption.AllDirectories)
+				where caseSensitive
+					? file.FullName == Path.GetFullPath(path)
+					: file.FullName.ToLower() == Path.GetFullPath(path).ToLower()
+				select file).FirstOrDefault();
+#nullable restore
+	}
+
+	/// <summary>
+	/// Structure for describing the differences between 2 <see cref="JObject"/>s.
+	/// </summary>
+	public struct JsonDiff
+	{
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all new items.
+		/// </summary>
+		public JObject Added { get; }
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all changes made to
+		/// existing items.
+		/// </summary>
+		public JObject Changed { get; }
+		/// <summary>
+		/// Gets a <see cref="JObject"/> containing all removed items.
+		/// </summary>
+		public JObject Removed { get; }
+
+		/// <summary>
+		/// Initializes a new instance of the <see cref="JsonDiff"/> structure that describes
+		/// all changes made to <paramref name="j2"/> compared to <paramref name="j1"/>.
+		/// </summary>
+		public JsonDiff(JObject j1, JObject j2)
+		{
+			// Get all properties of both JObjects
+			IEnumerable<JProperty> j1props = j1.Properties();
+			IEnumerable<JProperty> j2props = j2.Properties();
+
+			// Initialize all members
+			Added = new JObject();
+			Changed = new JObject();
+			Removed = new JObject();
+
+			// Fill the `Added` JObject with all properties unique to j2
+			foreach (JProperty prop in j2props.Where(x => !j1props.Any(y => x.Name == y.Name)))
+				Added.Add(prop.Name, prop.Value);
+
+			// Fill the `Removed` JObject with all properties unique to j1
+			foreach (JProperty prop in j1props.Where(x => j2props.Where(y => x.Name == y.Name).Count() == 0))
+				Removed.Add(prop.Name, prop.Value);
+
+			// Recursively find all changes between j1 and j2
+			foreach (JProperty prop in j1props)
+			{
+				// Find the equivalent property in j2
+				JProperty other = j2props.FirstOrDefault(x => x.Name == prop.Name);
+				if (other == null)
+					continue;
+
+				// If the type of the other property is different, just use the new value
+				if (other.Value.Type != prop.Value.Type)
+				{
+					Changed.Add(prop.Name, other.Value);
+				}
+				// If they are different, add the other one to this diff
+				else if (!JToken.DeepEquals(prop, other))
+				{
+					// If they are both JObjects, use their diff
+					if (other.Value.Type == JTokenType.Object && prop.Value.Type == JTokenType.Object)
+					{
+						var diff = new JsonDiff(prop.Value as JObject, other.Value as JObject);
+
+						// Add the other diff to this if they contain anything
+						if (diff.Added.Count != 0)
+							Added.Add(prop.Name, diff.Added);
+						if (diff.Changed.Count != 0)
+							Changed.Add(prop.Name, diff.Changed);
+						if (diff.Removed.Count != 0)
+							Removed.Add(prop.Name, diff.Removed);
+					}
+					// If they aren't both JObjects, simply add the other to this diff
+					else
+						Changed.Add(prop.Name, other.Value);
+				}
+			}
 		}
 	}
 }

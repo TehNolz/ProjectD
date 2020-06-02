@@ -89,10 +89,10 @@ namespace Webserver.Chat
 			if (chatroom is null)
 				throw new ArgumentNullException(nameof(chatroom));
 			if (startID < 1)
-				throw new ArgumentException("StartID must be positive");
+				throw new ArgumentException("StartID must be at least 1");
 			if (amount < 0)
 				throw new ArgumentException("Amount must be positive.");
-			return ChatManagement.Database.Select<Chatlog>("Chatroom = @chatroom AND ID < @startID LIMIT @amount", new { chatroom = chatroom.ID, startID, amount });
+			return Chat.Database.Select<Chatlog>("Chatroom = @chatroom AND ID <= @startID LIMIT @amount", new { chatroom = chatroom.ID, startID, amount });
 		}
 
 		/// <summary>
@@ -106,7 +106,7 @@ namespace Webserver.Chat
 				throw new ArgumentNullException(nameof(chatroom));
 
 			//Lol what is "MAX"? Never heard of it /s
-			return ChatManagement.Database.Select<Chatlog>("Chatroom = @chatroom ORDER BY ID LIMIT 1", new { chatroom = chatroom.ID }).FirstOrDefault();
+			return Chat.Database.Select<Chatlog>("Chatroom = @chatroom ORDER BY ID DESC LIMIT 1", new { chatroom = chatroom.ID }).FirstOrDefault();
 		}
 	}
 }
