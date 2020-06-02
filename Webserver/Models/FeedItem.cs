@@ -47,6 +47,16 @@ namespace Webserver.Models
 		}
 
 		/// <summary>
+		/// Gets alls the feed items.
+		/// </summary>
+		/// <param name="database">The database in which to get the feed items.</param>
+		/// <returns>A list of all feed items.</returns>
+		public static List<FeedItem> GetFeedItems(SQLiteAdapter database)
+		{
+			return database.Select<FeedItem>("1 ORDER BY ID DESC").ToList();
+		}
+
+		/// <summary>
 		/// Gets the feed items based on the given limit and offset.
 		/// </summary>
 		/// <param name="database">The database in which to get the feed items.</param>
@@ -74,10 +84,12 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="database">The database in which to search for the feed items.</param>
 		/// <param name="category">The category of the desired feed items.</param>
+		/// <param name="limit">The total amount of feed items with the category to get.</param>
+		/// <param name="offset">The first amount of feed items with the category to exclude.</param>
 		/// <returns>A list of feed items with the given category.</returns>
 		public static List<FeedItem> GetFeedItemsByCategory(SQLiteAdapter database, string category, int limit, int offset)
 		{
-			return GetFeedItems(database, limit, offset).Where(f => f.Category == category).ToList();
+			return GetFeedItems(database).Where(f => f.Category == category).Skip(offset).Take(limit).ToList();
 		}
 
 		/// <summary>
@@ -85,11 +97,13 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="database">The database in which to search for the feed items.</param>
 		/// <param name="searchString">The search string to check if the title or description contains.</param>
+		/// <param name="limit">The total amount of feed items with the search string to get.</param>
+		/// <param name="offset">The first amount of feed items with the search string to exclude.</param>
 		/// <returns>A list of feed items which title or description contains the given search string.</returns>
 		public static List<FeedItem> GetFeeditemsBySearchString(SQLiteAdapter database, string searchString, int limit, int offset)
 		{
-			return GetFeedItems(database, limit, offset).Where(f => f.Title.ToLower().Contains(searchString.ToLower()) ||
-														f.Description.ToLower().Contains(searchString.ToLower())).ToList();
+			return GetFeedItems(database).Where(f => f.Title.ToLower().Contains(searchString.ToLower()) ||
+												f.Description.ToLower().Contains(searchString.ToLower())).Skip(offset).Take(limit).ToList();
 		}
 
 		/// <summary>
