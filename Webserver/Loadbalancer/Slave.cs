@@ -1,81 +1,164 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
-using System.Text;
+using System.Net.Sockets;
 using System.Threading;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Webserver.Utils;
 
-namespace Webserver.LoadBalancer {
-	public static class Slave {
-		private static bool Running = false;
-		private static Timer HeartbeatTimer;
-		private static DateTime LastHeartbeat = new DateTime();
+using Webserver.API.Endpoints;
+using Webserver.Chat;
+using Webserver.Config;
+using Webserver.Replication;
 
-		public static void Receive(JObject Response, IPEndPoint EP) {
+using static Webserver.Program;
 
-			switch ((string)Response["Type"]) {
-				//Confirm a heartbeat request.
-				case "HEARTBEAT":
-					Networking.SendData(ConnectionMsg.Confirm("HEARTBEAT", EP));
-					LastHeartbeat = DateTime.Now;
-					break;
+namespace Webserver.LoadBalancer
+{
+	public static class Slave
+	{
+		/// <summary>
+		/// Sets this server as slave.
+		/// </summary>
+		/// <param name="masterAddress">The endpoint of the master server to connect to.</param>
+		/// <returns>The local IP address.</returns>
+		public static void Init(IPAddress masterAddress)
+		{
+			Log.Config($"Server is running as slave. Connecting to the Master server at {masterAddress}");
+			ServerProfile.KnownServers = new ConcurrentDictionary<IPAddress, ServerProfile>();
+			new ServerProfile(Balancer.LocalAddress);
 
-				//Master informs slaves that a slave has timed out
-				case "TIMEOUT":
-					if (!Response.TryGetValue<string>("Slave", out JToken Address)) return;
-					if (!Response.TryGetValue<int>("Port", out JToken Port)) return;
-					IPEndPoint Slave = new IPEndPoint(IPAddress.Parse((string)Address), (int)Port);
-					if(Balancer.Servers.ContainsKey(Slave)){
-						Balancer.Servers.Remove(Slave, out _);
-						Console.WriteLine("TIMEOUT received for slave " + Slave.Address);
-					} else {
-						Console.WriteLine("TIMEOUT received for unknown slave " + Slave.Address);
-					}
+			//Bind events;
+			ServerConnection.ServerTimeout += OnServerTimeout;
+			ServerConnection.MessageReceived += TimeoutMessage;
+			ServerConnection.MessageReceived += RegistrationResponse;
+			ServerConnection.MessageReceived += NewServer;
+			ServerConnection.MessageReceived += OnDbChange;
+			ServerConnection.MessageReceived += Example.TestHandler;
 
-					break;
+			//Chat system events
+			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;
 
-				default: return;
+			//Create a TcpClient.
+			var client = new TcpClient(new IPEndPoint(Balancer.LocalAddress, BalancerConfig.BalancerPort));
+			client.Connect(new IPEndPoint(masterAddress, BalancerConfig.BalancerPort));
+
+			//Convert the client into a ServerConnection
+			var connection = new ServerConnection(client);
+			Balancer.MasterServer = connection;
+
+			//Send registration request.
+			connection.Send(new ServerMessage(MessageType.Register, null));
+
+			Log.Config($"Connected to master at {masterAddress}. Local address is {(IPEndPoint)client.Client.LocalEndPoint}");
+		}
+
+		private static void OnDbChange(ServerMessage message)
+		{
+			// Check if the type is QueryInsert
+			if (message.Type != MessageType.DbChange)
+				return;
+
+			var changes = new Changes(message);
+
+			new Thread(() => Program.Database.Apply(changes)) { Name = $"OnDbChange<{changes.ID}>" }.Start();
+		}
+
+		/// <summary>
+		/// Event handler for registration responses.
+		/// </summary>
+		/// <param name="server">The master server who sent the response</param>
+		/// <param name="message">The response</param>
+		[EventMessageType(MessageType.RegisterResponse)]
+		public static void RegistrationResponse(ServerMessage message)
+		{
+			//Register all servers the Master has informed us about.
+			List<IPAddress> receivedAddresses = message.Data;
+			foreach (IPAddress address in receivedAddresses)
+			{
+				if (address.ToString() == Balancer.MasterServer.Address.ToString())
+					continue;
+				new ServerProfile(address);
 			}
 		}
 
-		public static void Init() {
-			Networking.Callback = Receive;
-			Running = true;
-			HeartbeatTimer = new Timer((object _) => HeartbeatCheck(), null, 0, 100);
+		/// <summary>
+		/// Event handler for new server announcements
+		/// </summary>
+		/// <param name="server">The master server that sent the announcement</param>
+		/// <param name="message">The announcement</param>
+		public static void NewServer(ServerMessage message)
+		{
+			//If this message isn't an announcement, ignore it.
+			if (message.Type != MessageType.NewServer)
+				return;
+
+			IPAddress endpoint = IPAddress.Parse(message.Data);
+
+			//Ignore this message if it just announces our own registration
+			if (endpoint.ToString() == Balancer.LocalAddress.ToString())
+				return;
+
+			Log.Info($"Master announced new server at {endpoint}");
+			new ServerProfile(endpoint);
 		}
 
-		public static void Stop(){
-			if (!Running) return;
-			HeartbeatTimer.Dispose();
+		/// <summary>
+		/// Processes timeout announcements from the master.
+		/// </summary>
+		/// <param name="server"></param>
+		/// <param name="message"></param>
+		public static void TimeoutMessage(ServerMessage message)
+		{
+			if (message is null)
+				throw new ArgumentNullException(nameof(message));
+			if (message.Type != MessageType.Timeout)
+				return;
+
+			Log.Warning($"Master lost connection with slave at {message.Data}");
+			ServerProfile.KnownServers.TryRemove(IPAddress.Parse(message.Data), out ServerProfile _);
 		}
+		/// <summary>
+		/// Handles a connection timeout with the master server, electing a new master as replacement.
+		/// </summary>
+		/// <param name="server"></param>
+		public static void OnServerTimeout(ServerProfile server, string message)
+		{
+			Log.Warning($"Connection lost to master: {message}");
+			ServerProfile.KnownServers.Remove(server.Address, out _);
 
-		private static void HeartbeatCheck(){
-			if (LastHeartbeat.Ticks == 0) return;
-			if (LastHeartbeat < DateTime.Now.AddSeconds(-2)) {
-				Console.WriteLine("Lost connection to master");
+			Log.Info("Electing a new master.");
 
-				IPEndPoint EP = null;
-				int Min = int.MaxValue;
-				foreach(IPEndPoint Entry in Balancer.Servers.Keys){
-					int HostNum = Entry.Address.GetAddressBytes()[3];
-					if(HostNum < Min){
-						Min = HostNum;
-						EP = Entry;
-					}
+			//Elect a new master by finding the slave with the lowest IPv4 address. This is guaranteed to give the same result on every slave.
+			//TODO: Maybe find a better algorithm to elect a master?
+			ServerProfile newMaster = null;
+			int minAddress = int.MaxValue;
+			foreach (IPAddress adress in ServerProfile.KnownServers.Keys)
+			{
+				int num = BitConverter.ToInt32(adress.GetAddressBytes(), 0);
+				if (num < minAddress)
+				{
+					newMaster = ServerProfile.KnownServers[adress];
+					minAddress = num;
 				}
+			}
 
-				Console.Title = string.Format("Local - {0} | Master - {1}", Networking.LocalEndPoint, EP);
-				Balancer.Servers.Remove(Balancer.MasterEndpoint, out _);
-				if (EP?.Address.ToString() == Networking.LocalEndPoint.Address.ToString()){
-					Console.WriteLine("Elected this server as new master");
-					Balancer.IsMaster = true;
-				} else {
-					Console.WriteLine("Eelected " + EP + " as new master");
-					Balancer.MasterEndpoint = EP;
-				}
+			//Check if this server was chosen as the new master. If it is, start promotion. If it isn't, connect to the new master.
+			Console.Title = $"Local address {Balancer.LocalAddress} | Master address {newMaster.Address}";
+
+			//Dispose the connection and reset all event bindings.
+			Balancer.MasterServer.Dispose();
+			ServerConnection.ResetEvents();
+
+			//If this slave was selected, promote to Master. Otherwise, restart the slave using the new master's address.
+			if (newMaster.Address.ToString() == Balancer.LocalAddress.ToString())
+			{
+				Log.Info("Elected this slave as new master. Promoting.");
+				Master.Init();
+			}
+			else
+			{
+				Log.Info($"Elected {newMaster.Address} as new master. Connecting.");
+				Init(newMaster.Address);
 			}
 		}
 	}
