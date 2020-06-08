@@ -17,7 +17,8 @@ namespace WebserverTests.API_Endpoints.Tests
 		public void EDIT_ValidArguments()
 		{
 			Database.Insert(new User("user@example.com", "SomePassword"));
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=user@example.com", HttpMethod.PATCH, new JObject() {
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account", HttpMethod.PATCH, new JObject() {
+				{"ID", User.GetByEmail(Database, "user@example.com").ID.ToString() },
 				{"Email", "test@example.com" },
 			}, contentType: "application/json");
 
