@@ -1,16 +1,16 @@
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+
 using Webserver.Models;
-using static Webserver.Chat.ChatCommand;
 
 namespace Webserver.Chat.Commands
 {
 	[CommandName("ChangeAccess")]
 	[Permission(Models.PermissionLevel.Admin)]
-	class ChangeAccess : ChatCommand
+	internal class ChangeAccess : ChatCommand
 	{
 		public override void Execute()
 		{
@@ -29,7 +29,7 @@ namespace Webserver.Chat.Commands
 			}
 
 			//Check if the specified chatroom exists
-			Chatroom chatroom = Chat.Database.Select<Chatroom>("ID = @chatroomID", new {chatroomID }).FirstOrDefault();
+			Chatroom chatroom = Chat.Database.Select<Chatroom>("ID = @chatroomID", new { chatroomID }).FirstOrDefault();
 			if (chatroom == null)
 			{
 				Message.Reply(ChatStatusCode.NoSuchChatroom);
@@ -38,7 +38,7 @@ namespace Webserver.Chat.Commands
 
 			//Check if the specified user exists
 			User user = Chat.Database.Select<User>("ID = @userID", new { userID }).FirstOrDefault();
-			if(user == null)
+			if (user == null)
 			{
 				Message.Reply(ChatStatusCode.NoSuchChatroom);
 				return;
@@ -50,27 +50,29 @@ namespace Webserver.Chat.Commands
 			if (canAccess)
 			{
 				//User should have acces
-				if(membership == null)
+				if (membership == null)
 				{
 					//User doesn't have access yet, so give it.
 					membership = new ChatroomMembership() { UserID = userID, ChatroomID = chatroomID };
 					Chat.Database.Insert(membership);
 
 					BroadcastChatMessage(TargetType.Chatrooms, new List<Guid>() { chatroom.ID }, (new ChatMessage(MessageType.ChatroomUpdated, chatroom.GetJson())));
-				} else
+				}
+				else
 				{
 					//User already has access, so do nothing.
 					return;
 				}
-			} 
+			}
 			else
 			{
 				//User should be denied access
-				if(membership == null)
+				if (membership == null)
 				{
 					//User never had access to begin with, so do nothing.
 					return;
-				} else
+				}
+				else
 				{
 					//User has access, so take it away.
 					Chat.Database.Delete(membership);

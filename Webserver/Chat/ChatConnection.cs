@@ -9,7 +9,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Threading;
-using System.Threading.Tasks;
+
 using Webserver.Chat.Commands;
 using Webserver.LoadBalancer;
 using Webserver.Models;

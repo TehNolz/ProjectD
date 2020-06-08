@@ -69,7 +69,7 @@ namespace Webserver.Replication
 			// Add the changelog to the database
 			database.CreateTableIfNotExists<ModelType>();
 			database.CreateTableIfNotExists<Changes>();
-			
+
 			// Build the typeList cache
 			typeList = database.Select<ModelType>().ToList();
 
@@ -81,10 +81,7 @@ namespace Webserver.Replication
 		/// <summary>
 		/// Closes this <see cref="ChangeLog"/>s connection to the database.
 		/// </summary>
-		public void Close()
-		{
-			database.Connection.Close();
-		}
+		public void Close() => database.Connection.Close();
 
 		/// <summary>
 		/// Pushes the given <paramref name="changes"/> to the changelog database.
@@ -399,11 +396,9 @@ namespace Webserver.Replication
 		}
 
 		// This code added to correctly implement the disposable pattern.
-		public void Dispose()
-		{
+		public void Dispose() =>
 			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
 			Dispose(true);
-		}
 		#endregion
 	}
 }

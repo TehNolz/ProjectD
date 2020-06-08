@@ -11,14 +11,13 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
-using Webserver.API.Endpoints;
 using Webserver.Chat;
 using Webserver.Chat.Commands;
 using Webserver.Config;
 using Webserver.Replication;
 
-using static Webserver.Program;
 using static Webserver.Config.DatabaseConfig;
+using static Webserver.Program;
 
 namespace Webserver.LoadBalancer
 {
@@ -67,7 +66,7 @@ namespace Webserver.LoadBalancer
 			RegistryThread.Start();
 			Listener.ListenerThread = new Thread(() => Listener.Listen(((IPEndPoint)listener.LocalEndpoint).Address, BalancerConfig.HttpPort));
 			Listener.ListenerThread.Start();
-			
+
 			Log.Config("Running interserver communication system on " + ((IPEndPoint)listener.LocalEndpoint));
 		}
 

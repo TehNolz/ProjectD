@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +27,7 @@ namespace Webserver.API.Endpoints.Account
 				return;
 			}
 
-			var account = Database.Select<User>("ID = @ID", new { ID }).FirstOrDefault();
+			User account = Database.Select<User>("ID = @ID", new { ID }).FirstOrDefault();
 
 			//Check if the specified user exists. If it doesn't, send a 404 Not Found
 			if (account == null)

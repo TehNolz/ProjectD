@@ -5,6 +5,7 @@ using System.Data.SQLite;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+
 using static Webserver.Config.DatabaseConfig;
 
 namespace Webserver.Replication
@@ -126,11 +127,9 @@ namespace Webserver.Replication
 		/// Finishes the database backup process and disposes all managed resources.
 		/// </summary>
 		// This code added to correctly implement the disposable pattern.
-		public override void Dispose()
-		{
+		public override void Dispose() =>
 			// Do not change this code. Put cleanup code in Dispose(bool disposing) above.
 			Dispose(true);
-		}
 		#endregion
 	}
 }

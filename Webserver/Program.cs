@@ -4,8 +4,10 @@ using Database.SQLite;
 
 using Logging;
 using Logging.Highlighting;
+
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -40,7 +42,7 @@ namespace Webserver
 		{
 			AppDomain.CurrentDomain.UnhandledException += (sender, eventArgs) => Cleanup();
 			AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) => Cleanup();
-			
+
 			Console.SetOut(new CustomWriter(Console.OutputEncoding, Console.Out));
 
 			Log = new Logger(Level.ALL)
@@ -200,7 +202,8 @@ namespace Webserver
 						break;
 				}
 				Shutdown();
-			}) { Name = "Program Exiter" }.Start();
+			})
+			{ Name = "Program Exiter" }.Start();
 
 			progress.Clear();
 
@@ -247,7 +250,7 @@ namespace Webserver
 					// Try to read the file to also test if if it is no longer in use.
 					using (var reader = new StreamReader(File.Open(ConfigName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
 						newConfig = (JObject)JsonConvert.DeserializeObject(reader.ReadToEnd());
-					
+
 					// If the file is empty it is probably still being written, so return and hope for another invocation.
 					if (newConfig == null)
 						return;
@@ -289,7 +292,7 @@ namespace Webserver
 					return;
 
 				OnConfigChange(diff);
-				
+
 				Log.Info($"Reloaded configuration file. (some changes may require a restart)");
 				prevConfig = newConfig;
 			}
