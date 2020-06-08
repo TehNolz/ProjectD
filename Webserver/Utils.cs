@@ -25,7 +25,7 @@ namespace Webserver
 		{
 			var result = new Dictionary<string, List<string>>();
 			foreach (string key in data)
-				result.Add(key?.ToLower() ?? "null", new List<string>(data[key]?.Split(',')));
+				result.Add(key ?? "null", new List<string>(data[key]?.Split(',')));
 			return result;
 		}
 
@@ -64,15 +64,32 @@ namespace Webserver
 			int magnitude = 0;
 			switch (unit.ToUpper()[0])
 			{
-				case 'Y': magnitude++; goto case 'Z';
-				case 'Z': magnitude++; goto case 'E';
-				case 'E': magnitude++; goto case 'P';
-				case 'P': magnitude++; goto case 'T';
-				case 'T': magnitude++; goto case 'G';
-				case 'G': magnitude++; goto case 'M';
-				case 'M': magnitude++; goto case 'K';
-				case 'K': magnitude++; break;
-				default: break;
+				case 'Y':
+					magnitude++;
+					goto case 'Z';
+				case 'Z':
+					magnitude++;
+					goto case 'E';
+				case 'E':
+					magnitude++;
+					goto case 'P';
+				case 'P':
+					magnitude++;
+					goto case 'T';
+				case 'T':
+					magnitude++;
+					goto case 'G';
+				case 'G':
+					magnitude++;
+					goto case 'M';
+				case 'M':
+					magnitude++;
+					goto case 'K';
+				case 'K':
+					magnitude++;
+					break;
+				default:
+					break;
 			}
 
 			// Multiply the value by the magnitude and return it

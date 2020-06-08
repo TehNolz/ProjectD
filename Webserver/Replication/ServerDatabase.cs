@@ -340,7 +340,7 @@ namespace Webserver.Replication
 					changes.Broadcast();
 				}
 			}
-		} 
+		}
 		#endregion
 
 		/// <summary>
@@ -414,7 +414,7 @@ namespace Webserver.Replication
 
 			// Replace the current database file
 			string databaseFile = Connection.FileName;
-			
+
 			// Close all connections
 			Connection.Close();
 			changelog.Close();

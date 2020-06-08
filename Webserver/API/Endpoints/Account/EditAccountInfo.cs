@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +27,7 @@ namespace Webserver.API.Endpoints.Account
 				return;
 			}
 
-			var account = Database.Select<User>("ID = @ID", new { ID }).FirstOrDefault();
+			User account = Database.Select<User>("ID = @ID", new { ID }).FirstOrDefault();
 
 			//Check if the specified user exists. If it doesn't, send a 404 Not Found
 			if (account == null)
@@ -38,7 +39,7 @@ namespace Webserver.API.Endpoints.Account
 			//Cancel if Email is "Administrator", because the built-in Admin shouldn't ever be deleted.
 			if (account.Email == "Administrator")
 			{
-				Response.Send("Can't delete built-in administrator", HttpStatusCode.Forbidden);
+				Response.Send("Can't edit built-in administrator", HttpStatusCode.Forbidden);
 				return;
 			}
 

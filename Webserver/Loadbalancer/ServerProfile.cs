@@ -430,6 +430,9 @@ namespace Webserver.LoadBalancer
 		/// Initializes a new instance of <see cref="EventMessageType"/> with the given <paramref name="type"/>.
 		/// </summary>
 		/// <param name="type"></param>
-		public EventMessageType(MessageType type) => Type = type;
+		public EventMessageType(MessageType type)
+		{
+			Type = type;
+		}
 	}
 }

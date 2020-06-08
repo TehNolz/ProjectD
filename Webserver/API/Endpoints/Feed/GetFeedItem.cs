@@ -1,9 +1,8 @@
+using Newtonsoft.Json.Linq;
+
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Text.Json;
-
-using Newtonsoft.Json.Linq;
 
 using Webserver.Models;
 
@@ -69,7 +68,7 @@ namespace Webserver.API.Endpoints.Feed
 					// Get the feed items with the category from the database.
 					List<FeedItem> feedItems = FeedItem.GetFeedItemsByCategory(Database, category, limit, offset);
 
-					var json = JsonSerializer.Serialize(feedItems);
+					string json = JsonSerializer.Serialize(feedItems);
 					Response.Send(json.ToString(), HttpStatusCode.OK);
 				}
 				else
@@ -87,7 +86,7 @@ namespace Webserver.API.Endpoints.Feed
 					// Get the feed items that contain the given search string from the database.
 					List<FeedItem> feedItems = FeedItem.GetFeeditemsBySearchString(Database, Params["search_string"][0], limit, offset);
 
-					var json = JsonSerializer.Serialize(feedItems);
+					string json = JsonSerializer.Serialize(feedItems);
 					Response.Send(json.ToString(), HttpStatusCode.OK);
 				}
 				else
@@ -104,7 +103,7 @@ namespace Webserver.API.Endpoints.Feed
 					// Get the feed items, starting at offset and until the limit is reached, from the database.
 					List<FeedItem> feedItems = FeedItem.GetFeedItems(Database, limit, offset);
 
-					var json = JsonSerializer.Serialize(feedItems);
+					string json = JsonSerializer.Serialize(feedItems);
 					Response.Send(json.ToString(), HttpStatusCode.OK);
 				}
 				else

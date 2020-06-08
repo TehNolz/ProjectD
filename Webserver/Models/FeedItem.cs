@@ -1,9 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Linq;
 using Database.SQLite;
 using Database.SQLite.Modeling;
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Webserver.Models
 {
@@ -41,20 +41,14 @@ namespace Webserver.Models
 		/// </summary>
 		/// <param name="database">The database in which to get the feed items.</param>
 		/// <returns>A list of all the feed items in the database.</returns>
-		public static List<FeedItem> GetAllFeedItems(SQLiteAdapter database)
-		{
-			return database.Select<FeedItem>().ToList();
-		}
+		public static List<FeedItem> GetAllFeedItems(SQLiteAdapter database) => database.Select<FeedItem>().ToList();
 
 		/// <summary>
 		/// Gets alls the feed items.
 		/// </summary>
 		/// <param name="database">The database in which to get the feed items.</param>
 		/// <returns>A list of all feed items.</returns>
-		public static List<FeedItem> GetFeedItems(SQLiteAdapter database)
-		{
-			return database.Select<FeedItem>("1 ORDER BY ID DESC").ToList();
-		}
+		public static List<FeedItem> GetFeedItems(SQLiteAdapter database) => database.Select<FeedItem>("1 ORDER BY ID DESC").ToList();
 
 		/// <summary>
 		/// Gets the feed items based on the given limit and offset.
@@ -63,10 +57,7 @@ namespace Webserver.Models
 		/// <param name="limit">The total amount of feed items to get.</param>
 		/// <param name="offset">The first amount of feed items to exclude.</param>
 		/// <returns>A list of feed items based on the given limit and offset.</returns>
-		public static List<FeedItem> GetFeedItems(SQLiteAdapter database, int limit, int offset)
-		{
-			return database.Select<FeedItem>("1 ORDER BY ID DESC LIMIT @limit OFFSET @offset", new { limit, offset }).ToList();
-		}
+		public static List<FeedItem> GetFeedItems(SQLiteAdapter database, int limit, int offset) => database.Select<FeedItem>("1 ORDER BY ID DESC LIMIT @limit OFFSET @offset", new { limit, offset }).ToList();
 
 		/// <summary>
 		/// Gets the feed item by the given ID.
@@ -74,10 +65,7 @@ namespace Webserver.Models
 		/// <param name="database">The database in which to search for the feed item.</param>
 		/// <param name="id">The ID of the desired feed item.</param>
 		/// <returns>The first feed item with the given ID. Null if no feed item was found.</returns>
-		public static FeedItem GetFeedItemByID(SQLiteAdapter database, int id)
-		{
-			return database.Select<FeedItem>("ID = @id", new { id }).FirstOrDefault();
-		}
+		public static FeedItem GetFeedItemByID(SQLiteAdapter database, int id) => database.Select<FeedItem>("ID = @id", new { id }).FirstOrDefault();
 
 		/// <summary>
 		/// Gets the feed items by the given category.
@@ -87,10 +75,7 @@ namespace Webserver.Models
 		/// <param name="limit">The total amount of feed items with the category to get.</param>
 		/// <param name="offset">The first amount of feed items with the category to exclude.</param>
 		/// <returns>A list of feed items with the given category.</returns>
-		public static List<FeedItem> GetFeedItemsByCategory(SQLiteAdapter database, string category, int limit, int offset)
-		{
-			return GetFeedItems(database).Where(f => f.Category == category).Skip(offset).Take(limit).ToList();
-		}
+		public static List<FeedItem> GetFeedItemsByCategory(SQLiteAdapter database, string category, int limit, int offset) => GetFeedItems(database).Where(f => f.Category == category).Skip(offset).Take(limit).ToList();
 
 		/// <summary>
 		/// Get the feed items which title or description contains the given search string. This is case-insensitive.
@@ -100,21 +85,15 @@ namespace Webserver.Models
 		/// <param name="limit">The total amount of feed items with the search string to get.</param>
 		/// <param name="offset">The first amount of feed items with the search string to exclude.</param>
 		/// <returns>A list of feed items which title or description contains the given search string.</returns>
-		public static List<FeedItem> GetFeeditemsBySearchString(SQLiteAdapter database, string searchString, int limit, int offset)
-		{
-			return GetFeedItems(database).Where(f => f.Title.ToLower().Contains(searchString.ToLower()) ||
-												f.Description.ToLower().Contains(searchString.ToLower())).Skip(offset).Take(limit).ToList();
-		}
+		public static List<FeedItem> GetFeeditemsBySearchString(SQLiteAdapter database, string searchString, int limit, int offset) => GetFeedItems(database).Where(f => f.Title.ToLower().Contains(searchString.ToLower()) ||
+																																													 f.Description.ToLower().Contains(searchString.ToLower())).Skip(offset).Take(limit).ToList();
 
 		/// <summary>
 		/// Determines if the given category can be parsed to a feed item category.
 		/// </summary>
 		/// <param name="category">The category to check if it can be parsed to a feed item category.</param>
 		/// <returns>True if the given category can be parsed to a feed item category, false otherwise.</returns>
-		public static bool IsCategoryValid(string category)
-		{
-			return Enum.TryParse(category, out FeedItemCategory _);
-		}
+		public static bool IsCategoryValid(string category) => Enum.TryParse(category, out FeedItemCategory _);
 
 		/// <summary>
 		/// Gets the feed item category based on the give category as string.

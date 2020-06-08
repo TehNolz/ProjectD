@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using Newtonsoft.Json.Linq;
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
@@ -17,7 +18,8 @@ namespace WebserverTests.API_Endpoints.Tests
 		public void EDIT_ValidArguments()
 		{
 			Database.Insert(new User("user@example.com", "SomePassword"));
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=user@example.com", HttpMethod.PATCH, new JObject() {
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account", HttpMethod.PATCH, new JObject() {
+				{"ID", User.GetByEmail(Database, "user@example.com").ID.ToString() },
 				{"Email", "test@example.com" },
 			}, contentType: "application/json");
 
@@ -36,9 +38,9 @@ namespace WebserverTests.API_Endpoints.Tests
 				new JObject() {
 					{ "Email", "user@example.com" }
 				},
-				"/api/account?email=Administrator",
+				IDType.Administrator,
 				HttpStatusCode.Forbidden,
-				null
+				"Can't edit built-in administrator"
 			},
 
 			//Change nonexistent user
@@ -46,17 +48,9 @@ namespace WebserverTests.API_Endpoints.Tests
 				new JObject() {
 					{ "Email", "user@example.com" }
 				},
-				"/api/account?email=SomeUser",
+				IDType.Empty,
 				HttpStatusCode.NotFound,
 				"No such user"
-			},
-
-			//No fields
-			new object[] {
-				new JObject(),
-				"/api/account",
-				HttpStatusCode.BadRequest,
-				"Missing fields"
 			},
 
 			//Bad email
@@ -64,7 +58,7 @@ namespace WebserverTests.API_Endpoints.Tests
 				new JObject() {
 					{ "Email", "SomeEmail" }
 				},
-				"/api/account?email=user@example.com",
+				IDType.CreatedUser,
 				HttpStatusCode.BadRequest,
 				"Invalid Email"
 			},
@@ -74,7 +68,7 @@ namespace WebserverTests.API_Endpoints.Tests
 				new JObject() {
 					{ "Email", "user@example.com" }
 				},
-				"/api/account?email=user@example.com",
+				IDType.CreatedUser,
 				HttpStatusCode.BadRequest,
 				"New Email already in use"
 			},
@@ -84,7 +78,7 @@ namespace WebserverTests.API_Endpoints.Tests
 				new JObject() {
 					{ "Password", "a" }
 				},
-				"/api/account?email=user@example.com",
+				IDType.CreatedUser,
 				HttpStatusCode.BadRequest,
 				"Password does not meet requirements"
 			}
@@ -95,13 +89,30 @@ namespace WebserverTests.API_Endpoints.Tests
 		/// </summary>
 		[TestMethod]
 		[DynamicData("InvalidPatchTestData")]
-		public void EDIT_InvalidArguments(JObject JSON, string URL, HttpStatusCode StatusCode, string ResponseMessage)
+		public void EDIT_InvalidArguments(JObject JSON, IDType ID, HttpStatusCode StatusCode, string ResponseMessage)
 		{
 			Database.Insert(new User("user@example.com", "SomePassword"));
-			ResponseProvider Response = ExecuteSimpleRequest(URL, HttpMethod.PATCH, JSON, contentType: "application/json");
+
+
+			JSON.Add("ID", ID switch
+			{
+				IDType.Administrator => User.GetByEmail(Database, "Administrator").ID.ToString(),
+				IDType.CreatedUser => User.GetByEmail(Database, "user@example.com").ID.ToString(),
+				IDType.Empty => Guid.Empty.ToString(),
+				_ => string.Empty,
+			});
+
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account", HttpMethod.PATCH, JSON, contentType: "application/json");
 			Assert.IsTrue(Response.StatusCode == StatusCode);
 			if (ResponseMessage != null)
 				Assert.IsTrue(Response.Data == ResponseMessage);
+		}
+
+		public enum IDType
+		{
+			CreatedUser,
+			Administrator,
+			Empty,
 		}
 	}
 }

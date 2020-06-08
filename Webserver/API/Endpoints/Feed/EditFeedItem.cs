@@ -1,6 +1,7 @@
-using System.Linq;
-using System.Net;
 using Newtonsoft.Json.Linq;
+
+using System.Net;
+
 using Webserver.Models;
 
 namespace Webserver.API.Endpoints.Feed

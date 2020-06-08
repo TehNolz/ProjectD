@@ -25,7 +25,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		[TestMethod]
 		public void GET_ValidArguments()
 		{
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=Administrator", HttpMethod.GET, contentType: "application/json");
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account?Email=Administrator", HttpMethod.GET, contentType: "application/json");
 
 			//Verify results
 			Assert.IsTrue(Response.StatusCode == HttpStatusCode.OK);
@@ -44,7 +44,7 @@ namespace WebserverTests.API_Endpoints.Tests
 			Database.Insert(new User("TestUser1@example.com", "TestPassword1"));
 			Database.Insert(new User("TestUser2@example.com", "TestPassword2"));
 
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=Administrator,TestUser1@example.com", HttpMethod.GET, contentType: "application/json");
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account?Email=Administrator,TestUser1@example.com", HttpMethod.GET, contentType: "application/json");
 
 			//Verify results
 			Assert.IsTrue(Response.StatusCode == HttpStatusCode.OK);
@@ -60,7 +60,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		[TestMethod]
 		public void GET_InvalidArguments()
 		{
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=SomeAccount", HttpMethod.GET);
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account?Email=SomeAccount", HttpMethod.GET);
 
 			//Verify results
 			Assert.IsTrue(Response.StatusCode == HttpStatusCode.OK);
@@ -74,7 +74,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		[TestMethod]
 		public void GET_BulkInvalidArguments()
 		{
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=SomeAccount,SomeOtherAccount", HttpMethod.GET, contentType: "application/json");
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account?Email=SomeAccount,SomeOtherAccount", HttpMethod.GET, contentType: "application/json");
 
 			//Verify results
 			Assert.IsTrue(Response.StatusCode == HttpStatusCode.OK);
@@ -88,7 +88,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		[TestMethod]
 		public void GET_MixedArguments()
 		{
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=Administrator,SomeUser", HttpMethod.GET, contentType: "application/json");
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account?Email=Administrator,SomeUser", HttpMethod.GET, contentType: "application/json");
 
 			//Verify results
 			Assert.IsTrue(Response.StatusCode == HttpStatusCode.OK);
@@ -105,7 +105,7 @@ namespace WebserverTests.API_Endpoints.Tests
 		public void GET_CurrentUser()
 		{
 			//Create mock request
-			ResponseProvider Response = ExecuteSimpleRequest("/api/account?email=CurrentUser", HttpMethod.GET, contentType: "application/json");
+			ResponseProvider Response = ExecuteSimpleRequest("/api/account?Email=CurrentUser", HttpMethod.GET, contentType: "application/json");
 
 			//Verify results
 			Assert.IsTrue(Response.StatusCode == HttpStatusCode.OK);

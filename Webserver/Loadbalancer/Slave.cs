@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
-using Webserver.API.Endpoints;
 using Webserver.Chat;
 using Webserver.Config;
 using Webserver.Replication;
