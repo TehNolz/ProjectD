@@ -25,7 +25,7 @@ namespace Webserver
 		{
 			var result = new Dictionary<string, List<string>>();
 			foreach (string key in data)
-				result.Add(key?.ToLower() ?? "null", new List<string>(data[key]?.Split(',')));
+				result.Add(key ?? "null", new List<string>(data[key]?.Split(',')));
 			return result;
 		}
 
