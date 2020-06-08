@@ -51,7 +51,6 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += OnDbSync;
 			ServerConnection.MessageReceived += OnDbChange;
 			ServerConnection.MessageReceived += OnServerStateChange;
-			ServerConnection.MessageReceived += Example.TestHandler;
 
 			//Chat system events
 			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;

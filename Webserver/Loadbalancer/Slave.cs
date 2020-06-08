@@ -33,7 +33,6 @@ namespace Webserver.LoadBalancer
 			ServerConnection.MessageReceived += RegistrationResponse;
 			ServerConnection.MessageReceived += NewServer;
 			ServerConnection.MessageReceived += OnDbChange;
-			ServerConnection.MessageReceived += Example.TestHandler;
 
 			//Chat system events
 			ServerConnection.MessageReceived += ChatCommand.BroadcastHandler;

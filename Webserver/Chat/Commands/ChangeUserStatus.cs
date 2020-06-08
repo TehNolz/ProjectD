@@ -22,7 +22,7 @@ namespace Webserver.Chat.Commands
 
 			//Announce this user's new status.
 			JObject userInfo = Message.User.GetJson();
-			userInfo.Add("Status", (int)UserStatuses.Offline);
+			userInfo.Add("Status", (int)status);
 			ChatCommand.BroadcastChatMessage(TargetType.Chatrooms, from C in Chatroom.GetAccessableByUser(Chat.Database, Message.User) select C.ID, new ChatMessage(MessageType.UserStatusChanged, userInfo));
 		}
 	}
