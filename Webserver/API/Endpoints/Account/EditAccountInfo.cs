@@ -38,7 +38,7 @@ namespace Webserver.API.Endpoints.Account
 			//Cancel if Email is "Administrator", because the built-in Admin shouldn't ever be deleted.
 			if (account.Email == "Administrator")
 			{
-				Response.Send("Can't delete built-in administrator", HttpStatusCode.Forbidden);
+				Response.Send("Can't edit built-in administrator", HttpStatusCode.Forbidden);
 				return;
 			}
 

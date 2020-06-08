@@ -41,6 +41,7 @@ namespace WebserverTests.API_Endpoints.Tests
 			//Run inits
 			Database = new SQLiteAdapter(":memory:");
 			Program.InitDatabase(Database);
+			Program.InitDatabaseContents(Database);
 		}
 
 		[ClassCleanup]
